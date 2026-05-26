@@ -1,0 +1,50 @@
+import type { Metadata } from "next";
+import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
+import { SearchFilters } from "@/components/search/SearchFilters";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getCityExperiences } from "@/lib/api";
+import type { SearchParams } from "@/types/api";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: { city: string } }): Promise<Metadata> {
+  const city = params.city.replace(/-/g, " ");
+  return {
+    title: `Things to do in ${city}`,
+    description: `Browse activities and tours in ${city}.`,
+  };
+}
+
+export default async function CityPage({
+  params,
+  searchParams,
+}: {
+  params: { city: string };
+  searchParams: SearchParams;
+}) {
+  const result = await getCityExperiences(params.city, searchParams);
+
+  return (
+    <div className="container py-section">
+      <div className="mb-6 space-y-3">
+        <h1 className="text-display-sm font-bold">Things to do in {params.city.replace(/-/g, " ")}</h1>
+        <p className="text-sm text-muted-foreground">{result.data?.count ?? result.data?.experiences.length ?? 0} experiences found</p>
+      </div>
+
+      <div className="mb-6">
+        <SearchFilters />
+      </div>
+
+      {result.error ? (
+        <Alert className="mb-6">
+          <AlertDescription>We could not load experiences right now. Please try again in a moment.</AlertDescription>
+        </Alert>
+      ) : result.data?.experiences.length ? (
+        <ExperienceGrid experiences={result.data.experiences} />
+      ) : (
+        <EmptyState title="No experiences yet" description="Try changing filters or search another destination." action={{ label: "Back home", href: "/" }} />
+      )}
+    </div>
+  );
+}

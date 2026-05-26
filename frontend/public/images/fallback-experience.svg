@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" fill="none">
+  <rect width="1200" height="900" fill="#E2F5FF"/>
+  <path d="M0 700L250 480L420 620L680 380L930 620L1200 420V900H0V700Z" fill="#9ADAF5"/>
+  <circle cx="950" cy="180" r="70" fill="#0EA5E9"/>
+  <text x="60" y="120" fill="#075985" font-family="Arial, sans-serif" font-size="54" font-weight="700">Traviia Experience</text>
+</svg>

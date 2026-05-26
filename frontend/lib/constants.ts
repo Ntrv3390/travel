@@ -1,0 +1,3 @@
+export const PDP_REVALIDATE_SECONDS = 3600;
+export const DEFAULT_PAGE_SIZE = 12;
+export const AVAILABILITY_REFRESH_MS = 30_000;

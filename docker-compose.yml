@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db-master:
+    image: postgres:15-alpine
+    container_name: travel-db-master
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-travel_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - travel-network
+
+  # Redis Cache Layer
+  cache-layer:
+    image: redis:7-alpine
+    container_name: travel-cache-layer
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - travel-network
+
+  # Go Backend API
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: travel-api-gateway
+    environment:
+      PORT: ${API_PORT:-8080}
+      DB_HOST: db-master
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-travel_db}
+      DB_SSLMODE: disable
+      REDIS_HOST: cache-layer
+      REDIS_PORT: 6379
+      HEADOUT_API_KEY: ${HEADOUT_API_KEY:-}
+      HEADOUT_URL: ${HEADOUT_URL:-https://api.headout.com}
+      ENV: ${ENV:-development}
+      # GTTD Configuration
+      GTTD_DEV_SFTP_HOST: ${GTTD_DEV_SFTP_HOST:-sftp-dev.things-to-do.google.com}
+      GTTD_DEV_SFTP_PORT: ${GTTD_DEV_SFTP_PORT:-22}
+      GTTD_DEV_SFTP_USERNAME: ${GTTD_DEV_SFTP_USERNAME:-traviia-dev}
+      GTTD_DEV_SFTP_REMOTE_DIR: ${GTTD_DEV_SFTP_REMOTE_DIR:-/uploads/traviia}
+      GTTD_DEV_SSH_PRIVATE_KEY_PATH: /run/secrets/gttd_dev_ssh_key
+      GTTD_PROD_SFTP_HOST: ${GTTD_PROD_SFTP_HOST:-sftp.things-to-do.google.com}
+      GTTD_PROD_SFTP_PORT: ${GTTD_PROD_SFTP_PORT:-22}
+      GTTD_PROD_SFTP_USERNAME: ${GTTD_PROD_SFTP_USERNAME:-traviia-prod}
+      GTTD_PROD_SFTP_REMOTE_DIR: ${GTTD_PROD_SFTP_REMOTE_DIR:-/uploads/traviia}
+      GTTD_PROD_SSH_PRIVATE_KEY_PATH: /run/secrets/gttd_prod_ssh_key
+      GTTD_BASE_URL: ${GTTD_BASE_URL:-https://traviia.com}
+      GTTD_FEED_OUTPUT_DIR: ${GTTD_FEED_OUTPUT_DIR:-/tmp/gttd_feeds}
+      GTTD_CRON_SCHEDULE: ${GTTD_CRON_SCHEDULE:-0 2 * * *}
+      GTTD_ENV: ${GTTD_ENV:-production}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      db-master:
+        condition: service_healthy
+      cache-layer:
+        condition: service_healthy
+    secrets:
+      - gttd_dev_ssh_key
+      - gttd_prod_ssh_key
+    networks:
+      - travel-network
+    restart: unless-stopped
+
+  # Next.js Web Client
+  web-client:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: travel-web-client
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api-gateway:8080}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - travel-network
+    restart: unless-stopped
+
+networks:
+  travel-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+secrets:
+  gttd_dev_ssh_key:
+    file: ./secrets/gttd_dev_ssh_key
+  gttd_prod_ssh_key:
+    file: ./secrets/gttd_prod_ssh_key

@@ -1,0 +1,21 @@
+.env
+.env.local
+*.log
+.DS_Store
+__pycache__/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+node_modules/
+.next/
+dist/
+build/
+bin/
+postgres_data/
+redis_data/
+
+# GTTD SSH Keys (keep README, exclude keys)
+secrets/gttd_*_ssh_key*
+!secrets/README.md
