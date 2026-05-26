@@ -52,7 +52,7 @@ function normalizeExperience(raw: BackendExperience): Experience {
   const imageUrl = raw.image_url && raw.image_url.length > 0 ? raw.image_url : "/images/fallback-experience.svg";
   const option: ExperienceOption = {
     id: `option-${raw.id}`,
-    headoutVariantId: String(raw.id),
+    headoutVariantId: raw.headout_id,
     title: "Standard",
     description: raw.description,
     price: raw.price,
@@ -173,7 +173,7 @@ export async function getExperience(city: string, slug: string): Promise<ApiResu
 
 export async function getExperienceById(id: string): Promise<ApiResult<Experience>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/experiences/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${API_BASE}/api/v1/experiences/by-id/${encodeURIComponent(id)}`, {
       next: { revalidate: PDP_REVALIDATE_SECONDS },
     });
     const payload = await readJson<BackendSingleResponse>(res);

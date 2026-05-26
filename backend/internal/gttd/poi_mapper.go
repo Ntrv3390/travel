@@ -3,7 +3,8 @@ package gttd
 import (
 	"context"
 	"fmt"
-	"traviia/internal/models"
+
+	"github.com/travel/backend/internal/models"
 )
 
 // POIMapperDB is the database interface for POI operations

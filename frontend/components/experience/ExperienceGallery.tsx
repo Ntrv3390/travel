@@ -2,20 +2,26 @@ import Image from "next/image";
 import type { ExperienceImage } from "@/types/experience";
 
 export function ExperienceGallery({ images, title }: { images: ExperienceImage[]; title: string }) {
-  const first = images[0]?.url ?? "/images/fallback-experience.svg";
+  const uniqueImages = images.filter((image, index, array) => array.findIndex((candidate) => candidate.url === image.url) === index);
+  const heroImage = uniqueImages[0]?.url ?? "/images/fallback-experience.svg";
+  const thumbnailImages = uniqueImages.slice(1, 5);
+  const hasMultipleImages = thumbnailImages.length > 0;
 
   return (
-    <div className="space-y-3">
+    <div className={hasMultipleImages ? "grid gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]" : "mx-auto max-w-5xl"}>
       <div className="relative aspect-video overflow-hidden rounded-xl">
-        <Image src={first} alt={title} fill priority sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
+        <Image src={heroImage} alt={title} fill priority sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
       </div>
-      <div className="grid grid-cols-4 gap-2">
-        {images.slice(0, 4).map((image, index) => (
-          <div key={image.url + index} className="relative aspect-[4/3] overflow-hidden rounded-md">
-            <Image src={image.url} alt={image.caption || `${title} image ${index + 1}`} fill sizes="120px" className="object-cover" />
-          </div>
-        ))}
-      </div>
+
+      {hasMultipleImages ? (
+        <div className="grid grid-cols-2 gap-2">
+          {thumbnailImages.map((image, index) => (
+            <div key={image.url + index} className="relative aspect-[4/3] overflow-hidden rounded-md">
+              <Image src={image.url} alt={image.caption || `${title} image ${index + 2}`} fill sizes="(max-width: 1024px) 50vw, 20vw" className="object-cover" />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

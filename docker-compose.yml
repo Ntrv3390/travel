@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
     container_name: travel-api-gateway
     environment:
-      PORT: ${API_PORT:-8080}
+      PORT: 8080
       DB_HOST: db-master
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
@@ -56,7 +56,11 @@ services:
       REDIS_HOST: cache-layer
       REDIS_PORT: 6379
       HEADOUT_API_KEY: ${HEADOUT_API_KEY:-}
-      HEADOUT_URL: ${HEADOUT_URL:-https://api.headout.com}
+      HEADOUT_ENV: ${HEADOUT_ENV:-sandbox}
+      HEADOUT_URL: ${HEADOUT_URL:-}
+      HEADOUT_SANDBOX_BASE_URL: ${HEADOUT_SANDBOX_BASE_URL:-https://sandbox.api.test-headout.com/api/public}
+      HEADOUT_STAGE_BASE_URL: ${HEADOUT_STAGE_BASE_URL:-https://sandbox.api.test-headout.com/api/public}
+      HEADOUT_PROD_BASE_URL: ${HEADOUT_PROD_BASE_URL:-https://www.headout.com/api/public}
       ENV: ${ENV:-development}
       # GTTD Configuration
       GTTD_DEV_SFTP_HOST: ${GTTD_DEV_SFTP_HOST:-sftp-dev.things-to-do.google.com}

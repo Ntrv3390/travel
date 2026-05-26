@@ -2,7 +2,8 @@ package gttdhandlers
 
 import (
 	"net/http"
-	"traviia/internal/gttd"
+
+	"github.com/travel/backend/internal/gttd"
 
 	"github.com/gin-gonic/gin"
 )

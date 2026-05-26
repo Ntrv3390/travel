@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"traviia/internal/pricing"
+
+	"github.com/travel/backend/internal/pricing"
 )
 
 type DBGetter interface {
@@ -104,7 +105,6 @@ func (b *JSONLDBuilder) BuildForExperience(ctx context.Context, exp interface{},
 	title, _ := expMap["title"].(string)
 	description, _ := expMap["description"].(string)
 	experienceID, _ := expMap["id"].(string)
-	headoutID, _ := expMap["headout_id"].(string)
 	rating, _ := expMap["headout_rating"].(float64)
 	reviewCount, _ := expMap["headout_review_count"].(float64)
 

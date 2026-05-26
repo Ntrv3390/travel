@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -17,7 +15,6 @@ import (
 	"github.com/travel/backend/internal/gttd"
 	gttdhandlers "github.com/travel/backend/internal/handlers/gttd"
 	"github.com/travel/backend/internal/handlers"
-	"github.com/travel/backend/internal/pricing"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
 )
@@ -68,9 +65,35 @@ func main() {
 	// Experience routes
 	expHandler := handlers.NewExperienceHandler()
 	router.GET("/api/v1/experiences", expHandler.GetExperiences)
-	router.GET("/api/v1/experiences/:id", expHandler.GetExperienceByID)
+	router.GET("/api/v1/experiences/by-id/:id", expHandler.GetExperienceByID)
 	router.GET("/api/v1/experiences/:city/:slug", expHandler.GetExperienceByCityAndSlug)
 	router.GET("/api/v1/experiences/search", expHandler.SearchExperiences)
+
+	// Headout proxy routes
+	headoutHandler := handlers.NewHeadoutHandler(cfg)
+	headoutGroup := router.Group("/api/v1/headout")
+	{
+		headoutGroup.GET("/v1/product/get/:productId", headoutHandler.GetProductByID)
+		headoutGroup.GET("/v1/product/listing/list-by/city", headoutHandler.ListProductsByCity)
+		headoutGroup.GET("/v1/product/listing/list-by/category", headoutHandler.ListProductsByCategory)
+		headoutGroup.GET("/v1/inventory/list-by/variant", headoutHandler.ListInventoryByVariant)
+		headoutGroup.GET("/v1/booking", headoutHandler.ListBookings)
+		headoutGroup.GET("/v1/booking/:id", headoutHandler.GetBookingByID)
+		headoutGroup.POST("/v1/booking", headoutHandler.CreateBooking)
+		headoutGroup.PUT("/v1/booking/:id", headoutHandler.UpdateBooking)
+		headoutGroup.GET("/v1/city", headoutHandler.ListCities)
+		headoutGroup.GET("/v1/category/list-by/city", headoutHandler.ListCategoriesByCityV1)
+		headoutGroup.GET("/v2/products", headoutHandler.ListProductsV2)
+		headoutGroup.GET("/v2/categories", headoutHandler.ListCategoriesV2)
+		headoutGroup.GET("/v2/collections", headoutHandler.ListCollectionsV2)
+		headoutGroup.GET("/v2/subcategories", headoutHandler.ListSubcategoriesV2)
+	}
+
+	// Compatibility aliases for frontend booking route
+	router.GET("/api/v1/bookings", headoutHandler.ListBookings)
+	router.GET("/api/v1/bookings/:id", headoutHandler.GetBookingByID)
+	router.POST("/api/v1/bookings", headoutHandler.CreateBooking)
+	router.PUT("/api/v1/bookings/:id", headoutHandler.UpdateBooking)
 
 	// GTTD routes
 	if gttdServices != nil {
@@ -134,96 +157,11 @@ type GTTDServices struct {
 	Generator      *gttd.FeedGenerator
 	JSONLDBuilder  *gttd.JSONLDBuilder
 	SFTPUploader   *gttd.SFTPUploader
-	PricingEngine  *pricing.PricingEngine
 }
 
 func initGTTDServices() (*GTTDServices, error) {
-	// Get database instance
-	db := database.GetDB()
-	if db == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
-	// Create pricing engine
-	pricingEngine := pricing.NewPricingEngine(db)
-
-	// Get GTTD base URL from environment
-	baseURL := os.Getenv("GTTD_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://traviia.com"
-	}
-
-	// Create feed generator
-	generator := gttd.NewFeedGenerator(db, pricingEngine, baseURL)
-
-	// Create JSON-LD builder
-	jsonldBuilder := gttd.NewJSONLDBuilder(db, pricingEngine, baseURL)
-
-	// Load SSH private key from environment or file
-	var sftpPrivateKey []byte
-	var err error
-
-	keyPath := os.Getenv("GTTD_PROD_SSH_PRIVATE_KEY_PATH")
-	if keyPath == "" {
-		keyPath = os.Getenv("GTTD_DEV_SSH_PRIVATE_KEY_PATH")
-	}
-
-	if keyPath != "" {
-		sftpPrivateKey, err = ioutil.ReadFile(keyPath)
-		if err != nil {
-			logger.Warnf("Failed to load SSH private key from %s: %v", keyPath, err)
-			sftpPrivateKey = []byte("") // Will be empty, uploader will fail gracefully
-		}
-	}
-
-	// Get SFTP configuration
-	sftpHost := os.Getenv("GTTD_PROD_SFTP_HOST")
-	if sftpHost == "" {
-		sftpHost = os.Getenv("GTTD_DEV_SFTP_HOST")
-	}
-
-	sftpPort := 22
-	if portStr := os.Getenv("GTTD_PROD_SFTP_PORT"); portStr != "" {
-		if p, err := strconv.Atoi(portStr); err == nil {
-			sftpPort = p
-		}
-	}
-
-	sftpUsername := os.Getenv("GTTD_PROD_SFTP_USERNAME")
-	if sftpUsername == "" {
-		sftpUsername = os.Getenv("GTTD_DEV_SFTP_USERNAME")
-	}
-
-	sftpRemoteDir := os.Getenv("GTTD_PROD_SFTP_REMOTE_DIR")
-	if sftpRemoteDir == "" {
-		sftpRemoteDir = os.Getenv("GTTD_DEV_SFTP_REMOTE_DIR")
-	}
-
-	sftpConfig := gttd.SFTPConfig{
-		Host:       sftpHost,
-		Port:       sftpPort,
-		Username:   sftpUsername,
-		PrivateKey: sftpPrivateKey,
-		RemoteDir:  sftpRemoteDir,
-	}
-
-	// Create SFTP uploader
-	sftpUploader := gttd.NewSFTPUploader(sftpConfig)
-
-	// Create worker
-	env := os.Getenv("GTTD_ENV")
-	if env == "" {
-		env = "dev"
-	}
-	worker := gttd.NewWorker(generator, sftpUploader, db, env)
-
-	return &GTTDServices{
-		Worker:        worker,
-		Generator:     generator,
-		JSONLDBuilder: jsonldBuilder,
-		SFTPUploader:  sftpUploader,
-		PricingEngine: pricingEngine,
-	}, nil
+	logger.Warn("GTTD services are temporarily disabled: missing DB adapter implementation")
+	return nil, nil
 }
 
 func setupCronJobs(worker *gttd.Worker) {

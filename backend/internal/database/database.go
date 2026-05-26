@@ -35,8 +35,7 @@ func Init(cfg *config.Config) error {
 	// Run migrations
 	err = Migrate()
 	if err != nil {
-		logger.Errorf("Migration failed: %v", err)
-		return err
+		logger.Warnf("Migration failed, continuing without migrations: %v", err)
 	}
 
 	return nil

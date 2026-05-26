@@ -1,14 +1,43 @@
 import type { Metadata } from "next";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
+import { SingleExperienceLanding } from "@/components/experience/SingleExperienceLanding";
 import { SearchFilters } from "@/components/search/SearchFilters";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getCityExperiences } from "@/lib/api";
+import { getSingleExperiencePayloadBySlugOrID } from "@/lib/experience/singleExperience";
 import type { SearchParams } from "@/types/api";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { city: string } }): Promise<Metadata> {
+  const cityPreview = await getCityExperiences(params.city, { limit: "1", page: "1" });
+  if (cityPreview.data?.experiences.length) {
+    const city = params.city.replace(/-/g, " ");
+    return {
+      title: `Things to do in ${city}`,
+      description: `Browse activities and tours in ${city}.`,
+    };
+  }
+
+  const payload = await getSingleExperiencePayloadBySlugOrID(params.city);
+  if (payload?.experience) {
+    const exp = payload.experience;
+    return {
+      title: `${exp.title} in ${exp.city}`,
+      description: exp.description.slice(0, 160),
+      openGraph: {
+        title: exp.title,
+        description: exp.description.slice(0, 160),
+        images: [{ url: exp.images[0]?.url ?? "/images/fallback-experience.svg", width: 1200, height: 630 }],
+        type: "website",
+      },
+      alternates: {
+        canonical: `/${params.city}`,
+      },
+    };
+  }
+
   const city = params.city.replace(/-/g, " ");
   return {
     title: `Things to do in ${city}`,
@@ -23,6 +52,14 @@ export default async function CityPage({
   params: { city: string };
   searchParams: SearchParams;
 }) {
+  const cityResult = await getCityExperiences(params.city, { ...searchParams, limit: searchParams.limit ?? "1", page: searchParams.page ?? "1" });
+  if (!cityResult.data?.experiences.length) {
+    const payload = await getSingleExperiencePayloadBySlugOrID(params.city);
+    if (payload) {
+      return <SingleExperienceLanding experience={payload.experience} related={payload.related} />;
+    }
+  }
+
   const result = await getCityExperiences(params.city, searchParams);
 
   return (

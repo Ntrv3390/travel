@@ -22,15 +22,19 @@ type Config struct {
 	RedisPort string
 
 	// Headout API
-	HeadoutAPIKey string
-	HeadoutURL    string
+	HeadoutAPIKey         string
+	HeadoutURL            string
+	HeadoutEnvironment    string
+	HeadoutSandboxBaseURL string
+	HeadoutStageBaseURL   string
+	HeadoutProdBaseURL    string
 
 	// Environment
 	Environment string
 }
 
 func Load() *Config {
-	return &Config{
+	cfg := &Config{
 		Port:           getEnv("PORT", "8080"),
 		DBHost:         getEnv("DB_HOST", "db-master"),
 		DBPort:         getEnv("DB_PORT", "5432"),
@@ -40,9 +44,45 @@ func Load() *Config {
 		DBSSLMode:      getEnv("DB_SSLMODE", "disable"),
 		RedisHost:      getEnv("REDIS_HOST", "cache-layer"),
 		RedisPort:      getEnv("REDIS_PORT", "6379"),
-		HeadoutAPIKey:  getEnv("HEADOUT_API_KEY", ""),
-		HeadoutURL:     getEnv("HEADOUT_URL", "https://api.headout.com"),
-		Environment:    getEnv("ENV", "development"),
+		HeadoutAPIKey:         getEnv("HEADOUT_API_KEY", ""),
+		HeadoutURL:            getEnv("HEADOUT_URL", ""),
+		HeadoutEnvironment:    getEnv("HEADOUT_ENV", ""),
+		HeadoutSandboxBaseURL: getEnv("HEADOUT_SANDBOX_BASE_URL", "https://sandbox.api.test-headout.com/api/public"),
+		HeadoutStageBaseURL:   getEnv("HEADOUT_STAGE_BASE_URL", "https://sandbox.api.test-headout.com/api/public"),
+		HeadoutProdBaseURL:    getEnv("HEADOUT_PROD_BASE_URL", "https://www.headout.com/api/public"),
+		Environment:           getEnv("ENV", "development"),
+	}
+
+	cfg.HeadoutURL = resolveHeadoutURL(cfg)
+	return cfg
+}
+
+func resolveHeadoutURL(cfg *Config) string {
+	if cfg.HeadoutURL != "" {
+		return cfg.HeadoutURL
+	}
+
+	headoutEnv := cfg.HeadoutEnvironment
+	if headoutEnv == "" {
+		switch cfg.Environment {
+		case "production":
+			headoutEnv = "production"
+		case "staging":
+			headoutEnv = "stage"
+		default:
+			headoutEnv = "sandbox"
+		}
+	}
+
+	switch headoutEnv {
+	case "prod", "production":
+		return cfg.HeadoutProdBaseURL
+	case "stage", "staging":
+		return cfg.HeadoutStageBaseURL
+	case "sandbox", "test", "development", "dev", "local":
+		return cfg.HeadoutSandboxBaseURL
+	default:
+		return cfg.HeadoutSandboxBaseURL
 	}
 }
 

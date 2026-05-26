@@ -9,8 +9,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"traviia/internal/models"
-	"traviia/internal/pricing"
+
+	"github.com/travel/backend/internal/models"
+	"github.com/travel/backend/internal/pricing"
 )
 
 const (
@@ -146,31 +147,24 @@ func (g *FeedGenerator) GenerateFeed(ctx context.Context) ([]string, error) {
 
 // mapExperienceToDBExperience converts GTTD model to DBExperience
 func (g *FeedGenerator) mapExperienceToDBExperience(exp models.ExperienceGTTD) DBExperience {
-	var images []map[string]interface{}
-	if err := json.Unmarshal(exp.Images, &images); err != nil {
+	images := exp.Images.Data()
+	if images == nil {
 		images = []map[string]interface{}{}
 	}
 
-	var categories []string
-	_ = json.Unmarshal(exp.Categories, &categories)
-
-	var languages []string
-	_ = json.Unmarshal(exp.Languages, &languages)
+	categories := []string(exp.Categories)
+	languages := []string(exp.Languages)
 
 	var cancPolicy *map[string]interface{}
-	if len(exp.CancellationPolicy) > 0 {
-		var cp map[string]interface{}
-		if err := json.Unmarshal(exp.CancellationPolicy, &cp); err == nil {
-			cancPolicy = &cp
-		}
+	if cp := exp.CancellationPolicy.Data(); len(cp) > 0 {
+		cancPolicy = &cp
 	}
 
 	var options []DBOption
 	for _, opt := range exp.Options {
-		var inclusions, exclusions, highlights []string
-		json.Unmarshal(opt.Inclusions, &inclusions)
-		json.Unmarshal(opt.Exclusions, &exclusions)
-		json.Unmarshal(opt.Highlights, &highlights)
+		inclusions := []string(opt.Inclusions)
+		exclusions := []string(opt.Exclusions)
+		highlights := []string(opt.Highlights)
 
 		options = append(options, DBOption{
 			HeadoutVariantID:  opt.HeadoutVariantID,

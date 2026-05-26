@@ -47,6 +47,10 @@ func Error(args ...interface{}) {
 	Get().Error(args...)
 }
 
+func Warn(args ...interface{}) {
+	Get().Warn(args...)
+}
+
 func Debug(args ...interface{}) {
 	Get().Debug(args...)
 }
@@ -57,6 +61,10 @@ func Infof(template string, args ...interface{}) {
 
 func Errorf(template string, args ...interface{}) {
 	Get().Errorf(template, args...)
+}
+
+func Warnf(template string, args ...interface{}) {
+	Get().Warnf(template, args...)
 }
 
 func Debugf(template string, args ...interface{}) {

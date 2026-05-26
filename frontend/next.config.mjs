@@ -10,9 +10,14 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "images.traviia.com",
+        hostname: "cdn-imgix.headout.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      }
     ],
     formats: ["image/avif", "image/webp"],
   },

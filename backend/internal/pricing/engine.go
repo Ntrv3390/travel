@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"traviia/internal/models"
+
+	"github.com/travel/backend/internal/models"
 )
 
 type DB interface {
@@ -43,14 +44,14 @@ func (e *PricingEngine) CalculatePrice(
 	rule := e.db.GetApplicablePricingRule(ctx, experienceID, city)
 
 	marked := baseAmount
-	if rule != nil && rule.IsActive {
+	if rule != nil && rule.Status == "active" {
 		// Apply percentage markup first
 		if rule.MarkupPercentage > 0 {
 			marked = baseAmount * (1 + rule.MarkupPercentage/100)
 		}
 		// Then add flat fee (assume same currency for now)
-		if rule.FixedFeeAmount > 0 {
-			marked += rule.FixedFeeAmount
+		if rule.FixedFee > 0 {
+			marked += rule.FixedFee
 		}
 	}
 
