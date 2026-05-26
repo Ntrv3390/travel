@@ -10,13 +10,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const startDateTime = `${date}T00:00:00`;
-    const endDateTime = `${date}T23:59:59`;
-
-    const upstream = new URL(`${env.API_URL}/api/v1/headout/v1/inventory/list-by/variant`);
+    const upstream = new URL(`${env.API_URL}/api/v1/booking-flow/availability`);
     upstream.searchParams.set("variantId", variantId);
-    upstream.searchParams.set("startDateTime", startDateTime);
-    upstream.searchParams.set("endDateTime", endDateTime);
+    upstream.searchParams.set("date", date);
 
     const response = await fetch(upstream.toString(), {
       method: "GET",

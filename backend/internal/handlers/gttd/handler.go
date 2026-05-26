@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/travel/backend/internal/gttd"
+	"github.com/travel/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,10 +51,21 @@ func (h *GttdHandler) TriggerUpload(c *gin.Context) {
 func (h *GttdHandler) GetStatus(c *gin.Context) {
 	env := c.DefaultQuery("env", "production")
 
-	// TODO: Fetch from DB
+	status := "not_available"
+	lastRun := ""
+	productCount := 0
+
+	if h.worker != nil {
+		status = "available"
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"env":    env,
-		"status": "placeholder",
+		"env":           env,
+		"status":        status,
+		"last_run":      lastRun,
+		"product_count": productCount,
+		"generator":     h.generator != nil,
+		"jsonld":        h.jsonldBuilder != nil,
 	})
 }
 
@@ -62,10 +74,31 @@ func (h *GttdHandler) GetStatus(c *gin.Context) {
 func (h *GttdHandler) GetPreview(c *gin.Context) {
 	limit := c.DefaultQuery("limit", "5")
 
-	// TODO: Generate preview feed
+	if h.generator == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"preview": nil,
+			"note":    "feed generator not initialized (GTTD is disabled)",
+			"limit":   limit,
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+	filePaths, err := h.generator.GenerateFeed(ctx)
+	if err != nil {
+		logger.Warnf("Feed preview generation failed: %v", err)
+		c.JSON(http.StatusOK, gin.H{
+			"preview": nil,
+			"error":   err.Error(),
+			"limit":   limit,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"preview": "placeholder",
-		"limit":   limit,
+		"preview":    filePaths,
+		"count":      len(filePaths),
+		"limit":      limit,
 	})
 }
 

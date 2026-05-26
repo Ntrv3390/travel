@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   }
 
   const response = await fetch(
-    `${env.API_URL}/api/v1/experiences/${id}/availability?date=${encodeURIComponent(date)}`,
+    `${env.API_URL}/api/v1/experiences-availability/${id}?date=${encodeURIComponent(date)}`,
     { cache: "no-store" },
   );
 

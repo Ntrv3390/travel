@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/database"
@@ -20,6 +21,7 @@ type ExperienceHandler struct {
 	service         *services.ExperienceCatalogService
 	headoutProxySvc *services.HeadoutProxyService
 	publicProxySvc  *services.HeadoutProxyService
+	syncSvc         *services.SyncService
 }
 
 func NewExperienceHandler() *ExperienceHandler {
@@ -30,39 +32,40 @@ func NewExperienceHandler() *ExperienceHandler {
 		service:         services.NewExperienceCatalogService(database.GetDB()),
 		headoutProxySvc: services.NewHeadoutProxyService(cfg),
 		publicProxySvc:  services.NewHeadoutProxyService(&publicCfg),
+		syncSvc:         services.NewSyncService(cfg),
 	}
 }
 
-// GetExperiences returns paginated experiences
+// GetExperiences returns experiences — always fetches live from Headout, falls back to DB
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	category := c.Query("category")
 	location := c.Query("location")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 12)
 
-	result, err := h.service.ListExperiences(c.Request.Context(), category, location, page, limit)
-	if err != nil {
-		logger.Errorf("Failed to fetch experiences: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch experiences",
+	liveExperiences, liveErr := h.fetchLiveExperiences(c, limit)
+	if liveErr == nil && len(liveExperiences) > 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"data":        liveExperiences,
+			"count":       len(liveExperiences),
+			"page":        1,
+			"limit":       limit,
+			"total_pages": 1,
 		})
 		return
 	}
 
-	if len(result.Experiences) == 0 {
-		liveExperiences, liveErr := h.fetchLiveExperiences(c, limit)
-		if liveErr != nil {
-			logger.Warnf("Live Headout fetch failed, returning DB result: %v", liveErr)
-		} else if len(liveExperiences) > 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"data":        liveExperiences,
-				"count":       len(liveExperiences),
-				"page":        1,
-				"limit":       limit,
-				"total_pages": 1,
-			})
-			return
-		}
+	if liveErr != nil {
+		logger.Warnf("Live Headout fetch failed, falling back to DB: %v", liveErr)
+	}
+
+	result, err := h.service.ListExperiences(c.Request.Context(), category, location, page, limit)
+	if err != nil {
+		logger.Errorf("Failed to fetch experiences from DB: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch experiences",
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -79,10 +82,13 @@ func (h *ExperienceHandler) GetExperienceByID(c *gin.Context) {
 	id := c.Param("id")
 	experience, err := h.service.GetExperienceByID(c.Request.Context(), id)
 	if err != nil {
-		logger.Errorf("Failed to fetch experience: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Experience not found",
-		})
+		liveExp, liveErr := h.fetchLiveExperienceByID(c, id)
+		if liveErr != nil {
+			logger.Errorf("Failed to fetch experience from both DB and Headout: %v / %v", err, liveErr)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": liveExp})
 		return
 	}
 
@@ -98,8 +104,13 @@ func (h *ExperienceHandler) GetExperienceByCityAndSlug(c *gin.Context) {
 
 	experience, err := h.service.GetExperienceByCityAndSlug(c.Request.Context(), city, slug)
 	if err != nil {
-		logger.Errorf("Failed to fetch experience by slug: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
+		liveExp, liveErr := h.fetchLiveExperienceByCityAndSlug(c, city, slug)
+		if liveErr != nil {
+			logger.Errorf("Failed to fetch experience from both DB and Headout: %v / %v", err, liveErr)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": liveExp})
 		return
 	}
 
@@ -131,6 +142,102 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	})
 }
 
+// SyncExperiences triggers a sync of experiences from Headout into the local DB
+func (h *ExperienceHandler) SyncExperiences(c *gin.Context) {
+	citiesParam := c.Query("cities")
+
+	var cities []string
+	if citiesParam != "" {
+		cities = strings.Split(citiesParam, ",")
+		for i := range cities {
+			cities[i] = strings.TrimSpace(cities[i])
+		}
+	}
+
+	go func() {
+		result, err := h.syncSvc.SyncExperiences(c.Request.Context(), cities)
+		if err != nil {
+			logger.Errorf("Sync error: %v", err)
+		} else {
+			logger.Infof("Sync completed: %+v", result)
+		}
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Sync started",
+		"cities":  cities,
+	})
+}
+
+// SyncExperienceByID syncs a single experience by Headout ID
+func (h *ExperienceHandler) SyncExperienceByID(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "headout id is required"})
+		return
+	}
+
+	go func() {
+		exp, err := h.syncSvc.SyncSingleExperience(c.Request.Context(), id)
+		if err != nil {
+			logger.Errorf("Sync single experience %s error: %v", id, err)
+		} else if exp != nil {
+			logger.Infof("Synced experience: %s (%s)", exp.Title, exp.HeadoutID)
+		}
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Sync started for experience",
+		"id":      id,
+	})
+}
+
+// GetAvailability returns inventory for a variant/date.
+// Compatibility behavior: if query param `variantId` is missing, `:id` is treated as variantId.
+func (h *ExperienceHandler) GetAvailability(c *gin.Context) {
+	variantID := strings.TrimSpace(c.Query("variantId"))
+	if variantID == "" {
+		variantID = strings.TrimSpace(c.Param("id"))
+	}
+
+	date := strings.TrimSpace(c.Query("date"))
+	if variantID == "" || date == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "variantId and date are required"})
+		return
+	}
+
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date, expected YYYY-MM-DD"})
+		return
+	}
+
+	parsedDate, _ := time.Parse("2006-01-02", date)
+	today := time.Now()
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+	parsedDate = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 0, 0, 0, 0, parsedDate.Location())
+	if parsedDate.Before(today) {
+		date = today.Format("2006-01-02")
+	}
+
+	query := url.Values{}
+	query.Set("variantId", variantID)
+	query.Set("startDateTime", date+"T00:00:00")
+	query.Set("endDateTime", date+"T23:59:59")
+
+	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/inventory/list-by/variant", query, false)
+	if err != nil {
+		logger.Errorf("Failed to fetch availability from Headout: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch availability"})
+		return
+	}
+
+	contentType := upstream.Headers.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	c.Data(upstream.StatusCode, contentType, upstream.Body)
+}
+
 func parseIntQuery(c *gin.Context, key string, fallback int) int {
 	if value := c.Query(key); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
@@ -138,6 +245,111 @@ func parseIntQuery(c *gin.Context, key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func (h *ExperienceHandler) fetchLiveExperienceByID(c *gin.Context, headoutID string) (*models.Experience, error) {
+	query := url.Values{}
+	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/product/get/"+url.PathEscape(headoutID), query, false)
+	if err != nil {
+		return nil, fmt.Errorf("headout request: %w", err)
+	}
+
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		return nil, fmt.Errorf("headout returned status %d", upstream.StatusCode)
+	}
+
+	var payload interface{}
+	if err := json.Unmarshal(upstream.Body, &payload); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	product := extractSingleProduct(payload)
+	if product == nil {
+		return nil, fmt.Errorf("no product data in response")
+	}
+
+	mapped, ok := mapHeadoutProductToExperience(product, 1)
+	if !ok {
+		return nil, fmt.Errorf("could not map headout product")
+	}
+
+	return &mapped, nil
+}
+
+func (h *ExperienceHandler) fetchLiveExperienceByCityAndSlug(c *gin.Context, city, slug string) (*models.Experience, error) {
+	cityCode := toCityCode(city)
+
+	query := url.Values{}
+	query.Set("cityCode", cityCode)
+	query.Set("currencyCode", "USD")
+	query.Set("language", "en")
+	query.Set("limit", "50")
+	query.Set("offset", "0")
+
+	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, false)
+	if err != nil {
+		return nil, fmt.Errorf("headout request: %w", err)
+	}
+
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		return nil, fmt.Errorf("headout returned status %d", upstream.StatusCode)
+	}
+
+	var payload interface{}
+	if err := json.Unmarshal(upstream.Body, &payload); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	products := extractProductsArray(payload)
+	for _, item := range products {
+		title := getString(item, "title", "name")
+		if title == "" {
+			continue
+		}
+		itemSlug := slugify(title)
+		if strings.EqualFold(itemSlug, slug) {
+			mapped, ok := mapHeadoutProductToExperience(item, 1)
+			if ok {
+				return &mapped, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no experience found for %s/%s", city, slug)
+}
+
+func extractSingleProduct(payload interface{}) map[string]interface{} {
+	root, ok := payload.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	keys := []string{"data", "product", "result"}
+	for _, key := range keys {
+		if value, exists := root[key]; exists {
+			if product, ok := value.(map[string]interface{}); ok {
+				return product
+			}
+		}
+	}
+
+	return root
+}
+
+func slugify(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var result strings.Builder
+	lastDash := false
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			result.WriteRune(r)
+			lastDash = false
+		} else if !lastDash {
+			result.WriteRune('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(result.String(), "-")
 }
 
 func (h *ExperienceHandler) fetchLiveExperiences(c *gin.Context, limit int) ([]models.Experience, error) {

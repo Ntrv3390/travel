@@ -30,8 +30,6 @@ const sectionLinks = [
   { href: "#more-ways", label: "More ways" },
 ];
 
-const fallbackSlots = ["09:00", "11:30", "14:00", "18:15"];
-
 function formatDisplayPrice(value: number, currency: string) {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -42,39 +40,6 @@ function formatDisplayPrice(value: number, currency: string) {
   } catch {
     return `${currency || "USD"} ${value.toFixed(0)}`;
   }
-}
-
-function extractInventorySlots(payload: unknown): string[] {
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const candidates: string[] = [];
-  const visit = (value: unknown) => {
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
-
-    if (!value || typeof value !== "object") {
-      return;
-    }
-
-    const obj = value as Record<string, unknown>;
-    const raw = (obj.startDateTime || obj.startTime || obj.time) as string | undefined;
-    if (typeof raw === "string" && raw.length >= 5) {
-      const slot = raw.includes("T") ? raw.split("T")[1]?.slice(0, 5) : raw.slice(0, 5);
-      if (slot && /^\d{2}:\d{2}$/.test(slot)) {
-        candidates.push(slot);
-      }
-    }
-
-    Object.values(obj).forEach(visit);
-  };
-
-  visit(payload);
-
-  return [...new Set(candidates)].sort();
 }
 
 export function SingleExperienceLanding({ experience, related }: SingleExperienceLandingProps) {
@@ -170,6 +135,11 @@ export function SingleExperienceLanding({ experience, related }: SingleExperienc
             <PackageOptionsSection
               variantId={variantId ?? ""}
               headoutId={content.experience.headoutId}
+              experienceId={content.experience.headoutId}
+              title={content.experience.title}
+              imageUrl={content.experience.images[0]?.url ?? ""}
+              price={content.experience.options[0]?.price ?? 0}
+              currency={content.experience.options[0]?.currency ?? "USD"}
               selectedDate={selectedDate}
               selectedSlot={selectedSlot}
               onDateChange={handleDateChange}

@@ -44,9 +44,12 @@ func Init(cfg *config.Config) error {
 func Migrate() error {
 	return db.AutoMigrate(
 		&models.Experience{},
+		&models.ExperienceGTTD{},
+		&models.ExperienceOption{},
 		&models.Booking{},
 		&models.PricingRule{},
 		&models.GoogleFeedStatus{},
+		&models.POIMapping{},
 	)
 }
 

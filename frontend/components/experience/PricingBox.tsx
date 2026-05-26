@@ -17,7 +17,7 @@ export function PricingBox({ experience }: { experience: Experience }) {
   const [date, setDate] = useState("");
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
   const [adults, setAdults] = useState(1);
-  const [children, setChildren] = useState(0);
+  const [childCount, setChildCount] = useState(0);
 
   const selectedVariant = useMemo(
     () => experience.options.find((option) => option.id === variantId) ?? experience.options[0],
@@ -28,8 +28,8 @@ export function PricingBox({ experience }: { experience: Experience }) {
 
   const total = useMemo(() => {
     const unitPrice = selectedVariant?.price ?? 0;
-    return unitPrice * (adults + children);
-  }, [selectedVariant?.price, adults, children]);
+    return unitPrice * (adults + childCount);
+  }, [selectedVariant?.price, adults, childCount]);
 
   const canBook = Boolean(date && variantId && availability && !isError);
 
@@ -43,7 +43,7 @@ export function PricingBox({ experience }: { experience: Experience }) {
         <Separator />
         <VariantSelector options={experience.options} value={variantId} onChange={setVariantId} />
         <DatePicker value={date} onChange={setDate} />
-        <GuestSelector adults={adults} children={children} onAdultsChange={setAdults} onChildrenChange={setChildren} />
+        <GuestSelector adults={adults} childCount={childCount} onAdultsChange={setAdults} onChildrenChange={setChildCount} />
         <Separator />
 
         <div className="flex items-center justify-between text-sm">

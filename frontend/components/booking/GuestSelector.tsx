@@ -21,12 +21,12 @@ function Counter({ label, value, onChange, min = 0 }: { label: string; value: nu
 
 export function GuestSelector({
   adults,
-  children,
+  childCount,
   onAdultsChange,
   onChildrenChange,
 }: {
   adults: number;
-  children: number;
+  childCount: number;
   onAdultsChange: (value: number) => void;
   onChildrenChange: (value: number) => void;
 }) {
@@ -35,7 +35,7 @@ export function GuestSelector({
       <label className="text-sm font-medium">Guests</label>
       <div className="space-y-2">
         <Counter label="Adults" value={adults} onChange={onAdultsChange} min={1} />
-        <Counter label="Children" value={children} onChange={onChildrenChange} />
+        <Counter label="Children" value={childCount} onChange={onChildrenChange} />
       </div>
     </div>
   );

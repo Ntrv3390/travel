@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ShoppingCart } from "lucide-react";
 import { SearchBar } from "@/components/search/SearchBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Button } from "@/components/ui/button";
@@ -61,8 +63,15 @@ export function Navbar() {
           <div className="hidden flex-1 md:block">
             <SearchBar compact />
           </div>
-          <div className="md:hidden">
-            <MobileNav />
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild className="h-9 w-9 p-0">
+              <Link href="/cart" aria-label="Cart">
+                <ShoppingCart className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div className="md:hidden">
+              <MobileNav />
+            </div>
           </div>
         </Card>
       </div>

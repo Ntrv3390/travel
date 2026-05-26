@@ -192,7 +192,7 @@ export function ContentSections({ content, cardImageTick, moreWaysRailRef, onScr
             </div>
 
             <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-6 lg:grid-cols-12">
-              {content.reviews.map((review, index) => {
+              {content.reviews.slice(0, 12).map((review, index) => {
                 const key = getReviewCardClass(index);
                 return (
                   <article

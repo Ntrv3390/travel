@@ -50,20 +50,10 @@ func NewPricingService() *PricingService {
 
 // ApplyPricingRule applies pricing rules to an experience
 func (s *PricingService) ApplyPricingRule(
-	exp *models.Experience,
-	rule *models.PricingRule,
+	exp *models.PricingRule,
 ) float64 {
-	finalPrice := exp.Price + rule.FixedFee
-	finalPrice = finalPrice * (1 + rule.MarkupPercentage/100)
-
-	if rule.MinPrice > 0 && finalPrice < rule.MinPrice {
-		return rule.MinPrice
-	}
-
-	if rule.MaxPrice > 0 && finalPrice > rule.MaxPrice {
-		return rule.MaxPrice
-	}
-
+	finalPrice := exp.FixedFeeAmount
+	finalPrice = finalPrice * (1 + exp.MarkupPercentage/100)
 	return finalPrice
 }
 

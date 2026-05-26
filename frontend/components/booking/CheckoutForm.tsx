@@ -3,14 +3,24 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { checkoutFormSchema, type CheckoutFormValues } from "@/lib/validations";
+import { createBooking } from "@/lib/api";
 
 export function CheckoutForm() {
   const router = useRouter();
   const search = useSearchParams();
+  const [submitting, setSubmitting] = useState(false);
+
+  const experienceId = search.get("experienceId") ?? "";
+  const variantId = search.get("variantId") ?? "";
+  const date = search.get("date") ?? "";
+  const adults = parseInt(search.get("adults") ?? "1", 10);
+  const children = parseInt(search.get("children") ?? "0", 10);
+
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutFormSchema),
     defaultValues: {
@@ -23,10 +33,34 @@ export function CheckoutForm() {
   });
 
   const onSubmit = async (values: CheckoutFormValues) => {
-    const params = new URLSearchParams(search.toString());
-    Object.entries(values).forEach(([key, value]) => {
-      if (value) params.set(key, value);
+    setSubmitting(true);
+    const result = await createBooking({
+      experienceId,
+      variantId,
+      date,
+      adults,
+      children,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email,
+      phone: values.phone,
+      specialRequests: values.specialRequests,
     });
+
+    if (result.error) {
+      alert("Booking failed: " + result.error);
+      setSubmitting(false);
+      return;
+    }
+
+    const booking = result.data;
+    const params = new URLSearchParams(search.toString());
+    if (booking) {
+      params.set("bookingRef", booking.headoutReference || booking.bookingId);
+      params.set("bookingId", booking.bookingId);
+      params.set("status", booking.status);
+      params.set("emailSent", String(booking.confirmationEmailSent));
+    }
     router.push(`/checkout/confirmation?${params.toString()}`);
   };
 
@@ -89,8 +123,8 @@ export function CheckoutForm() {
             )}
           />
         </div>
-        <Button className="w-full" type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? "Processing..." : "Continue"}
+        <Button className="w-full" type="submit" disabled={submitting}>
+          {submitting ? "Booking..." : "Confirm & Book"}
         </Button>
       </form>
     </Form>

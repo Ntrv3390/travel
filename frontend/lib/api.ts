@@ -207,7 +207,7 @@ export async function getJSONLD(headoutId: string): Promise<ApiResult<string>> {
 export async function getAvailability(experienceId: string, date: string): Promise<ApiResult<Record<string, unknown>>> {
   try {
     const res = await fetch(
-      `${API_BASE}/api/v1/experiences/${encodeURIComponent(experienceId)}/availability?date=${encodeURIComponent(date)}`,
+      `${API_BASE}/api/v1/experiences-availability/${encodeURIComponent(experienceId)}?date=${encodeURIComponent(date)}`,
       { cache: "no-store" },
     );
     return readJson<Record<string, unknown>>(res);
@@ -225,6 +225,104 @@ export async function createBooking(payload: BookingRequest): Promise<ApiResult<
       cache: "no-store",
     });
     return readJson<BookingResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export interface CartItemPayload {
+  experienceId: string;
+  variantId: string;
+  date: string;
+  adults: number;
+  children: number;
+  priceAmount?: number;
+  currency?: string;
+  title?: string;
+  imageUrl?: string;
+}
+
+interface CartItemResponse {
+  id: string;
+  experienceId: string;
+  variantId: string;
+  date: string;
+  adults: number;
+  children: number;
+  priceAmount?: number;
+  currency?: string;
+  title?: string;
+  imageUrl?: string;
+  addedAt: string;
+}
+
+interface CartResponse {
+  id: string;
+  sessionId: string;
+  items: CartItemResponse[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+const CART_SESSION_KEY = "traviia_cart_session";
+
+export function getCartSessionId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem(CART_SESSION_KEY);
+  if (!id) {
+    id = crypto.randomUUID?.() ?? `sess-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(CART_SESSION_KEY, id);
+  }
+  return id;
+}
+
+export async function getCart(sessionId: string): Promise<ApiResult<CartResponse>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/cart`, {
+      headers: { "X-Session-ID": sessionId },
+      cache: "no-store",
+    });
+    return readJson<CartResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function addCartItem(sessionId: string, item: CartItemPayload): Promise<ApiResult<CartResponse>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/cart/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-ID": sessionId },
+      body: JSON.stringify(item),
+      cache: "no-store",
+    });
+    return readJson<CartResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function removeCartItem(sessionId: string, itemId: string): Promise<ApiResult<CartResponse>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/cart/items/${encodeURIComponent(itemId)}`, {
+      method: "DELETE",
+      headers: { "X-Session-ID": sessionId },
+      cache: "no-store",
+    });
+    return readJson<CartResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function clearCart(sessionId: string): Promise<ApiResult<{ message: string }>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/cart`, {
+      method: "DELETE",
+      headers: { "X-Session-ID": sessionId },
+      cache: "no-store",
+    });
+    return readJson<{ message: string }>(res);
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
   }

@@ -67,7 +67,10 @@ func main() {
 	router.GET("/api/v1/experiences", expHandler.GetExperiences)
 	router.GET("/api/v1/experiences/by-id/:id", expHandler.GetExperienceByID)
 	router.GET("/api/v1/experiences/:city/:slug", expHandler.GetExperienceByCityAndSlug)
+	router.GET("/api/v1/experiences-availability/:id", expHandler.GetAvailability)
 	router.GET("/api/v1/experiences/search", expHandler.SearchExperiences)
+	router.POST("/api/v1/admin/sync", expHandler.SyncExperiences)
+	router.POST("/api/v1/admin/sync/:id", expHandler.SyncExperienceByID)
 
 	// Headout proxy routes
 	headoutHandler := handlers.NewHeadoutHandler(cfg)
@@ -89,10 +92,31 @@ func main() {
 		headoutGroup.GET("/v2/subcategories", headoutHandler.ListSubcategoriesV2)
 	}
 
-	// Compatibility aliases for frontend booking route
+	// Normalized booking flow routes (for frontend consumption)
+	bookingFlowHandler := handlers.NewBookingFlowHandler(cfg)
+	bookingFlowGroup := router.Group("/api/v1/booking-flow")
+	{
+		bookingFlowGroup.GET("/calendar", bookingFlowHandler.GetCalendar)
+		bookingFlowGroup.GET("/availability", bookingFlowHandler.GetAvailability)
+		bookingFlowGroup.POST("/bookings", bookingFlowHandler.CreateBooking)
+		bookingFlowGroup.GET("/bookings/:id", bookingFlowHandler.GetBooking)
+		bookingFlowGroup.PUT("/bookings/:id/capture", bookingFlowHandler.CaptureBooking)
+	}
+
+	// Cart routes (for multi-item booking support)
+	cartHandler := handlers.NewCartHandler()
+	cartGroup := router.Group("/api/v1/cart")
+	{
+		cartGroup.GET("", cartHandler.GetCart)
+		cartGroup.POST("/items", cartHandler.AddItem)
+		cartGroup.DELETE("/items/:id", cartHandler.RemoveItem)
+		cartGroup.DELETE("", cartHandler.ClearCart)
+	}
+
+	// Frontend-facing booking API (uses booking flow handler for proper request/response mapping)
 	router.GET("/api/v1/bookings", headoutHandler.ListBookings)
 	router.GET("/api/v1/bookings/:id", headoutHandler.GetBookingByID)
-	router.POST("/api/v1/bookings", headoutHandler.CreateBooking)
+	router.POST("/api/v1/bookings", bookingFlowHandler.CreateBooking)
 	router.PUT("/api/v1/bookings/:id", headoutHandler.UpdateBooking)
 
 	// GTTD routes
