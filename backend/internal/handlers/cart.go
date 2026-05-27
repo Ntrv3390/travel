@@ -12,9 +12,9 @@ type CartHandler struct {
 	cartService *services.CartService
 }
 
-func NewCartHandler() *CartHandler {
+func NewCartHandler(cartService *services.CartService) *CartHandler {
 	return &CartHandler{
-		cartService: services.NewCartService(),
+		cartService: cartService,
 	}
 }
 

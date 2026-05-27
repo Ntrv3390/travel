@@ -94,6 +94,7 @@ type createBookingRequest struct {
 	Phone           string `json:"phone"`
 	SpecialRequests string `json:"specialRequests,omitempty"`
 	CurrencyCode    string `json:"currencyCode,omitempty"`
+	IdempotencyKey  string `json:"-"`
 }
 
 type bookingResponse struct {
@@ -330,11 +331,15 @@ func (h *BookingFlowHandler) GetAvailability(c *gin.Context) {
 }
 
 func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
+	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+
 	var req createBookingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking payload"})
 		return
 	}
+
+	req.IdempotencyKey = idempotencyKey
 
 	req.VariantID = strings.TrimSpace(req.VariantID)
 	req.Email = strings.TrimSpace(req.Email)
@@ -351,13 +356,46 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "date is required"})
 		return
 	}
+	if _, dateErr := time.Parse("2006-01-02", req.Date); dateErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
+		return
+	}
 	if req.Email == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		return
+	}
+	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
 		return
 	}
 	if req.FirstName == "" || req.LastName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "firstName and lastName are required"})
 		return
+	}
+	if req.Adults < 0 || req.Children < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "adults and children must be non-negative"})
+		return
+	}
+	if req.Phone != "" && len(req.Phone) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid phone number"})
+		return
+	}
+
+	if idempotencyKey != "" {
+		var existing models.Booking
+		err := database.GetDB().WithContext(c.Request.Context()).
+			Where("idempotency_key = ?", idempotencyKey).First(&existing).Error
+		if err == nil {
+			c.JSON(http.StatusOK, bookingResponse{
+				BookingID:             existing.BookingID,
+				HeadoutReference:      existing.HeadoutReference,
+				Status:                existing.Status,
+				TotalAmount:           existing.TotalPrice,
+				Currency:              existing.Currency,
+				ConfirmationEmailSent: true,
+			})
+			return
+		}
 	}
 
 	inventoryID := strings.TrimSpace(req.InventoryID)
@@ -376,7 +414,6 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	}
 
 	customers := make([]map[string]interface{}, 0, totalPax)
-	customerIdx := 0
 	for i := 0; i < max(1, req.Adults); i++ {
 		customer := map[string]interface{}{
 			"personType": "ADULT",
@@ -392,7 +429,6 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 				map[string]interface{}{"id": "PHONE_NUMBER", "value": req.Phone})
 		}
 		customers = append(customers, customer)
-		customerIdx++
 	}
 	for i := 0; i < req.Children; i++ {
 		customers = append(customers, map[string]interface{}{
@@ -421,13 +457,20 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		return
 	}
 
-	upstream, err := h.authService.Post(c.Request.Context(), "/v1/booking", url.Values{}, bodyBytes, true)
+	upstream, err := retryHeadoutCall(func() (*services.UpstreamResponse, error) {
+		return h.authService.Post(c.Request.Context(), "/v1/booking", url.Values{}, bodyBytes, true)
+	})
 	if err != nil {
 		h.handleProxyError(c, err)
 		return
 	}
 
 	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		preview := string(upstream.Body)
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		logger.Errorf("Headout booking rejected with status %d: %s", upstream.StatusCode, preview)
 		c.Data(upstream.StatusCode, "application/json", upstream.Body)
 		return
 	}
@@ -522,7 +565,38 @@ func (h *BookingFlowHandler) handleProxyError(c *gin.Context, err error) {
 	}
 
 	logger.Errorf("Booking flow Headout request failed: %v", err)
-	c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch data from headout"})
+
+	errMsg := "headout service is temporarily unavailable"
+	if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
+		errMsg = "headout service request timed out"
+	} else if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "no such host") {
+		errMsg = "headout service is unreachable"
+	}
+	c.JSON(http.StatusBadGateway, gin.H{"error": errMsg})
+}
+
+func retryHeadoutCall(fn func() (*services.UpstreamResponse, error)) (*services.UpstreamResponse, error) {
+	var lastErr error
+	maxAttempts := 3
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(500*attempt) * time.Millisecond)
+		}
+
+		resp, err := fn()
+		if err == nil && resp.StatusCode < 500 {
+			return resp, nil
+		}
+
+		if err != nil {
+			lastErr = err
+			logger.Warnf("Headout call attempt %d/%d failed with error: %v", attempt+1, maxAttempts, err)
+		} else {
+			lastErr = fmt.Errorf("headout returned status %d", resp.StatusCode)
+			logger.Warnf("Headout call attempt %d/%d returned status %d", attempt+1, maxAttempts, resp.StatusCode)
+		}
+	}
+	return nil, fmt.Errorf("headout call failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (h *BookingFlowHandler) writeUpstreamResponse(c *gin.Context, upstream *services.UpstreamResponse) {
@@ -1006,6 +1080,7 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 		CustomerEmail:   req.Email,
 		CustomerPhone:   req.Phone,
 		SpecialRequests: req.SpecialRequests,
+		IdempotencyKey:  req.IdempotencyKey,
 	}
 
 	if err := db.WithContext(ctx).Create(&booking).Error; err != nil {

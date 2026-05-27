@@ -15,6 +15,8 @@ import (
 	"github.com/travel/backend/internal/gttd"
 	gttdhandlers "github.com/travel/backend/internal/handlers/gttd"
 	"github.com/travel/backend/internal/handlers"
+	"github.com/travel/backend/internal/middleware"
+	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
 )
@@ -52,10 +54,15 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(middleware.Recovery())
 
-	// Add CORS middleware
+	// Add middleware
 	router.Use(corsMiddleware())
+	router.Use(middleware.RequestLogger())
+
+	rl := middleware.NewRateLimiter(60, time.Minute)
+	router.Use(rl.RateLimit())
 
 	// Health check routes
 	healthHandler := handlers.NewHealthHandler()
@@ -69,8 +76,18 @@ func main() {
 	router.GET("/api/v1/experiences/:city/:slug", expHandler.GetExperienceByCityAndSlug)
 	router.GET("/api/v1/experiences-availability/:id", expHandler.GetAvailability)
 	router.GET("/api/v1/experiences/search", expHandler.SearchExperiences)
-	router.POST("/api/v1/admin/sync", expHandler.SyncExperiences)
-	router.POST("/api/v1/admin/sync/:id", expHandler.SyncExperienceByID)
+
+	// Admin sync routes (protected by admin auth)
+	adminGroup := router.Group("/api/v1/admin")
+	adminGroup.Use(middleware.AdminAuth())
+	{
+		adminGroup.POST("/sync", expHandler.SyncExperiences)
+		adminGroup.POST("/sync/:id", expHandler.SyncExperienceByID)
+	}
+
+	// Currencies endpoint
+	currencyHandler := handlers.NewCurrencyHandler()
+	router.GET("/api/v1/currencies", currencyHandler.ListCurrencies)
 
 	// Headout proxy routes
 	headoutHandler := handlers.NewHeadoutHandler(cfg)
@@ -104,13 +121,16 @@ func main() {
 	}
 
 	// Cart routes (for multi-item booking support)
-	cartHandler := handlers.NewCartHandler()
+	cartSvc := services.NewCartService(database.GetDB())
+	cartHandler := handlers.NewCartHandler(cartSvc)
+	checkoutHandler := handlers.NewCheckoutHandler(cartSvc, services.NewHeadoutProxyService(cfg))
 	cartGroup := router.Group("/api/v1/cart")
 	{
 		cartGroup.GET("", cartHandler.GetCart)
 		cartGroup.POST("/items", cartHandler.AddItem)
 		cartGroup.DELETE("/items/:id", cartHandler.RemoveItem)
 		cartGroup.DELETE("", cartHandler.ClearCart)
+		cartGroup.POST("/checkout", checkoutHandler.Checkout)
 	}
 
 	// Frontend-facing booking API (uses booking flow handler for proper request/response mapping)

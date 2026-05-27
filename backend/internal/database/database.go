@@ -50,6 +50,8 @@ func Migrate() error {
 		&models.PricingRule{},
 		&models.GoogleFeedStatus{},
 		&models.POIMapping{},
+		&models.Cart{},
+		&models.CartItem{},
 	)
 }
 

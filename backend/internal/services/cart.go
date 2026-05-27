@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/pkg/logger"
+	"gorm.io/gorm"
 )
 
 type CartItem struct {
@@ -38,50 +39,47 @@ type Cart struct {
 }
 
 type CartService struct {
-	mu    sync.RWMutex
-	carts map[string]*Cart
+	db *gorm.DB
 }
 
-func NewCartService() *CartService {
-	return &CartService{
-		carts: make(map[string]*Cart),
-	}
+func NewCartService(db *gorm.DB) *CartService {
+	return &CartService{db: db}
 }
 
 func (s *CartService) GetOrCreateCart(sessionID string) *Cart {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	sessionID = sanitizeSessionID(sessionID)
 	if sessionID == "" {
 		sessionID = uuid.New().String()
 	}
 
-	if cart, exists := s.carts[sessionID]; exists {
-		return cart
+	var model models.Cart
+	err := s.db.Where("session_id = ?", sessionID).Preload("Items").First(&model).Error
+	if err == nil {
+		return s.modelToCart(&model)
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	cart := &Cart{
-		ID:        uuid.New().String(),
+	now := time.Now()
+	model = models.Cart{
 		SessionID: sessionID,
-		Items:     make([]CartItem, 0),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	s.carts[sessionID] = cart
-	return cart
+	if err := s.db.Create(&model).Error; err != nil {
+		logger.Errorf("Failed to create cart for session %s: %v", sessionID, err)
+		return &Cart{
+			ID:        uuid.New().String(),
+			SessionID: sessionID,
+			Items:     []CartItem{},
+			CreatedAt: now.Format(time.RFC3339),
+			UpdatedAt: now.Format(time.RFC3339),
+		}
+	}
+
+	return s.modelToCart(&model)
 }
 
 func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartItem) (*Cart, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	sessionID = sanitizeSessionID(sessionID)
-	cart, exists := s.carts[sessionID]
-	if !exists {
-		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
-	}
 
 	if item.VariantID == "" {
 		return nil, fmt.Errorf("variantId is required")
@@ -90,69 +88,125 @@ func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartIt
 		return nil, fmt.Errorf("date is required")
 	}
 
-	item.ID = uuid.New().String()
-	item.AddedAt = time.Now().UTC().Format(time.RFC3339)
+	var model models.Cart
+	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
+		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
+	}
 
-	cart.Items = append(cart.Items, item)
-	cart.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	itemID := uuid.New().String()
+	cartItem := models.CartItem{
+		CartID:       model.ID,
+		UUID:         itemID,
+		ExperienceID: item.ExperienceID,
+		VariantID:    item.VariantID,
+		InventoryID:  item.InventoryID,
+		Date:         item.Date,
+		Adults:       item.Adults,
+		Children:     item.Children,
+		FirstName:    item.FirstName,
+		LastName:     item.LastName,
+		Email:        item.Email,
+		Phone:        item.Phone,
+		PriceAmount:  item.PriceAmount,
+		Currency:     item.Currency,
+		Title:        item.Title,
+		ImageURL:     item.ImageURL,
+	}
 
-	logger.Infof("Cart %s: added item %s (variant: %s, date: %s)", sessionID, item.ID, item.VariantID, item.Date)
+	if err := s.db.WithContext(ctx).Create(&cartItem).Error; err != nil {
+		return nil, fmt.Errorf("failed to add item: %w", err)
+	}
+
+	s.db.Model(&model).Update("updated_at", time.Now())
+
+	s.db.Preload("Items").First(&model, model.ID)
+	cart := s.modelToCart(&model)
+
+	logger.Infof("Cart %s: added item %s (variant: %s, date: %s)", sessionID, itemID, item.VariantID, item.Date)
 	return cart, nil
 }
 
 func (s *CartService) RemoveItem(ctx context.Context, sessionID string, itemID string) (*Cart, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	sessionID = sanitizeSessionID(sessionID)
-	cart, exists := s.carts[sessionID]
-	if !exists {
+
+	var model models.Cart
+	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
 		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
 	}
 
-	found := false
-	for i, item := range cart.Items {
-		if item.ID == itemID {
-			cart.Items = append(cart.Items[:i], cart.Items[i+1:]...)
-			found = true
-			break
-		}
+	result := s.db.WithContext(ctx).Where("cart_id = ? AND uuid = ?", model.ID, itemID).Delete(&models.CartItem{})
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to remove item: %w", result.Error)
 	}
-
-	if !found {
+	if result.RowsAffected == 0 {
 		return nil, fmt.Errorf("item %s not found in cart", itemID)
 	}
 
-	cart.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	s.db.Model(&model).Update("updated_at", time.Now())
+
+	s.db.Preload("Items").First(&model, model.ID)
+	cart := s.modelToCart(&model)
+
 	logger.Infof("Cart %s: removed item %s", sessionID, itemID)
 	return cart, nil
 }
 
 func (s *CartService) GetCart(ctx context.Context, sessionID string) (*Cart, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	sessionID = sanitizeSessionID(sessionID)
-	cart, exists := s.carts[sessionID]
-	if !exists {
+
+	var model models.Cart
+	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).Preload("Items").First(&model).Error; err != nil {
 		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
 	}
 
-	return cart, nil
+	return s.modelToCart(&model), nil
 }
 
 func (s *CartService) ClearCart(ctx context.Context, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	sessionID = sanitizeSessionID(sessionID)
-	if _, exists := s.carts[sessionID]; !exists {
+
+	var model models.Cart
+	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
 		return fmt.Errorf("cart not found for session: %s", sessionID)
 	}
 
-	s.carts[sessionID].Items = make([]CartItem, 0)
-	s.carts[sessionID].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.db.WithContext(ctx).Where("cart_id = ?", model.ID).Delete(&models.CartItem{}).Error; err != nil {
+		return fmt.Errorf("failed to clear cart items: %w", err)
+	}
+
+	s.db.Model(&model).Update("updated_at", time.Now())
 	return nil
+}
+
+func (s *CartService) modelToCart(m *models.Cart) *Cart {
+	cart := &Cart{
+		ID:        fmt.Sprintf("%d", m.ID),
+		SessionID: m.SessionID,
+		Items:     make([]CartItem, 0, len(m.Items)),
+		CreatedAt: m.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: m.UpdatedAt.Format(time.RFC3339),
+	}
+	for _, item := range m.Items {
+		cart.Items = append(cart.Items, CartItem{
+			ID:           item.UUID,
+			ExperienceID: item.ExperienceID,
+			VariantID:    item.VariantID,
+			InventoryID:  item.InventoryID,
+			Date:         item.Date,
+			Adults:       item.Adults,
+			Children:     item.Children,
+			FirstName:    item.FirstName,
+			LastName:     item.LastName,
+			Email:        item.Email,
+			Phone:        item.Phone,
+			PriceAmount:  item.PriceAmount,
+			Currency:     item.Currency,
+			Title:        item.Title,
+			ImageURL:     item.ImageURL,
+			AddedAt:      item.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return cart
 }
 
 func sanitizeSessionID(id string) string {

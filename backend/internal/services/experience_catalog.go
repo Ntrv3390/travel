@@ -18,14 +18,15 @@ func NewExperienceCatalogService(db *gorm.DB) *ExperienceCatalogService {
 }
 
 type ExperienceListResult struct {
-	Experiences []models.Experience `json:"data"`
-	Count       int64               `json:"count"`
-	Page        int                 `json:"page"`
-	Limit       int                 `json:"limit"`
-	TotalPages  int                 `json:"total_pages"`
+	Experiences  []models.Experience `json:"data"`
+	Count        int64               `json:"count"`
+	Page         int                 `json:"page"`
+	Limit        int                 `json:"limit"`
+	TotalPages   int                 `json:"total_pages"`
+	CurrencyCode string              `json:"currency_code,omitempty"`
 }
 
-func (s *ExperienceCatalogService) ListExperiences(ctx context.Context, category, location string, page, limit int) (*ExperienceListResult, error) {
+func (s *ExperienceCatalogService) ListExperiences(ctx context.Context, category, location, query, sort, currencyCode string, page, limit int) (*ExperienceListResult, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -34,68 +35,44 @@ func (s *ExperienceCatalogService) ListExperiences(ctx context.Context, category
 	}
 
 	offset := (page - 1) * limit
-	query := s.db.WithContext(ctx).Model(&models.Experience{}).Where("status = ?", "active")
+	q := s.db.WithContext(ctx).Model(&models.Experience{}).Where("status = ?", "active")
 	if category != "" {
-		query = query.Where("category = ?", category)
+		q = q.Where("category = ?", category)
 	}
 	if location != "" {
-		query = query.Where("location ILIKE ?", "%"+location+"%")
+		q = q.Where("location ILIKE ?", "%"+location+"%")
+	}
+	if query != "" {
+		like := "%" + query + "%"
+		q = q.Where("(title ILIKE ? OR description ILIKE ?)", like, like)
 	}
 
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
+	if err := q.Count(&total).Error; err != nil {
 		return nil, err
 	}
 
 	var experiences []models.Experience
-	if err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&experiences).Error; err != nil {
+	order := "created_at DESC"
+	if sort == "popular" {
+		order = "rating DESC, review_count DESC"
+	}
+	if err := q.Order(order).Limit(limit).Offset(offset).Find(&experiences).Error; err != nil {
 		return nil, err
 	}
 
 	return &ExperienceListResult{
-		Experiences: experiences,
-		Count:       total,
-		Page:        page,
-		Limit:       limit,
-		TotalPages:  int(math.Ceil(float64(total) / float64(limit))),
+		Experiences:  experiences,
+		Count:        total,
+		Page:         page,
+		Limit:        limit,
+		TotalPages:   int(math.Ceil(float64(total) / float64(limit))),
+		CurrencyCode: currencyCode,
 	}, nil
 }
 
-func (s *ExperienceCatalogService) SearchExperiences(ctx context.Context, category, location string, page, limit int) (*ExperienceListResult, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 12
-	}
-
-	offset := (page - 1) * limit
-	query := s.db.WithContext(ctx).Model(&models.Experience{}).Where("status = ?", "active")
-
-	if category != "" {
-		query = query.Where("category = ?", category)
-	}
-	if location != "" {
-		query = query.Where("location ILIKE ?", "%"+location+"%")
-	}
-
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, err
-	}
-
-	var experiences []models.Experience
-	if err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&experiences).Error; err != nil {
-		return nil, err
-	}
-
-	return &ExperienceListResult{
-		Experiences: experiences,
-		Count:       total,
-		Page:        page,
-		Limit:       limit,
-		TotalPages:  int(math.Ceil(float64(total) / float64(limit))),
-	}, nil
+func (s *ExperienceCatalogService) SearchExperiences(ctx context.Context, category, location, query, sort, currencyCode string, page, limit int) (*ExperienceListResult, error) {
+	return s.ListExperiences(ctx, category, location, query, sort, currencyCode, page, limit)
 }
 
 func (s *ExperienceCatalogService) GetExperienceByID(ctx context.Context, id string) (*models.Experience, error) {

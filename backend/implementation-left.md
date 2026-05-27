@@ -150,11 +150,18 @@
 | 🟠 HIGH | GTTD model migration | ✅ **DONE** |
 | 🟠 HIGH | Experience sync from Headout | ✅ **DONE** |
 | 🟠 HIGH | Local booking persistence | ✅ **DONE** |
-| 🟠 HIGH | Auth middleware | ❌ **TODO** |
+| 🟠 HIGH | Auth middleware | ✅ **DONE** |
+| 🟠 HIGH | Multi-currency support | ✅ **DONE** |
+| 🟠 HIGH | Free-text search + popular sort | ✅ **DONE** |
+| 🟠 HIGH | Cart persistence (DB) + checkout | ✅ **DONE** |
+| 🟠 HIGH | Booking flow: idempotency, retry, validation | ✅ **DONE** |
 | 🟡 MODERATE | GTTD handler placeholders | ✅ **DONE** |
 | 🟡 MODERATE | JSONLDBuilder hardcoded data | 🟡 **PARTIAL** (needs Item 2) |
 | 🟡 MODERATE | PricingRule model alignment | ✅ **DONE** |
 | 🟡 MODERATE | Experience model duality | ✅ **DONE** |
+| 🟡 MODERATE | HTML email templates | ✅ **DONE** |
+| 🟡 MODERATE | Request logging middleware | ✅ **DONE** |
+| 🟡 MODERATE | Rate limiting middleware | ✅ **DONE** |
 | 🟢 LOW | SFTP insecure host key | ❌ **TODO** |
 | 🟢 LOW | Redis caching | ❌ **TODO** |
 | 🟢 LOW | Cron starts after GTTD fix | ⏸️ **DEFERRED** |
@@ -163,6 +170,7 @@
 
 ## What IS Already Implemented ✅
 
+### Previously Done
 - All 14 Headout API endpoints are proxied (both v1 and v2) via `internal/handlers/headout.go`
 - Headout proxy service with GET/POST/PUT + auth header support (`internal/services/headout_proxy.go`)
 - Experience CRUD handlers with DB+live fallback (`internal/handlers/experience.go`)
@@ -181,3 +189,19 @@
 - CORS middleware (`cmd/api/main.go`)
 - Health/ready endpoints (`internal/handlers/health.go`)
 - Graceful shutdown (`cmd/api/main.go`)
+
+### Newly Implemented
+- **Multi-currency support**: All experience list/detail endpoints accept `currencyCode` param; hardcoded USD replaced; `GET /api/v1/currencies` endpoint added (`internal/handlers/currency.go`, `internal/handlers/experience.go`, `internal/services/experience_catalog.go`)
+- **Free-text search**: `q=` query param on `GET /experiences` and `/search` uses ILIKE on title/description; `sort=popular` orders by rating/review count (`internal/handlers/experience.go`, `internal/services/experience_catalog.go`)
+- **DB-backed cart**: Cart & CartItem GORM models; CartService now persists to PostgreSQL instead of in-memory (`internal/models/cart.go`, `internal/services/cart.go`, `internal/database/database.go`)
+- **Cart checkout**: `POST /api/v1/cart/checkout` iterates cart items, creates Headout bookings, saves locally, sends notifications, handles partial failures (`internal/handlers/checkout.go`)
+- **Booking idempotency**: `Idempotency-Key` header support prevents duplicate bookings (`internal/handlers/booking_flow.go`, `internal/models/booking.go`)
+- **Booking validation**: Email format, date format, non-negative pax, phone length validation (`internal/handlers/booking_flow.go`)
+- **Retry logic**: `retryHeadoutCall` retries transient Headout failures up to 3 times with backoff (`internal/handlers/booking_flow.go`)
+- **Improved error messages**: Differentiated timeout/unreachable/generic Headout errors (`internal/handlers/booking_flow.go`)
+- **HTML email templates**: Professional inline-styled HTML for booking confirmations (`internal/services/email.go`)
+- **Request logging middleware**: Logs method, path, status, duration for every request (`internal/middleware/logging.go`)
+- **Rate limiting**: In-memory token bucket (60 req/min/IP) with cleanup goroutine (`internal/middleware/ratelimit.go`)
+- **Admin auth middleware**: Protects admin sync routes via `X-Admin-Key` header (`internal/middleware/auth.go`)
+- **Panic recovery**: Custom recovery middleware with structured logging (`internal/middleware/recovery.go`)
+- **Integration in main.go**: All routes, middleware, and services wired up (`cmd/api/main.go`)

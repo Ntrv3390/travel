@@ -23,6 +23,7 @@ type Booking struct {
 	CustomerEmail     string          `json:"customer_email"`
 	CustomerPhone     string          `json:"customer_phone"`
 	SpecialRequests   string          `gorm:"type:text" json:"special_requests"`
+	IdempotencyKey    string          `gorm:"uniqueIndex" json:"idempotency_key"`
 	ConfirmationEmail string          `json:"confirmation_email"`
 	CreatedAt         time.Time       `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt         time.Time       `gorm:"autoUpdateTime" json:"updated_at"`

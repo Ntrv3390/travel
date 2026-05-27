@@ -94,7 +94,8 @@ func (s *SyncService) syncCity(ctx context.Context, cityCode string) (*SyncResul
 	for page < maxPages {
 		query := url.Values{}
 		query.Set("cityCode", cityCode)
-		query.Set("currencyCode", "USD")
+		currencyCode := "USD" // default, can be made configurable
+		query.Set("currencyCode", currencyCode)
 		query.Set("language", "en")
 		query.Set("limit", strconv.Itoa(limit))
 		query.Set("offset", strconv.Itoa(page*limit))

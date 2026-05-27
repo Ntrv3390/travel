@@ -40,17 +40,21 @@ func NewExperienceHandler() *ExperienceHandler {
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	category := c.Query("category")
 	location := c.Query("location")
+	q := c.Query("q")
+	sort := c.Query("sort")
+	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 12)
 
 	liveExperiences, liveErr := h.fetchLiveExperiences(c, limit)
 	if liveErr == nil && len(liveExperiences) > 0 {
 		c.JSON(http.StatusOK, gin.H{
-			"data":        liveExperiences,
-			"count":       len(liveExperiences),
-			"page":        1,
-			"limit":       limit,
-			"total_pages": 1,
+			"data":           liveExperiences,
+			"count":          len(liveExperiences),
+			"page":           1,
+			"limit":          limit,
+			"total_pages":    1,
+			"currency_code":  strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
 		})
 		return
 	}
@@ -59,7 +63,7 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 		logger.Warnf("Live Headout fetch failed, falling back to DB: %v", liveErr)
 	}
 
-	result, err := h.service.ListExperiences(c.Request.Context(), category, location, page, limit)
+	result, err := h.service.ListExperiences(c.Request.Context(), category, location, q, sort, currencyCode, page, limit)
 	if err != nil {
 		logger.Errorf("Failed to fetch experiences from DB: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -69,20 +73,22 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":        result.Experiences,
-		"count":       result.Count,
-		"page":        result.Page,
-		"limit":       result.Limit,
-		"total_pages": result.TotalPages,
+		"data":          result.Experiences,
+		"count":         result.Count,
+		"page":          result.Page,
+		"limit":         result.Limit,
+		"total_pages":   result.TotalPages,
+		"currency_code": result.CurrencyCode,
 	})
 }
 
 // GetExperienceByID returns a single experience by ID
 func (h *ExperienceHandler) GetExperienceByID(c *gin.Context) {
 	id := c.Param("id")
+	currencyCode := c.Query("currencyCode")
 	experience, err := h.service.GetExperienceByID(c.Request.Context(), id)
 	if err != nil {
-		liveExp, liveErr := h.fetchLiveExperienceByID(c, id)
+		liveExp, liveErr := h.fetchLiveExperienceByID(c, id, currencyCode)
 		if liveErr != nil {
 			logger.Errorf("Failed to fetch experience from both DB and Headout: %v / %v", err, liveErr)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
@@ -101,10 +107,11 @@ func (h *ExperienceHandler) GetExperienceByID(c *gin.Context) {
 func (h *ExperienceHandler) GetExperienceByCityAndSlug(c *gin.Context) {
 	city := c.Param("city")
 	slug := c.Param("slug")
+	currencyCode := c.Query("currencyCode")
 
 	experience, err := h.service.GetExperienceByCityAndSlug(c.Request.Context(), city, slug)
 	if err != nil {
-		liveExp, liveErr := h.fetchLiveExperienceByCityAndSlug(c, city, slug)
+		liveExp, liveErr := h.fetchLiveExperienceByCityAndSlug(c, city, slug, currencyCode)
 		if liveErr != nil {
 			logger.Errorf("Failed to fetch experience from both DB and Headout: %v / %v", err, liveErr)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
@@ -121,10 +128,13 @@ func (h *ExperienceHandler) GetExperienceByCityAndSlug(c *gin.Context) {
 func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	category := c.Query("category")
 	location := c.Query("location")
+	q := c.Query("q")
+	sort := c.Query("sort")
+	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 12)
 
-	result, err := h.service.SearchExperiences(c.Request.Context(), category, location, page, limit)
+	result, err := h.service.SearchExperiences(c.Request.Context(), category, location, q, sort, currencyCode, page, limit)
 	if err != nil {
 		logger.Errorf("Failed to search experiences: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -134,11 +144,12 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":        result.Experiences,
-		"count":       result.Count,
-		"page":        result.Page,
-		"limit":       result.Limit,
-		"total_pages": result.TotalPages,
+		"data":          result.Experiences,
+		"count":         result.Count,
+		"page":          result.Page,
+		"limit":         result.Limit,
+		"total_pages":   result.TotalPages,
+		"currency_code": result.CurrencyCode,
 	})
 }
 
@@ -247,8 +258,11 @@ func parseIntQuery(c *gin.Context, key string, fallback int) int {
 	return fallback
 }
 
-func (h *ExperienceHandler) fetchLiveExperienceByID(c *gin.Context, headoutID string) (*models.Experience, error) {
+func (h *ExperienceHandler) fetchLiveExperienceByID(c *gin.Context, headoutID, currencyCode string) (*models.Experience, error) {
 	query := url.Values{}
+	if currencyCode != "" {
+		query.Set("currencyCode", strings.ToUpper(currencyCode))
+	}
 	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/product/get/"+url.PathEscape(headoutID), query, false)
 	if err != nil {
 		return nil, fmt.Errorf("headout request: %w", err)
@@ -276,12 +290,12 @@ func (h *ExperienceHandler) fetchLiveExperienceByID(c *gin.Context, headoutID st
 	return &mapped, nil
 }
 
-func (h *ExperienceHandler) fetchLiveExperienceByCityAndSlug(c *gin.Context, city, slug string) (*models.Experience, error) {
+func (h *ExperienceHandler) fetchLiveExperienceByCityAndSlug(c *gin.Context, city, slug, currencyCode string) (*models.Experience, error) {
 	cityCode := toCityCode(city)
 
 	query := url.Values{}
 	query.Set("cityCode", cityCode)
-	query.Set("currencyCode", "USD")
+	query.Set("currencyCode", strings.ToUpper(defaultIfEmpty(currencyCode, "USD")))
 	query.Set("language", "en")
 	query.Set("limit", "50")
 	query.Set("offset", "0")
