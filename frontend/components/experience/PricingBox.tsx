@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, ShieldCheck, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -11,13 +12,20 @@ import { GuestSelector } from "@/components/booking/GuestSelector";
 import { VariantSelector } from "@/components/booking/VariantSelector";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { useAvailability } from "@/hooks/useAvailability";
+import { useCart } from "@/hooks/useCart";
+import { useToast } from "@/components/ui/toaster";
 import type { Experience } from "@/types/experience";
 
 export function PricingBox({ experience }: { experience: Experience }) {
+  const router = useRouter();
   const [date, setDate] = useState("");
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
   const [adults, setAdults] = useState(1);
   const [childCount, setChildCount] = useState(0);
+  const [addingToCart, setAddingToCart] = useState(false);
+
+  const { addItem } = useCart();
+  const { toast } = useToast();
 
   const selectedVariant = useMemo(
     () => experience.options.find((option) => option.id === variantId) ?? experience.options[0],
@@ -32,6 +40,46 @@ export function PricingBox({ experience }: { experience: Experience }) {
   }, [selectedVariant?.price, adults, childCount]);
 
   const canBook = Boolean(date && variantId && availability && !isError);
+
+  function handleBookNow() {
+    if (!canBook || !selectedVariant) return;
+    const params = new URLSearchParams({
+      experienceId: experience.id,
+      variantId: selectedVariant.id,
+      inventoryId: "",
+      date,
+      adults: String(adults),
+      children: String(childCount),
+      title: experience.title,
+      price: String(total),
+      currency: selectedVariant.currency ?? "USD",
+    });
+    router.push(`/checkout?${params.toString()}`);
+  }
+
+  async function handleAddToCart() {
+    if (!canBook || !selectedVariant || !date) return;
+    setAddingToCart(true);
+    try {
+      await addItem({
+        experienceId: experience.id,
+        variantId: selectedVariant.id,
+        variantTitle: selectedVariant.title,
+        date,
+        adults,
+        children: childCount,
+        unitPrice: selectedVariant.price,
+        totalPrice: total,
+        currency: selectedVariant.currency ?? "USD",
+        experience,
+      });
+      toast({ title: "Added to cart", description: `${experience.title} has been added to your cart.`, variant: "success" });
+    } catch {
+      toast({ title: "Failed to add", description: "Could not add item to cart. Please try again.", variant: "error" });
+    } finally {
+      setAddingToCart(false);
+    }
+  }
 
   return (
     <Card className="sticky top-24 border-0 shadow-pricing-box">
@@ -58,8 +106,18 @@ export function PricingBox({ experience }: { experience: Experience }) {
           </Alert>
         ) : null}
 
-        <Button className="h-12 w-full text-base font-semibold" disabled={!canBook}>
+        <Button className="h-12 w-full text-base font-semibold" disabled={!canBook} onClick={handleBookNow}>
           {canBook ? "Book Now" : "Check Availability"}
+        </Button>
+
+        <Button
+          variant="outline"
+          className="h-12 w-full text-base font-semibold"
+          disabled={!canBook || addingToCart}
+          onClick={handleAddToCart}
+        >
+          <ShoppingCart className="mr-2 h-4 w-4" />
+          {addingToCart ? "Adding..." : "Add to Cart"}
         </Button>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

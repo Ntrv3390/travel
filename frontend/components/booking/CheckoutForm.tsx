@@ -17,9 +17,11 @@ export function CheckoutForm() {
 
   const experienceId = search.get("experienceId") ?? "";
   const variantId = search.get("variantId") ?? "";
+  const inventoryId = search.get("inventoryId") ?? "";
   const date = search.get("date") ?? "";
   const adults = parseInt(search.get("adults") ?? "1", 10);
   const children = parseInt(search.get("children") ?? "0", 10);
+  const currency = search.get("currency") ?? "USD";
 
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutFormSchema),
@@ -34,12 +36,16 @@ export function CheckoutForm() {
 
   const onSubmit = async (values: CheckoutFormValues) => {
     setSubmitting(true);
+    const idempotencyKey = crypto.randomUUID?.() ?? `bk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const result = await createBooking({
       experienceId,
       variantId,
+      inventoryId,
       date,
       adults,
       children,
+      currencyCode: currency,
+      idempotencyKey,
       firstName: values.firstName,
       lastName: values.lastName,
       email: values.email,

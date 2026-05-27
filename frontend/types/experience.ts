@@ -9,6 +9,24 @@ export interface CancellationPolicy {
   description: string;
 }
 
+export interface AvailabilitySlot {
+  time: string
+  startDateTime: string
+  endDateTime: string
+  spotsLeft: number
+  inventoryId: string
+  variantId: string
+  price: number
+  currency: string
+}
+
+export interface CalendarDay {
+  date: string
+  available: boolean
+  minPrice: number
+  currency: string
+}
+
 export interface ExperienceOption {
   id: string;
   headoutVariantId: string;
@@ -45,5 +63,6 @@ export interface Experience {
   durationMaxSeconds: number;
   cancellationPolicy: CancellationPolicy | null;
   options: ExperienceOption[];
+  tags?: string[];
   gttdEnabled: boolean;
 }

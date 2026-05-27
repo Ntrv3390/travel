@@ -15,6 +15,12 @@ export interface PaginatedResponse<T> {
   limit: number;
 }
 
+export interface CurrencyOption {
+  code: string
+  symbol: string
+  name: string
+}
+
 export interface SearchParams {
   category?: string;
   sort?: "recommended" | "price_asc" | "price_desc" | "rating";

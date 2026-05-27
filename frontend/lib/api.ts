@@ -134,7 +134,85 @@ async function requestExperiences(url: string): Promise<ApiResult<{ experiences:
 }
 
 export async function getTopExperiences(limit = 8) {
-  return requestExperiences(`${API_BASE}/api/v1/experiences?limit=${limit}`);
+  return requestExperiences(`${API_BASE}/api/v1/experiences/popular?limit=${limit}`);
+}
+
+// ── New: Popular Experiences ──
+export async function getPopularExperiences(currency = "USD", limit = 12) {
+  const url = new URL(`${API_BASE}/api/v1/experiences/popular`);
+  url.searchParams.set("currencyCode", currency);
+  url.searchParams.set("limit", String(limit));
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) return { data: null, error: "Failed to fetch popular experiences" };
+  const json = await res.json();
+  return { data: json.data ?? json, error: null };
+}
+
+export async function getExperienceCalendar(experienceId: string, months = 2, currency = "USD") {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/v1/experiences/${encodeURIComponent(experienceId)}/calendar?months=${months}&currencyCode=${currency}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getSlotAvailability(experienceId: string, variantId: string, date: string, currency = "USD") {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/v1/experiences-availability/${encodeURIComponent(experienceId)}?variantId=${encodeURIComponent(variantId)}&date=${encodeURIComponent(date)}&currencyCode=${currency}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getSupportedCurrencies() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/currencies`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getCities() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/headout/cities`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getCategories() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/headout/categories`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
 }
 
 export async function getCityExperiences(city: string, params: SearchParams = {}) {

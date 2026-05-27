@@ -5,10 +5,13 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { SearchBar } from "@/components/search/SearchBar";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { CurrencyPicker } from "@/components/common/CurrencyPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useCart } from "@/hooks/useCart";
 
 export function Navbar() {
+  const { itemCount } = useCart();
   const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
@@ -64,9 +67,15 @@ export function Navbar() {
             <SearchBar compact />
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild className="h-9 w-9 p-0">
+            <CurrencyPicker />
+            <Button variant="ghost" size="sm" asChild className="relative h-9 w-9 p-0">
               <Link href="/cart" aria-label="Cart">
                 <ShoppingCart className="h-5 w-5" />
+                {itemCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-[10px] font-bold text-white">
+                    {itemCount > 9 ? "9+" : itemCount}
+                  </span>
+                )}
               </Link>
             </Button>
             <div className="md:hidden">
