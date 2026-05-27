@@ -7,9 +7,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTopExperiences } from "@/lib/api";
+import type { SearchParams } from "@/types/api";
 
-export default async function HomePage() {
-  const result = await getTopExperiences(8);
+const PAGE_SIZE = 12;
+
+export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
+  const page = parseInt(searchParams.page ?? "1", 10);
+  const limit = parseInt(searchParams.limit ?? String(PAGE_SIZE), 10);
+  const result = await getTopExperiences(limit, page);
+
+  const totalPages = result.data?.totalPages ?? 1;
+  const currentCount = result.data?.experiences.length ?? 0;
 
   return (
     <>
@@ -26,8 +34,27 @@ export default async function HomePage() {
           <Alert>
             <AlertDescription>Experiences are temporarily unavailable. Please refresh in a moment.</AlertDescription>
           </Alert>
-        ) : result.data && result.data.experiences.length ? (
-          <ExperienceGrid experiences={result.data.experiences} />
+        ) : result.data && currentCount ? (
+          <>
+            <ExperienceGrid experiences={result.data.experiences} />
+            {totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-4">
+                {page > 1 && (
+                  <Button asChild variant="outline">
+                    <Link href={`/?page=${page - 1}&limit=${limit}`}>Previous</Link>
+                  </Button>
+                )}
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                {page < totalPages && (
+                  <Button asChild variant="outline">
+                    <Link href={`/?page=${page + 1}&limit=${limit}`}>Next</Link>
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
         ) : (
           <EmptyState title="No experiences yet" description="Try again later or explore another destination." />
         )}

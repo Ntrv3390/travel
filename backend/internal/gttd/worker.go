@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/travel/backend/internal/models"
 )
 
 // WorkerDB is the database interface needed by the worker
 type WorkerDB interface {
-	GetGTTDEnabledExperiences(ctx context.Context) (interface{}, error)
-	GetApplicablePricingRule(ctx context.Context, experienceID string, city string) interface{}
+	GetGTTDEnabledExperiences(ctx context.Context) ([]models.ExperienceGTTD, error)
+	GetApplicablePricingRule(ctx context.Context, experienceID string, city string) *models.PricingRule
 	CreateFeedStatus(ctx context.Context, environment string) (string, error)
 	UpdateFeedStatus(ctx context.Context, statusID string, status string, productCount int, errorMsg string) error
 }

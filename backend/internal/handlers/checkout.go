@@ -233,7 +233,7 @@ func (h *CheckoutHandler) fetchInventoryByVariant(ctx context.Context, variantID
 	query.Set("startDateTime", toDateKey(startDate)+defaultInventoryFrom)
 	query.Set("endDateTime", toDateKey(endDate)+defaultInventoryTo)
 
-	upstream, err := h.authService.Get(ctx, "/v1/inventory/list-by/variant", query, false)
+	upstream, err := h.authService.Get(ctx, "/v1/inventory/list-by/variant", query, true)
 	if err != nil {
 		return nil, err
 	}

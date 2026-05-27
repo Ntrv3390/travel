@@ -133,13 +133,13 @@ async function requestExperiences(url: string): Promise<ApiResult<{ experiences:
   }
 }
 
-export async function getTopExperiences(limit = 8) {
-  return requestExperiences(`${API_BASE}/api/v1/experiences/popular?limit=${limit}`);
+export async function getTopExperiences(limit = 12, page = 1) {
+  return requestExperiences(`${API_BASE}/api/v1/experiences?location=New York&limit=${limit}&page=${page}`);
 }
 
 // ── New: Popular Experiences ──
 export async function getPopularExperiences(currency = "USD", limit = 12) {
-  const url = new URL(`${API_BASE}/api/v1/experiences/popular`);
+  const url = new URL(`${API_BASE}/api/v1/experiences`);
   url.searchParams.set("currencyCode", currency);
   url.searchParams.set("limit", String(limit));
   const res = await fetch(url.toString(), { cache: "no-store" });
@@ -151,7 +151,7 @@ export async function getPopularExperiences(currency = "USD", limit = 12) {
 export async function getExperienceCalendar(experienceId: string, months = 2, currency = "USD") {
   try {
     const res = await fetch(
-      `${API_BASE}/api/v1/experiences/${encodeURIComponent(experienceId)}/calendar?months=${months}&currencyCode=${currency}`,
+      `${API_BASE}/api/v1/booking-flow/calendar?headoutId=${encodeURIComponent(experienceId)}&months=${months}&currencyCode=${currency}`,
       { cache: "no-store" }
     );
     if (!res.ok) return { data: [], error: null };
@@ -191,7 +191,7 @@ export async function getSupportedCurrencies() {
 
 export async function getCities() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/headout/cities`, {
+    const res = await fetch(`${API_BASE}/api/v1/headout/v1/city`, {
       next: { revalidate: 86400 },
     });
     if (!res.ok) return { data: [], error: null };
@@ -204,7 +204,7 @@ export async function getCities() {
 
 export async function getCategories() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/headout/categories`, {
+    const res = await fetch(`${API_BASE}/api/v1/headout/v2/categories`, {
       next: { revalidate: 86400 },
     });
     if (!res.ok) return { data: [], error: null };

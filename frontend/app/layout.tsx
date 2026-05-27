@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   title: { default: "Traviia - Experiences Worth Having", template: "%s | Traviia" },
   description: "Book tours, activities and experiences worldwide.",
   metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL),
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -22,12 +23,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={cn(GeistSans.className, "bg-background")}> 
         <CurrencyProvider>
           <CartProvider>
-            <div className="flex min-h-screen flex-col">
-              <Navbar />
-              <main className="flex-1">{children}</main>
-              <Footer />
-            </div>
-            <Toaster />
+            <Toaster>
+              <div className="flex min-h-screen flex-col">
+                <Navbar />
+                <main className="flex-1">{children}</main>
+                <Footer />
+              </div>
+            </Toaster>
           </CartProvider>
         </CurrencyProvider>
       </body>

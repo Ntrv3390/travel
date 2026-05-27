@@ -28,8 +28,7 @@ const (
 )
 
 type BookingFlowHandler struct {
-	authService   *services.HeadoutProxyService
-	publicService *services.HeadoutProxyService
+	authService *services.HeadoutProxyService
 }
 
 type inventoryPersonPrice struct {
@@ -94,6 +93,7 @@ type createBookingRequest struct {
 	Phone           string `json:"phone"`
 	SpecialRequests string `json:"specialRequests,omitempty"`
 	CurrencyCode    string `json:"currencyCode,omitempty"`
+	VariantInputFields []map[string]interface{} `json:"variantInputFields,omitempty"`
 	IdempotencyKey  string `json:"-"`
 }
 
@@ -117,12 +117,8 @@ type headoutBookingResponse struct {
 }
 
 func NewBookingFlowHandler(cfg *config.Config) *BookingFlowHandler {
-	publicCfg := *cfg
-	publicCfg.HeadoutURL = cfg.HeadoutProdBaseURL
-
 	return &BookingFlowHandler{
-		authService:   services.NewHeadoutProxyService(cfg),
-		publicService: services.NewHeadoutProxyService(&publicCfg),
+		authService: services.NewHeadoutProxyService(cfg),
 	}
 }
 
@@ -441,6 +437,11 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		})
 	}
 
+	vif := req.VariantInputFields
+	if vif == nil {
+		vif = []map[string]interface{}{}
+	}
+
 	headoutPayload := map[string]interface{}{
 		"variantId":   req.VariantID,
 		"inventoryId": inventoryID,
@@ -448,7 +449,7 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 			"count":     totalPax,
 			"customers": customers,
 		},
-		"variantInputFields": []map[string]interface{}{},
+		"variantInputFields": vif,
 	}
 
 	bodyBytes, err := json.Marshal(headoutPayload)
@@ -632,7 +633,7 @@ func (h *BookingFlowHandler) resolveVariantCandidates(c *gin.Context, variantID 
 	}
 
 	path := fmt.Sprintf("/v1/product/get/%s", url.PathEscape(headoutID))
-	upstream, err := h.publicService.Get(c.Request.Context(), path, url.Values{}, false)
+	upstream, err := h.authService.Get(c.Request.Context(), path, url.Values{}, true)
 	if err != nil {
 		logger.Warnf("Failed to fetch product for variant discovery: %v", err)
 		return found
@@ -663,7 +664,7 @@ func (h *BookingFlowHandler) fetchInventoryByVariant(
 	query.Set("startDateTime", toDateKey(startDate)+defaultInventoryFrom)
 	query.Set("endDateTime", toDateKey(endDate)+defaultInventoryTo)
 
-	upstream, err := h.publicService.Get(c.Request.Context(), "/v1/inventory/list-by/variant", query, false)
+	upstream, err := h.authService.Get(c.Request.Context(), "/v1/inventory/list-by/variant", query, true)
 	if err != nil {
 		return nil, err
 	}

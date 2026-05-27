@@ -13,6 +13,7 @@ export interface BookingRequest {
   email: string;
   phone: string;
   specialRequests?: string;
+  variantInputFields?: Array<{ id: string; value: string }>;
 }
 
 export interface CartItem {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"os/signal"
 	"syscall"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
 	"github.com/travel/backend/internal/database"
+	"github.com/travel/backend/internal/pricing"
 	"github.com/travel/backend/internal/gttd"
 	gttdhandlers "github.com/travel/backend/internal/handlers/gttd"
 	"github.com/travel/backend/internal/handlers"
@@ -61,7 +63,7 @@ func main() {
 	router.Use(corsMiddleware())
 	router.Use(middleware.RequestLogger())
 
-	rl := middleware.NewRateLimiter(60, time.Minute)
+	rl := middleware.NewRateLimiter(300, time.Minute)
 	router.Use(rl.RateLimit())
 
 	// Health check routes
@@ -204,8 +206,91 @@ type GTTDServices struct {
 }
 
 func initGTTDServices() (*GTTDServices, error) {
-	logger.Warn("GTTD services are temporarily disabled: missing DB adapter implementation")
-	return nil, nil
+	gormDB := database.GetDB()
+	if gormDB == nil {
+		return nil, fmt.Errorf("database not available for GTTD services")
+	}
+
+	// Create the DB adapter that implements all GTTD interfaces
+	dbAdapter := database.NewGTTDDBAdapter(gormDB)
+
+	// Create the pricing engine (centralized, used by feed gen, JSON-LD, and checkout)
+	pricingEngine := pricing.NewPricingEngine(dbAdapter)
+
+	// Determine environment for SFTP config
+	gttdEnv := os.Getenv("GTTD_ENV")
+	if gttdEnv == "" {
+		gttdEnv = "dev"
+	}
+
+	// Build SFTP config from environment variables
+	sftpHostKey := "GTTD_PROD_SFTP_HOST"
+	sftpUserKey := "GTTD_PROD_SFTP_USERNAME"
+	sftpPortKey := "GTTD_PROD_SFTP_PORT"
+	sftpDirKey := "GTTD_PROD_SFTP_REMOTE_DIR"
+	sshKeyPathKey := "GTTD_PROD_SSH_PRIVATE_KEY_PATH"
+
+	if gttdEnv == "dev" || gttdEnv == "sandbox" || gttdEnv == "development" {
+		sftpHostKey = "GTTD_DEV_SFTP_HOST"
+		sftpUserKey = "GTTD_DEV_SFTP_USERNAME"
+		sftpPortKey = "GTTD_DEV_SFTP_PORT"
+		sftpDirKey = "GTTD_DEV_SFTP_REMOTE_DIR"
+		sshKeyPathKey = "GTTD_DEV_SSH_PRIVATE_KEY_PATH"
+	}
+
+	sshKeyPath := os.Getenv(sshKeyPathKey)
+	if sshKeyPath == "" {
+		return nil, fmt.Errorf("SSH private key path not set (env: %s)", sshKeyPathKey)
+	}
+
+	privateKey, err := os.ReadFile(sshKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read SSH private key from %s: %w", sshKeyPath, err)
+	}
+
+	port := 22
+	if portStr := os.Getenv(sftpPortKey); portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			port = p
+		}
+	}
+
+	sftpCfg := gttd.SFTPConfig{
+		Host:       os.Getenv(sftpHostKey),
+		Port:       port,
+		Username:   os.Getenv(sftpUserKey),
+		PrivateKey: privateKey,
+		RemoteDir:  os.Getenv(sftpDirKey),
+	}
+
+	// Build feed output directory
+	feedOutputDir := os.Getenv("GTTD_FEED_OUTPUT_DIR")
+	if feedOutputDir == "" {
+		feedOutputDir = "/tmp/gttd_feeds"
+	}
+	if err := os.MkdirAll(feedOutputDir, 0755); err != nil {
+		return nil, fmt.Errorf("create feed output dir: %w", err)
+	}
+
+	baseURL := os.Getenv("GTTD_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://traviia.com"
+	}
+
+	// Create GTTD components
+	generator := gttd.NewFeedGenerator(dbAdapter, pricingEngine, baseURL)
+	jsonldBuilder := gttd.NewJSONLDBuilder(dbAdapter, pricingEngine, baseURL)
+	sftpUploader := gttd.NewSFTPUploader(sftpCfg)
+	worker := gttd.NewWorker(generator, sftpUploader, dbAdapter, gttdEnv)
+
+	logger.Infof("GTTD services initialized successfully (env: %s, sftp: %s)", gttdEnv, sftpCfg.Host)
+
+	return &GTTDServices{
+		Worker:        worker,
+		Generator:     generator,
+		JSONLDBuilder: jsonldBuilder,
+		SFTPUploader:  sftpUploader,
+	}, nil
 }
 
 func setupCronJobs(worker *gttd.Worker) {

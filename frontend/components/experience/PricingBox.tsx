@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DatePicker } from "@/components/booking/DatePicker";
 import { GuestSelector } from "@/components/booking/GuestSelector";
 import { VariantSelector } from "@/components/booking/VariantSelector";
+import { SlotSelector, type Slot } from "@/components/booking/SlotSelector";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { useAvailability } from "@/hooks/useAvailability";
 import { useCart } from "@/hooks/useCart";
@@ -20,6 +21,7 @@ export function PricingBox({ experience }: { experience: Experience }) {
   const router = useRouter();
   const [date, setDate] = useState("");
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
+  const [inventoryId, setInventoryId] = useState("");
   const [adults, setAdults] = useState(1);
   const [childCount, setChildCount] = useState(0);
   const [addingToCart, setAddingToCart] = useState(false);
@@ -32,21 +34,34 @@ export function PricingBox({ experience }: { experience: Experience }) {
     [experience.options, variantId],
   );
 
-  const { availability, isError } = useAvailability(experience.id, date);
+  const { availability, isError } = useAvailability(experience.id, variantId, date);
+
+  const slots: Slot[] = availability?.slots ?? [];
+  
+  // Auto-select first available slot if inventoryId is empty or invalid for current date/variant
+  useMemo(() => {
+    if (slots.length > 0) {
+      if (!inventoryId || !slots.find(s => s.inventoryId === inventoryId)) {
+        setInventoryId(slots[0].inventoryId);
+      }
+    } else {
+      setInventoryId("");
+    }
+  }, [slots, inventoryId]);
 
   const total = useMemo(() => {
     const unitPrice = selectedVariant?.price ?? 0;
     return unitPrice * (adults + childCount);
   }, [selectedVariant?.price, adults, childCount]);
 
-  const canBook = Boolean(date && variantId && availability && !isError);
+  const canBook = Boolean(date && variantId && (!slots.length || inventoryId) && availability && !isError);
 
   function handleBookNow() {
     if (!canBook || !selectedVariant) return;
     const params = new URLSearchParams({
       experienceId: experience.id,
       variantId: selectedVariant.id,
-      inventoryId: "",
+      inventoryId: inventoryId,
       date,
       adults: String(adults),
       children: String(childCount),
@@ -91,6 +106,9 @@ export function PricingBox({ experience }: { experience: Experience }) {
         <Separator />
         <VariantSelector options={experience.options} value={variantId} onChange={setVariantId} />
         <DatePicker value={date} onChange={setDate} />
+        {slots.length > 0 && (
+          <SlotSelector slots={slots} value={inventoryId} onChange={setInventoryId} />
+        )}
         <GuestSelector adults={adults} childCount={childCount} onAdultsChange={setAdults} onChildrenChange={setChildCount} />
         <Separator />
 

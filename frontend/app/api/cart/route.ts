@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const sessionId = req.headers.get("X-Session-ID") ?? ""
   const body = await req.json()
-  const res = await fetch(`${env.API_URL}/api/v1/cart`, {
+  const res = await fetch(`${env.API_URL}/api/v1/cart/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Session-ID": sessionId },
     body: JSON.stringify(body),

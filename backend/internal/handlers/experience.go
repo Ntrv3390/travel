@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/travel/backend/internal/database"
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
@@ -18,193 +17,257 @@ import (
 )
 
 type ExperienceHandler struct {
-	service         *services.ExperienceCatalogService
 	headoutProxySvc *services.HeadoutProxyService
-	publicProxySvc  *services.HeadoutProxyService
-	syncSvc         *services.SyncService
 }
 
 func NewExperienceHandler() *ExperienceHandler {
 	cfg := config.Load()
-	publicCfg := *cfg
-	publicCfg.HeadoutURL = cfg.HeadoutProdBaseURL
 	return &ExperienceHandler{
-		service:         services.NewExperienceCatalogService(database.GetDB()),
 		headoutProxySvc: services.NewHeadoutProxyService(cfg),
-		publicProxySvc:  services.NewHeadoutProxyService(&publicCfg),
-		syncSvc:         services.NewSyncService(cfg),
 	}
 }
 
-// GetExperiences returns experiences — always fetches live from Headout, falls back to DB
+// GetExperiences returns experiences — always from Headout live
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	category := c.Query("category")
 	location := c.Query("location")
 	q := c.Query("q")
-	sort := c.Query("sort")
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 12)
 
-	liveExperiences, liveErr := h.fetchLiveExperiences(c, limit)
-	if liveErr == nil && len(liveExperiences) > 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"data":           liveExperiences,
-			"count":          len(liveExperiences),
-			"page":           1,
-			"limit":          limit,
-			"total_pages":    1,
-			"currency_code":  strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
-		})
+	if category != "" {
+		h.fetchByCategory(c, category, currencyCode, page, limit)
 		return
 	}
 
-	if liveErr != nil {
-		logger.Warnf("Live Headout fetch failed, falling back to DB: %v", liveErr)
+	if q != "" && location != "" {
+		liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, location, page, limit)
+		if liveErr == nil && len(liveExperiences) > 0 {
+			filtered := filterExperiencesByQuery(liveExperiences, q)
+			totalPages := 1
+			if len(filtered) >= limit {
+				totalPages = page + 1
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"data":          filtered,
+				"count":         len(filtered),
+				"page":          page,
+				"limit":         limit,
+				"total_pages":   totalPages,
+				"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+			})
+			return
+		}
+		if liveErr != nil {
+			logger.Errorf("Failed to fetch from Headout: %v", liveErr)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
+			return
+		}
 	}
 
-	result, err := h.service.ListExperiences(c.Request.Context(), category, location, q, sort, currencyCode, page, limit)
-	if err != nil {
-		logger.Errorf("Failed to fetch experiences from DB: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch experiences",
+	// If location is derived from query text, use that
+	if q != "" && location == "" {
+		location = q
+	}
+
+	if location != "" {
+		liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, location, page, limit)
+		if liveErr != nil {
+			logger.Errorf("Failed to fetch from Headout: %v", liveErr)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
+			return
+		}
+		totalPages := 1
+		if len(liveExperiences) >= limit {
+			totalPages = page + 1
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data":          liveExperiences,
+			"count":         len(liveExperiences),
+			"page":          page,
+			"limit":         limit,
+			"total_pages":   totalPages,
+			"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":          result.Experiences,
-		"count":         result.Count,
-		"page":          result.Page,
-		"limit":         result.Limit,
-		"total_pages":   result.TotalPages,
-		"currency_code": result.CurrencyCode,
+		"data":         []models.Experience{},
+		"count":        0,
+		"page":         page,
+		"limit":        limit,
+		"total_pages":  0,
+		"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
 	})
 }
 
-// GetExperienceByID returns a single experience by ID
+// GetExperienceByID returns a single experience by ID — always from Headout
 func (h *ExperienceHandler) GetExperienceByID(c *gin.Context) {
 	id := c.Param("id")
 	currencyCode := c.Query("currencyCode")
-	experience, err := h.service.GetExperienceByID(c.Request.Context(), id)
-	if err != nil {
-		liveExp, liveErr := h.fetchLiveExperienceByID(c, id, currencyCode)
-		if liveErr != nil {
-			logger.Errorf("Failed to fetch experience from both DB and Headout: %v / %v", err, liveErr)
-			c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"data": liveExp})
+
+	liveExp, liveErr := h.fetchLiveExperienceByID(c, id, currencyCode)
+	if liveErr != nil {
+		logger.Errorf("Headout fetch for experience %s failed: %v", id, liveErr)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": experience,
-	})
+	c.JSON(http.StatusOK, gin.H{"data": liveExp})
 }
 
-// GetExperienceByCityAndSlug returns a single experience by city and slug
+// GetExperienceByCityAndSlug returns a single experience by city and slug — always from Headout
 func (h *ExperienceHandler) GetExperienceByCityAndSlug(c *gin.Context) {
 	city := c.Param("city")
 	slug := c.Param("slug")
 	currencyCode := c.Query("currencyCode")
 
-	experience, err := h.service.GetExperienceByCityAndSlug(c.Request.Context(), city, slug)
-	if err != nil {
-		liveExp, liveErr := h.fetchLiveExperienceByCityAndSlug(c, city, slug, currencyCode)
-		if liveErr != nil {
-			logger.Errorf("Failed to fetch experience from both DB and Headout: %v / %v", err, liveErr)
-			c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"data": liveExp})
+	liveExp, liveErr := h.fetchLiveExperienceByCityAndSlug(c, city, slug, currencyCode)
+	if liveErr != nil {
+		logger.Errorf("Headout fetch for %s/%s failed: %v", city, slug, liveErr)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Experience not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": experience})
+	c.JSON(http.StatusOK, gin.H{"data": liveExp})
 }
 
-// SearchExperiences searches for experiences by category/location with pagination
+// SearchExperiences searches for experiences — always from Headout
 func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	category := c.Query("category")
 	location := c.Query("location")
 	q := c.Query("q")
-	sort := c.Query("sort")
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 12)
 
-	result, err := h.service.SearchExperiences(c.Request.Context(), category, location, q, sort, currencyCode, page, limit)
-	if err != nil {
-		logger.Errorf("Failed to search experiences: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to search experiences",
+	searchLocation := location
+	if searchLocation == "" {
+		searchLocation = c.Query("city")
+	}
+	if searchLocation == "" && q != "" {
+		searchLocation = q
+	}
+
+	if category != "" {
+		h.fetchByCategory(c, category, currencyCode, page, limit)
+		return
+	}
+
+	if searchLocation == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"data":          []models.Experience{},
+			"count":         0,
+			"page":          page,
+			"limit":         limit,
+			"total_pages":   0,
+			"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
 		})
 		return
 	}
 
+	liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, searchLocation, page, limit)
+
+	if liveErr != nil {
+		logger.Errorf("Failed to fetch from Headout: %v", liveErr)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
+		return
+	}
+
+	results := liveExperiences
+	if q != "" {
+		results = filterExperiencesByQuery(results, q)
+	}
+
+	totalPages := 1
+	if len(results) >= limit {
+		totalPages = page + 1
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"data":          result.Experiences,
-		"count":         result.Count,
-		"page":          result.Page,
-		"limit":         result.Limit,
-		"total_pages":   result.TotalPages,
-		"currency_code": result.CurrencyCode,
+		"data":          results,
+		"count":         len(results),
+		"page":          page,
+		"limit":         limit,
+		"total_pages":   totalPages,
+		"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
 	})
+}
+
+func (h *ExperienceHandler) fetchByCategory(c *gin.Context, category, currencyCode string, page, limit int) {
+	offset := (page - 1) * limit
+	query := url.Values{}
+	query.Set("categoryId", category)
+	query.Set("currencyCode", strings.ToUpper(defaultIfEmpty(currencyCode, "USD")))
+	query.Set("language", "en")
+	query.Set("limit", strconv.Itoa(limit))
+	query.Set("offset", strconv.Itoa(offset))
+
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/category", query, true)
+	if err != nil {
+		logger.Errorf("Headout category fetch failed: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
+		return
+	}
+
+	var payload interface{}
+	if err := json.Unmarshal(upstream.Body, &payload); err != nil {
+		logger.Errorf("Failed to decode Headout response: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to parse Headout response"})
+		return
+	}
+
+	products := extractProductsArray(payload)
+	experiences := make([]models.Experience, 0, len(products))
+	for idx, item := range products {
+		mapped, ok := mapHeadoutProductToExperience(item, uint(idx+1))
+		if ok {
+			experiences = append(experiences, mapped)
+		}
+	}
+
+	totalPages := 1
+	if len(experiences) >= limit {
+		totalPages = page + 1
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":          experiences,
+		"count":         len(experiences),
+		"page":          page,
+		"limit":         limit,
+		"total_pages":   totalPages,
+		"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+	})
+}
+
+func filterExperiencesByQuery(experiences []models.Experience, query string) []models.Experience {
+	if query == "" {
+		return experiences
+	}
+	lower := strings.ToLower(strings.TrimSpace(query))
+	filtered := make([]models.Experience, 0, len(experiences))
+	for _, e := range experiences {
+		if strings.Contains(strings.ToLower(e.Title), lower) ||
+			strings.Contains(strings.ToLower(e.Description), lower) ||
+			strings.Contains(strings.ToLower(e.Category), lower) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
 
 // SyncExperiences triggers a sync of experiences from Headout into the local DB
 func (h *ExperienceHandler) SyncExperiences(c *gin.Context) {
-	citiesParam := c.Query("cities")
-
-	var cities []string
-	if citiesParam != "" {
-		cities = strings.Split(citiesParam, ",")
-		for i := range cities {
-			cities[i] = strings.TrimSpace(cities[i])
-		}
-	}
-
-	go func() {
-		result, err := h.syncSvc.SyncExperiences(c.Request.Context(), cities)
-		if err != nil {
-			logger.Errorf("Sync error: %v", err)
-		} else {
-			logger.Infof("Sync completed: %+v", result)
-		}
-	}()
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"message": "Sync started",
-		"cities":  cities,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Sync not available — all data comes from Headout live"})
 }
 
 // SyncExperienceByID syncs a single experience by Headout ID
 func (h *ExperienceHandler) SyncExperienceByID(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "headout id is required"})
-		return
-	}
-
-	go func() {
-		exp, err := h.syncSvc.SyncSingleExperience(c.Request.Context(), id)
-		if err != nil {
-			logger.Errorf("Sync single experience %s error: %v", id, err)
-		} else if exp != nil {
-			logger.Infof("Synced experience: %s (%s)", exp.Title, exp.HeadoutID)
-		}
-	}()
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"message": "Sync started for experience",
-		"id":      id,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Sync not available — all data comes from Headout live"})
 }
 
 // GetAvailability returns inventory for a variant/date.
-// Compatibility behavior: if query param `variantId` is missing, `:id` is treated as variantId.
 func (h *ExperienceHandler) GetAvailability(c *gin.Context) {
 	variantID := strings.TrimSpace(c.Query("variantId"))
 	if variantID == "" {
@@ -235,7 +298,7 @@ func (h *ExperienceHandler) GetAvailability(c *gin.Context) {
 	query.Set("startDateTime", date+"T00:00:00")
 	query.Set("endDateTime", date+"T23:59:59")
 
-	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/inventory/list-by/variant", query, false)
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/inventory/list-by/variant", query, true)
 	if err != nil {
 		logger.Errorf("Failed to fetch availability from Headout: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch availability"})
@@ -263,7 +326,7 @@ func (h *ExperienceHandler) fetchLiveExperienceByID(c *gin.Context, headoutID, c
 	if currencyCode != "" {
 		query.Set("currencyCode", strings.ToUpper(currencyCode))
 	}
-	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/product/get/"+url.PathEscape(headoutID), query, false)
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/product/get/"+url.PathEscape(headoutID), query, true)
 	if err != nil {
 		return nil, fmt.Errorf("headout request: %w", err)
 	}
@@ -300,7 +363,7 @@ func (h *ExperienceHandler) fetchLiveExperienceByCityAndSlug(c *gin.Context, cit
 	query.Set("limit", "50")
 	query.Set("offset", "0")
 
-	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, false)
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, true)
 	if err != nil {
 		return nil, fmt.Errorf("headout request: %w", err)
 	}
@@ -366,15 +429,25 @@ func slugify(value string) string {
 	return strings.Trim(result.String(), "-")
 }
 
-func (h *ExperienceHandler) fetchLiveExperiences(c *gin.Context, limit int) ([]models.Experience, error) {
+func (h *ExperienceHandler) fetchLiveExperiences(c *gin.Context, page, limit int) ([]models.Experience, error) {
+	return h.fetchLiveExperiencesForLocation(c, c.Query("location"), page, limit)
+}
+
+func (h *ExperienceHandler) fetchLiveExperiencesForLocation(c *gin.Context, location string, page, limit int) ([]models.Experience, error) {
+	cityCode := toCityCode(location)
+	if cityCode == "" {
+		return nil, fmt.Errorf("no city code provided for live fetch")
+	}
+
+	offset := (page - 1) * limit
 	query := url.Values{}
-	query.Set("cityCode", toCityCode(c.Query("location")))
+	query.Set("cityCode", cityCode)
 	query.Set("currencyCode", strings.ToUpper(defaultIfEmpty(c.Query("currencyCode"), "USD")))
 	query.Set("language", defaultIfEmpty(c.Query("language"), "en"))
 	query.Set("limit", strconv.Itoa(limit))
-	query.Set("offset", "0")
+	query.Set("offset", strconv.Itoa(offset))
 
-	upstream, err := h.publicProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, false)
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, true)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +528,7 @@ func toMapArray(value interface{}) []map[string]interface{} {
 }
 
 func mapHeadoutProductToExperience(item map[string]interface{}, fallbackID uint) (models.Experience, bool) {
-	headoutID := getString(item, "id", "product_id", "headout_id")
+	headoutID := extractID(item)
 	title := getString(item, "title", "name")
 	if headoutID == "" || title == "" {
 		return models.Experience{}, false
@@ -596,10 +669,32 @@ func defaultIfEmpty(value string, fallback string) string {
 	return value
 }
 
+func extractID(item map[string]interface{}) string {
+	for _, key := range []string{"id", "product_id", "headout_id"} {
+		if value, exists := item[key]; exists {
+			switch v := value.(type) {
+			case string:
+				if v != "" {
+					return v
+				}
+			case float64:
+				if v > 0 {
+					return strconv.FormatInt(int64(v), 10)
+				}
+			case json.Number:
+				if str := v.String(); str != "" {
+					return str
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func toCityCode(location string) string {
 	trimmed := strings.TrimSpace(location)
 	if trimmed == "" {
-		return "NEW_YORK"
+		return ""
 	}
 
 	replacer := strings.NewReplacer("-", "_", " ", "_")

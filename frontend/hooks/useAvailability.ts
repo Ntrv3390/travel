@@ -11,10 +11,10 @@ const fetcher = async (url: string) => {
   return response.json();
 };
 
-export function useAvailability(experienceId: string, date: string) {
+export function useAvailability(experienceId: string, variantId: string, date: string) {
   const { data, error, isLoading } = useSWR(
-    experienceId && date
-      ? `/api/availability?id=${encodeURIComponent(experienceId)}&date=${encodeURIComponent(date)}`
+    experienceId && variantId && date
+      ? `/api/availability?id=${encodeURIComponent(experienceId)}&variantId=${encodeURIComponent(variantId)}&date=${encodeURIComponent(date)}`
       : null,
     fetcher,
     {

@@ -6,6 +6,8 @@ export const checkoutFormSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   phone: z.string().min(10, "Please enter a valid phone number"),
   specialRequests: z.string().max(500).optional(),
+  passport: z.string().max(100).optional(),
+  hotelName: z.string().max(200).optional(),
 });
 
 export const bookingDetailsSchema = z.object({

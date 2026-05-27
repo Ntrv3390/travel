@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
 import { SingleExperienceLanding } from "@/components/experience/SingleExperienceLanding";
 import { SearchFilters } from "@/components/search/SearchFilters";
@@ -10,7 +11,14 @@ import type { SearchParams } from "@/types/api";
 
 export const dynamic = "force-dynamic";
 
+const STATIC_ASSETS = new Set(["favicon.ico", "favicon.svg", "enc.js", "robots.txt", "sitemap.xml", "apple-touch-icon.png"]);
+
+function isValidCity(city: string): boolean {
+  return !STATIC_ASSETS.has(city.toLowerCase()) && !city.includes(".");
+}
+
 export async function generateMetadata({ params }: { params: { city: string } }): Promise<Metadata> {
+  if (!isValidCity(params.city)) return { title: "Not Found" };
   const cityPreview = await getCityExperiences(params.city, { limit: "1", page: "1" });
   if (cityPreview.data?.experiences.length) {
     const city = params.city.replace(/-/g, " ");
@@ -52,6 +60,7 @@ export default async function CityPage({
   params: { city: string };
   searchParams: SearchParams;
 }) {
+  if (!isValidCity(params.city)) notFound();
   const cityResult = await getCityExperiences(params.city, { ...searchParams, limit: searchParams.limit ?? "1", page: searchParams.page ?? "1" });
   if (!cityResult.data?.experiences.length) {
     const payload = await getSingleExperiencePayloadBySlugOrID(params.city);

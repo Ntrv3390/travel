@@ -52,6 +52,7 @@ func Migrate() error {
 		&models.POIMapping{},
 		&models.Cart{},
 		&models.CartItem{},
+		&models.GTTDFeedUploadStatus{},
 	)
 }
 
