@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchFilters } from "@/components/search/SearchFilters";
 import { SearchResults } from "@/components/search/SearchResults";
@@ -10,7 +11,9 @@ import type { SearchParams } from "@/types/api";
 export const dynamic = "force-dynamic";
 
 export default async function SearchPage({ searchParams }: { searchParams: SearchParams }) {
-  const result = await searchExperiences(searchParams);
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
+  const result = await searchExperiences({ ...searchParams, currency });
   const page = parseInt(searchParams.page ?? "1", 10);
   const totalPages = result.data?.totalPages ?? 1;
   const currentCount = result.data?.experiences.length ?? 0;
@@ -22,7 +25,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
     if (searchParams.category) params.set("category", searchParams.category);
     if (searchParams.sort) params.set("sort", searchParams.sort);
     params.set("page", String(p));
-    params.set("limit", searchParams.limit ?? "12");
+    params.set("limit", searchParams.limit ?? "24");
     return `/search?${params.toString()}`;
   }
 

@@ -30,4 +30,5 @@ export interface SearchParams {
   limit?: string;
   q?: string;
   city?: string;
+  currency?: string;
 }

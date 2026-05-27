@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Globe2, ShieldCheck, Zap } from "lucide-react";
 import { ExperienceHero } from "@/components/experience/ExperienceHero";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
@@ -9,12 +10,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTopExperiences } from "@/lib/api";
 import type { SearchParams } from "@/types/api";
 
-const PAGE_SIZE = 12;
+export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 24;
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
   const page = parseInt(searchParams.page ?? "1", 10);
   const limit = parseInt(searchParams.limit ?? String(PAGE_SIZE), 10);
-  const result = await getTopExperiences(limit, page);
+  const result = await getTopExperiences(limit, page, currency);
 
   const totalPages = result.data?.totalPages ?? 1;
   const currentCount = result.data?.experiences.length ?? 0;

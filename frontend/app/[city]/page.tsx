@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
 import { SingleExperienceLanding } from "@/components/experience/SingleExperienceLanding";
@@ -61,7 +62,9 @@ export default async function CityPage({
   searchParams: SearchParams;
 }) {
   if (!isValidCity(params.city)) notFound();
-  const cityResult = await getCityExperiences(params.city, { ...searchParams, limit: searchParams.limit ?? "1", page: searchParams.page ?? "1" });
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
+  const cityResult = await getCityExperiences(params.city, { ...searchParams, limit: searchParams.limit ?? "1", page: searchParams.page ?? "1", currency });
   if (!cityResult.data?.experiences.length) {
     const payload = await getSingleExperiencePayloadBySlugOrID(params.city);
     if (payload) {
@@ -69,7 +72,7 @@ export default async function CityPage({
     }
   }
 
-  const result = await getCityExperiences(params.city, searchParams);
+  const result = await getCityExperiences(params.city, { ...searchParams, currency });
 
   return (
     <div className="container py-section">

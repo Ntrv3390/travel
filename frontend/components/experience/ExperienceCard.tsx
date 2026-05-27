@@ -29,6 +29,7 @@ interface ExperienceCardProps {
 export function ExperienceCard({
   title,
   city,
+  citySlug,
   slug,
   imageUrl,
   rating,
@@ -42,7 +43,7 @@ export function ExperienceCard({
   priority = false,
 }: ExperienceCardProps) {
   return (
-    <Link href={`/${slug}`} className="group block">
+    <Link href={`/${citySlug}/${slug}`} className="group block">
       <Card
         className={cn(
           "overflow-hidden border-0 shadow-sm transition-all duration-300 ease-out",

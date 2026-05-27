@@ -3,10 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +29,15 @@ func NewExperienceHandler() *ExperienceHandler {
 	}
 }
 
+var popularCities = []string{
+	"New York", "Paris", "London", "Dubai", "Tokyo",
+	"Barcelona", "Rome", "Singapore", "Bangkok", "Istanbul",
+	"Sydney", "Amsterdam", "Las Vegas", "San Francisco", "Los Angeles",
+	"Orlando", "Hong Kong", "Bali", "Cancun", "Miami",
+	"Prague", "Vienna", "Berlin", "Madrid", "Lisbon",
+	"Budapest", "Athens", "Kuala Lumpur", "Mumbai", "Seoul",
+}
+
 // GetExperiences returns experiences — always from Headout live
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	category := c.Query("category")
@@ -34,7 +45,7 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	q := c.Query("q")
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
-	limit := parseIntQuery(c, "limit", 12)
+	limit := parseIntQuery(c, "limit", 24)
 
 	if category != "" {
 		h.fetchByCategory(c, category, currencyCode, page, limit)
@@ -73,6 +84,11 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 
 	if location != "" {
 		liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, location, page, limit)
+		if liveErr != nil && q != "" && location == q {
+			// q was used as location but Headout rejected it — do multi-city query search
+			h.searchByQueryAcrossCities(c, q, page, limit, currencyCode)
+			return
+		}
 		if liveErr != nil {
 			logger.Errorf("Failed to fetch from Headout: %v", liveErr)
 			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
@@ -93,14 +109,8 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data":         []models.Experience{},
-		"count":        0,
-		"page":         page,
-		"limit":        limit,
-		"total_pages":  0,
-		"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
-	})
+	// No location specified — fetch from random popular cities for a diverse mix
+	h.fetchRandomExperiences(c, page, limit, currencyCode)
 }
 
 // GetExperienceByID returns a single experience by ID — always from Headout
@@ -141,7 +151,7 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	q := c.Query("q")
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
-	limit := parseIntQuery(c, "limit", 12)
+	limit := parseIntQuery(c, "limit", 24)
 
 	searchLocation := location
 	if searchLocation == "" {
@@ -168,7 +178,20 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 		return
 	}
 
-	liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, searchLocation, page, limit)
+	// When a query filter is active, fetch more data so the filter has a larger pool to match against
+	fetchLimit := limit
+	if q != "" && fetchLimit < 50 {
+		fetchLimit = 50
+	}
+
+	liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, searchLocation, 1, fetchLimit)
+
+	if liveErr != nil && q != "" && location == "" && c.Query("city") == "" {
+		// q was used as a location name but Headout rejected it (e.g. "burj khalifa")
+		// Fall back to multi-city query search
+		h.searchByQueryAcrossCities(c, q, page, limit, currencyCode)
+		return
+	}
 
 	if liveErr != nil {
 		logger.Errorf("Failed to fetch from Headout: %v", liveErr)
@@ -179,6 +202,11 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	results := liveExperiences
 	if q != "" {
 		results = filterExperiencesByQuery(results, q)
+	}
+
+	// Trim back to the original limit after filtering
+	if q != "" && len(results) > limit {
+		results = results[:limit]
 	}
 
 	totalPages := 1
@@ -255,6 +283,180 @@ func filterExperiencesByQuery(experiences []models.Experience, query string) []m
 		}
 	}
 	return filtered
+}
+
+func (h *ExperienceHandler) fetchRandomExperiences(c *gin.Context, page, limit int, currencyCode string) {
+	numCities := 5
+	perm := rand.Perm(len(popularCities))
+	selectedCities := make([]string, 0, numCities)
+	for i := 0; i < numCities && i < len(perm); i++ {
+		selectedCities = append(selectedCities, popularCities[perm[i]])
+	}
+
+	perCity := (limit / len(selectedCities)) + 2
+	if perCity < 4 {
+		perCity = 4
+	}
+
+	type cityResult struct {
+		city       string
+		experiences []models.Experience
+	}
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	results := make([]cityResult, 0, len(selectedCities))
+	errs := make([]error, 0, len(selectedCities))
+
+	for _, city := range selectedCities {
+		wg.Add(1)
+		go func(cityName string) {
+			defer wg.Done()
+			exps, err := h.fetchLiveExperiencesForLocation(c, cityName, 1, perCity)
+			mu.Lock()
+			if err != nil {
+				logger.Errorf("Random fetch failed for %s: %v", cityName, err)
+				errs = append(errs, err)
+			} else {
+				logger.Infof("Random fetch got %d experiences from %s", len(exps), cityName)
+				results = append(results, cityResult{city: cityName, experiences: exps})
+			}
+			mu.Unlock()
+		}(city)
+	}
+	wg.Wait()
+
+	if len(results) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"data":          []models.Experience{},
+			"count":         0,
+			"page":          page,
+			"limit":         limit,
+			"total_pages":   0,
+			"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+		})
+		return
+	}
+
+	allExperiences := make([]models.Experience, 0, limit)
+	for _, r := range results {
+		allExperiences = append(allExperiences, r.experiences...)
+	}
+
+	rand.Shuffle(len(allExperiences), func(i, j int) {
+		allExperiences[i], allExperiences[j] = allExperiences[j], allExperiences[i]
+	})
+
+	if len(allExperiences) > limit {
+		allExperiences = allExperiences[:limit]
+	}
+
+	deduped := make([]models.Experience, 0, len(allExperiences))
+	seen := make(map[string]bool)
+	for _, e := range allExperiences {
+		if !seen[e.HeadoutID] {
+			seen[e.HeadoutID] = true
+			deduped = append(deduped, e)
+		}
+	}
+
+	totalPages := 1
+	if len(deduped) >= limit {
+		totalPages = page + 1
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":          deduped,
+		"count":         len(deduped),
+		"page":          page,
+		"limit":         limit,
+		"total_pages":   totalPages,
+		"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+	})
+}
+
+// searchByQueryAcrossCities fetches from all popular cities and filters by query text.
+// Used when q is provided without a valid city/location.
+func (h *ExperienceHandler) searchByQueryAcrossCities(c *gin.Context, q string, page, limit int, currencyCode string) {
+	perCity := (limit / len(popularCities)) + 20
+	if perCity < 20 {
+		perCity = 20
+	}
+
+	type cityResult struct {
+		city       string
+		experiences []models.Experience
+	}
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	results := make([]cityResult, 0, len(popularCities))
+
+	// Use a semaphore to limit concurrency to 5 simultaneous API calls
+	sem := make(chan struct{}, 5)
+
+	for _, city := range popularCities {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(cityName string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			exps, err := h.fetchLiveExperiencesForLocation(c, cityName, 1, perCity)
+			mu.Lock()
+			if err == nil {
+				filtered := filterExperiencesByQuery(exps, q)
+				if len(filtered) > 0 {
+					results = append(results, cityResult{city: cityName, experiences: filtered})
+				}
+			}
+			mu.Unlock()
+		}(city)
+	}
+	wg.Wait()
+
+	if len(results) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"data":          []models.Experience{},
+			"count":         0,
+			"page":          page,
+			"limit":         limit,
+			"total_pages":   0,
+			"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+		})
+		return
+	}
+
+	allExperiences := make([]models.Experience, 0, limit)
+	for _, r := range results {
+		allExperiences = append(allExperiences, r.experiences...)
+	}
+
+	if len(allExperiences) > limit {
+		allExperiences = allExperiences[:limit]
+	}
+
+	deduped := make([]models.Experience, 0, len(allExperiences))
+	seen := make(map[string]bool)
+	for _, e := range allExperiences {
+		if !seen[e.HeadoutID] {
+			seen[e.HeadoutID] = true
+			deduped = append(deduped, e)
+		}
+	}
+
+	totalPages := 1
+	if len(deduped) >= limit {
+		totalPages = page + 1
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":          deduped,
+		"count":         len(deduped),
+		"page":          page,
+		"limit":         limit,
+		"total_pages":   totalPages,
+		"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+	})
 }
 
 // SyncExperiences triggers a sync of experiences from Headout into the local DB
@@ -544,6 +746,9 @@ func mapHeadoutProductToExperience(item map[string]interface{}, fallbackID uint)
 	}
 
 	currency := getString(item, "currency", "currency_code")
+	if currency == "" {
+		currency = getNestedString(item, "currency", "code")
+	}
 	if currency == "" {
 		currency = "USD"
 	}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ShieldCheck, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,16 +38,16 @@ export function PricingBox({ experience }: { experience: Experience }) {
 
   const slots: Slot[] = availability?.slots ?? [];
   
-  // Auto-select first available slot if inventoryId is empty or invalid for current date/variant
-  useMemo(() => {
-    if (slots.length > 0) {
-      if (!inventoryId || !slots.find(s => s.inventoryId === inventoryId)) {
-        setInventoryId(slots[0].inventoryId);
-      }
-    } else {
+  // Auto-select first available slot when date/variant changes
+  useEffect(() => {
+    const available = availability?.slots;
+    if (available && available.length > 0) {
+      if (inventoryId && available.some(s => s.inventoryId === inventoryId)) return;
+      setInventoryId(available[0].inventoryId);
+    } else if (inventoryId) {
       setInventoryId("");
     }
-  }, [slots, inventoryId]);
+  }, [date, variantId, inventoryId, availability]);
 
   const total = useMemo(() => {
     const unitPrice = selectedVariant?.price ?? 0;

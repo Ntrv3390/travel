@@ -133,12 +133,16 @@ async function requestExperiences(url: string): Promise<ApiResult<{ experiences:
   }
 }
 
-export async function getTopExperiences(limit = 12, page = 1) {
-  return requestExperiences(`${API_BASE}/api/v1/experiences?location=New York&limit=${limit}&page=${page}`);
+export async function getTopExperiences(limit = 24, page = 1, currency = "USD") {
+  const url = new URL(`${API_BASE}/api/v1/experiences`);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("currencyCode", currency);
+  return requestExperiences(url.toString());
 }
 
 // ── New: Popular Experiences ──
-export async function getPopularExperiences(currency = "USD", limit = 12) {
+export async function getPopularExperiences(currency = "USD", limit = 24) {
   const url = new URL(`${API_BASE}/api/v1/experiences`);
   url.searchParams.set("currencyCode", currency);
   url.searchParams.set("limit", String(limit));
@@ -219,18 +223,25 @@ export async function getCityExperiences(city: string, params: SearchParams = {}
   const url = new URL(`${API_BASE}/api/v1/experiences`);
   url.searchParams.set("location", city.replace(/-/g, " "));
   url.searchParams.set("page", params.page ?? "1");
-  url.searchParams.set("limit", params.limit ?? "12");
+  url.searchParams.set("limit", params.limit ?? "24");
   if (params.category) url.searchParams.set("category", params.category);
+  if (params.currency) url.searchParams.set("currencyCode", params.currency);
   return requestExperiences(url.toString());
 }
 
 export async function searchExperiences(params: SearchParams) {
   const url = new URL(`${API_BASE}/api/v1/experiences/search`);
   Object.entries(params).forEach(([key, value]) => {
-    if (value) url.searchParams.set(key, value);
+    if (value) {
+      if (key === "currency") {
+        url.searchParams.set("currencyCode", value);
+      } else {
+        url.searchParams.set(key, value);
+      }
+    }
   });
   if (!url.searchParams.has("page")) url.searchParams.set("page", "1");
-  if (!url.searchParams.has("limit")) url.searchParams.set("limit", "12");
+  if (!url.searchParams.has("limit")) url.searchParams.set("limit", "24");
   return requestExperiences(url.toString());
 }
 
