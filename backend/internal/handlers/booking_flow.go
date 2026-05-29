@@ -81,12 +81,13 @@ type availabilitySlot struct {
 }
 
 type createBookingRequest struct {
-	ProductID           string `json:"productId"`
-	ProductName         string `json:"productName"`
-	VariantID           string `json:"variantId"`
-	VariantName         string `json:"variantName"`
-	InventoryID         string `json:"inventoryId,omitempty"`
-	InventoryType       string `json:"inventoryType,omitempty"`
+	ProductID           string   `json:"productId"`
+	ProductName         string   `json:"productName"`
+	VariantID           string   `json:"variantId"`
+	VariantName         string   `json:"variantName"`
+	InventoryID         string   `json:"inventoryId,omitempty"`
+	InventoryType       string   `json:"inventoryType,omitempty"`
+	InventorySeatIDs    []string `json:"inventorySeatIds,omitempty"`
 	Date                string `json:"date"`
 	StartDateTime       string `json:"startDateTime,omitempty"`
 	EndDateTime         string `json:"endDateTime,omitempty"`
@@ -357,6 +358,7 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	req.IdempotencyKey = idempotencyKey
 	req.SessionID = sessionID
 
+	req.ProductID = strings.TrimSpace(req.ProductID)
 	req.VariantID = strings.TrimSpace(req.VariantID)
 	req.Email = strings.TrimSpace(req.Email)
 	req.FirstName = strings.TrimSpace(req.FirstName)
@@ -364,6 +366,10 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	req.Date = strings.TrimSpace(req.Date)
 	req.Phone = strings.TrimSpace(req.Phone)
 
+	if req.ProductID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId is required"})
+		return
+	}
 	if req.VariantID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "variantId is required"})
 		return
@@ -478,6 +484,10 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		},
 	}
 
+	if len(req.InventorySeatIDs) > 0 {
+		headoutPayload["inventorySeatIds"] = req.InventorySeatIDs
+	}
+
 	bodyBytes, err := json.Marshal(headoutPayload)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare booking"})
@@ -550,18 +560,32 @@ func (h *BookingFlowHandler) CaptureBooking(c *gin.Context) {
 		return
 	}
 
-	body := map[string]interface{}{"status": "CAPTURED"}
+	body := map[string]interface{}{
+		"bookingId": bookingID,
+		"status":    "CAPTURED",
+	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to encode capture payload"})
 		return
 	}
 
-	path := fmt.Sprintf("/v1/booking/%s", url.PathEscape(bookingID))
-	upstream, err := h.authService.Put(c.Request.Context(), path, url.Values{}, bodyBytes, true)
+	upstream, err := h.authService.Put(c.Request.Context(), "/v2/bookings/update", url.Values{}, bodyBytes, true)
 	if err != nil {
 		h.handleProxyError(c, err)
 		return
+	}
+
+	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+		var raw map[string]interface{}
+		if err := json.Unmarshal(upstream.Body, &raw); err == nil {
+			if newStatus, ok := raw["status"].(string); ok {
+				db := database.GetDB()
+				db.WithContext(c.Request.Context()).Model(&models.Booking{}).
+					Where("booking_id = ?", bookingID).
+					Update("status", newStatus)
+			}
+		}
 	}
 
 	h.writeUpstreamResponse(c, upstream)
@@ -1131,6 +1155,13 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 		}
 	}
 
+	seatIDsJSON := "[]"
+	if len(req.InventorySeatIDs) > 0 {
+		if b, err := json.Marshal(req.InventorySeatIDs); err == nil {
+			seatIDsJSON = string(b)
+		}
+	}
+
 	booking := models.Booking{
 		BookingID:          headoutResp.BookingID,
 		PartnerReferenceID: headoutResp.PartnerReferenceID,
@@ -1144,6 +1175,7 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 		InventoryType: req.InventoryType,
 
 		InventoryID:   req.InventoryID,
+		InventorySeatIDs: seatIDsJSON,
 		StartDateTime: startDT,
 		EndDateTime:   endDT,
 

@@ -40,17 +40,11 @@ var popularCities = []string{
 
 // GetExperiences returns experiences — always from Headout live
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
-	category := c.Query("category")
 	location := c.Query("location")
 	q := c.Query("q")
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 24)
-
-	if category != "" {
-		h.fetchByCategory(c, category, currencyCode, page, limit)
-		return
-	}
 
 	if q != "" && location != "" {
 		liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, location, page, limit)

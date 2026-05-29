@@ -752,42 +752,48 @@ CREATE INDEX idx_bookings_experience_date ON bookings(experience_date);
 ### API Details
 
 - **Purpose:** Creates a booking in `UNCAPTURED` state. The booking is two-step: `CreateBooking` reserves the slot and returns a `bookingId`, then `CaptureBooking` captures it. Bookings not captured within 1 hour auto-expire to `CAPTURE_TIMEDOUT`.
-- **Business logic:** Receives a booking request from the frontend (productId, variantId, inventoryId, customersDetails, price), forwards it to the Headout v2 bookings API, saves a reference record locally, and returns the booking response.
+- **Business logic:** Receives a booking request from the frontend (productId, variantId, inventoryId, date, adults/children, customer info, price), transforms it to Headout's v2 booking format (customersDetails + price), forwards it to Headout, saves a reference record locally, and returns the booking response.
 - **Validation rules:**
   - `variantId` — required
   - `inventoryId` — required
+  - `productId` — required
   - `date` — required, must be `YYYY-MM-DD` format
   - `email` — required, must contain `@` and `.`
   - `firstName`, `lastName` — required
   - `adults` / `children` — must be non-negative, at least 1 total
 - **Booking flow (direct / single-item):**
   - Frontend calls `POST /api/v1/bookings` with customer details and selected slot
-  - Backend creates the booking on Headout (v2 API), saves local reference, returns `bookingId`
+  - Backend transforms flat payload → Headout format (`customersDetails`, `price`), posts to `POST /v2/bookings/`, saves local reference, returns `bookingId`
 - **Booking flow (cart / multi-item):**
   - Items are added to cart via `POST /api/v1/cart/items`
   - Checkout via `POST /api/v1/cart/checkout` iterates all items and creates bookings
   - Each item is booked individually via the same Headout v2 API
 
-### Request (Direct Booking)
+### Request (to Backend)
 
 ```json
 {
-  "productId": "string",
-  "variantId": "string",
-  "inventoryId": "string",
-  "date": "YYYY-MM-DD",
+  "productId": "18969",
+  "productName": "Bali Swing Experience",
+  "variantId": "25525",
+  "variantName": "Standard Entry",
+  "inventoryId": "501183605",
+  "inventoryType": "NORMAL",
+  "date": "2025-04-12",
+  "startDateTime": "2025-04-12T19:30:00",
+  "endDateTime": "2025-04-12T20:15:00",
   "adults": 1,
   "children": 0,
-  "firstName": "string",
-  "lastName": "string",
-  "email": "string",
-  "phone": "string",
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john@example.com",
+  "phone": "+14155551234",
   "currencyCode": "USD",
-  "price": {
-    "amount": 77.08,
-    "currencyCode": "USD"
-  },
-  "variantInputFields": []
+  "priceAmount": 77.08,
+  "specialRequests": "Window seat preferred",
+  "variantInputFields": [
+    { "id": "PICKUP_LOCATION", "value": "Hotel Lobby" }
+  ]
 }
 ```
 
@@ -799,7 +805,38 @@ CREATE INDEX idx_bookings_experience_date ON bookings(experience_date);
   "partnerReferenceId": null,
   "status": "UNCAPTURED",
   "startDateTime": "2025-04-12T19:30:00",
-  "voucherUrl": "https://...",
+  "totalAmount": 77.08,
+  "currency": "USD",
+  "voucherUrl": "https://www.headout.com/voucher/126890?...",
+  "confirmationEmailSent": true
+}
+```
+
+### Headout-facing Payload (transformed by backend)
+
+```json
+{
+  "productId": "18969",
+  "variantId": "25525",
+  "inventoryId": "501183605",
+  "inventorySeatIds": null,
+  "customersDetails": {
+    "count": 1,
+    "customers": [
+      {
+        "personType": "ADULT",
+        "isPrimary": true,
+        "inputFields": [
+          { "id": "NAME", "value": "John Doe" },
+          { "id": "EMAIL", "value": "john@example.com" },
+          { "id": "PHONE", "value": "+14155551234" }
+        ]
+      }
+    ]
+  },
+  "variantInputFields": [
+    { "id": "PICKUP_LOCATION", "value": "Hotel Lobby" }
+  ],
   "price": {
     "amount": 77.08,
     "currencyCode": "USD"

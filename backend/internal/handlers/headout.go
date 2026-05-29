@@ -106,7 +106,7 @@ func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
 
 	c.Request.URL.RawQuery = q.Encode()
 
-	h.proxyGetWithService(c, h.publicService, "/v2/cities/", false)
+	h.proxyGetWithService(c, h.publicService, "/v2/cities/", true)
 }
 
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
