@@ -1,10 +1,14 @@
 "use client"
 
-import { Loader2, Clock, Users } from "lucide-react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { Loader2, Clock, Users, ShoppingCart, ArrowRight, Minus, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useCurrency } from "@/hooks/useCurrency"
+import { useCartContext } from "@/context/CartContext"
+import { useProductDetail } from "@/context/ProductDetailContext"
 import type { SlotItem } from "@/types/product"
 
 interface SlotPanelProps {
@@ -16,7 +20,14 @@ interface SlotPanelProps {
 }
 
 export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: SlotPanelProps) {
-  const { formatPrice } = useCurrency()
+  const { formatPrice, currency } = useCurrency()
+  const { addItem } = useCartContext()
+  const { productId, productName, variantId, variantName } = useProductDetail()
+  const router = useRouter()
+  const [adults, setAdults] = useState(1)
+  const [children, setChildren] = useState(0)
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
+  const [addingToCart, setAddingToCart] = useState(false)
 
   if (loading) {
     return (
@@ -43,11 +54,103 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
     )
   }
 
+  const handleBookNow = (slot: SlotItem) => {
+    const params = new URLSearchParams({
+      productId,
+      productName: productName ?? "Experience",
+      variantId: String(variantId),
+      variantName: variantName ?? "Standard",
+      inventoryId: slot.id,
+      inventoryType: "NORMAL",
+      date: selectedDate,
+      startDateTime: slot.startDateTime,
+      endDateTime: slot.endDateTime,
+      adults: String(adults),
+      children: String(children),
+      price: String(slot.pricing.persons[0]?.headoutSellingPrice ?? 0),
+      currency: currency ?? "USD",
+      title: variantName ?? productName ?? "Experience",
+    })
+    router.push(`/checkout?${params.toString()}`)
+  }
+
+  const handleAddToCart = async (slot: SlotItem) => {
+    setAddingToCart(true)
+    setSelectedSlotId(slot.id)
+    try {
+      await addItem({
+        experienceId: productId,
+        productId,
+        variantId: String(variantId),
+        inventoryId: slot.id,
+        inventoryType: "NORMAL",
+        date: selectedDate,
+        startDateTime: slot.startDateTime,
+        endDateTime: slot.endDateTime,
+        adults,
+        children,
+        title: variantName ?? productName ?? "Experience",
+        priceAmount: slot.pricing.persons[0]?.headoutSellingPrice ?? 0,
+        currency: currency ?? "USD",
+        imageUrl: "",
+        addedAt: new Date().toISOString(),
+      })
+    } finally {
+      setAddingToCart(false)
+      setSelectedSlotId(null)
+    }
+  }
+
+  const peopleSummary = `${adults} adult${adults !== 1 ? "s" : ""}${children > 0 ? `, ${children} child${children !== 1 ? "ren" : ""}` : ""}`
+
   return (
     <div className="mt-3 space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">
-        {slots.length} slot{slots.length !== 1 ? "s" : ""} available on {selectedDate}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">
+          {slots.length} slot{slots.length !== 1 ? "s" : ""} available on {selectedDate}
+        </p>
+        <p className="text-xs text-muted-foreground">{peopleSummary}</p>
+      </div>
+
+      {/* Guest selector */}
+      <div className="flex items-center gap-4 rounded-lg border bg-muted/10 p-2.5">
+        <span className="text-xs font-medium text-muted-foreground">Guests</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setAdults(Math.max(1, adults - 1))}
+              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="min-w-[3ch] text-center text-sm font-medium">{adults}</span>
+            <button
+              onClick={() => setAdults(Math.min(20, adults + 1))}
+              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+            <span className="text-xs text-muted-foreground">Adults</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setChildren(Math.max(0, children - 1))}
+              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="min-w-[3ch] text-center text-sm font-medium">{children}</span>
+            <button
+              onClick={() => setChildren(Math.min(10, children + 1))}
+              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+            <span className="text-xs text-muted-foreground">Children</span>
+          </div>
+        </div>
+      </div>
+
       {slots.map((slot) => {
         const startTime = slot.startDateTime.split("T")[1]?.slice(0, 5) ?? slot.startDateTime
         const endTime = slot.endDateTime.split("T")[1]?.slice(0, 5) ?? slot.endDateTime
@@ -57,6 +160,8 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
           : slot.availability === "LIMITED"
             ? "bg-amber-100 text-amber-700 border-amber-200"
             : "bg-green-100 text-green-700 border-green-200"
+
+        const totalPrice = (slot.pricing.persons[0]?.headoutSellingPrice ?? 0) * (adults + children)
 
         return (
           <Card key={slot.id} className={isClosed ? "opacity-50" : ""}>
@@ -117,6 +222,38 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
                         Up to {g.size}: {formatPrice(g.price)}
                       </Badge>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              {!isClosed && (
+                <div className="mt-3 flex items-center justify-between border-t pt-3">
+                  <div>
+                    <p className="text-sm font-bold">{formatPrice(totalPrice)}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {adults + children} guest{adults + children !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddToCart(slot)}
+                      disabled={addingToCart}
+                      className="gap-1.5"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5" />
+                      {addingToCart && selectedSlotId === slot.id ? "Adding..." : "Add to Cart"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleBookNow(slot)}
+                      className="gap-1.5"
+                    >
+                      Book Now
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               )}

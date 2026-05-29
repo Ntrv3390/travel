@@ -23,35 +23,9 @@ const sectionLinks = [
   { href: "#more-ways", label: "More ways" },
 ];
 
-function formatDisplayPrice(value: number, currency: string) {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "USD",
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${currency || "USD"} ${value.toFixed(0)}`;
-  }
-}
-
 export function SingleExperienceLanding() {
   const { state } = useProduct();
   const content = state.singleExperienceContent!;
-
-  const priceLabel = formatDisplayPrice(
-    content.experience.options[0]?.price ?? 0,
-    content.experience.options[0]?.currency ?? "USD",
-  );
-
-  const handleSelectOptions = () => {
-    const target = document.getElementById("packages");
-    if (!target) return;
-    target.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  };
 
   return (
     <section className="min-h-screen bg-[radial-gradient(circle_at_10%_-14%,rgba(37,99,235,0.14),transparent_36%),radial-gradient(circle_at_88%_-8%,rgba(14,165,233,0.08),transparent_34%),#f8fafc] text-slate-900">
@@ -91,10 +65,7 @@ export function SingleExperienceLanding() {
             <ContentSections />
           </main>
 
-          <BookingPanel
-            priceLabel={priceLabel}
-            onSelectOptions={handleSelectOptions}
-          />
+          <BookingPanel />
         </div>
       </div>
     </section>

@@ -5,9 +5,15 @@ import { useSearchParams } from "next/navigation"
 
 export interface CheckoutInfo {
   experienceId: string
+  productId: string
+  productName: string
   variantId: string
+  variantName: string
   inventoryId: string
+  inventoryType: string
   date: string
+  startDateTime: string
+  endDateTime: string
   time: string
   adults: number
   children: number
@@ -19,9 +25,15 @@ export interface CheckoutInfo {
 
 const defaultCheckout: CheckoutInfo = {
   experienceId: "",
+  productId: "",
+  productName: "",
   variantId: "",
+  variantName: "",
   inventoryId: "",
+  inventoryType: "NORMAL",
   date: "",
+  startDateTime: "",
+  endDateTime: "",
   time: "",
   adults: 1,
   children: 0,
@@ -44,11 +56,19 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     const adults = parseInt(search.get("adults") ?? "1", 10)
     const children = parseInt(search.get("children") ?? "0", 10)
     const price = parseFloat(search.get("price") ?? "0")
+    const experienceId = search.get("experienceId") ?? ""
+    const productId = search.get("productId") ?? experienceId
     return {
-      experienceId: search.get("experienceId") ?? "",
+      experienceId,
+      productId,
+      productName: search.get("productName") ?? search.get("title") ?? "Experience",
       variantId: search.get("variantId") ?? "",
+      variantName: search.get("variantName") ?? search.get("title") ?? "Standard",
       inventoryId: search.get("inventoryId") ?? "",
+      inventoryType: search.get("inventoryType") ?? "NORMAL",
       date: search.get("date") ?? "",
+      startDateTime: search.get("startDateTime") ?? "",
+      endDateTime: search.get("endDateTime") ?? "",
       time: search.get("time") ?? "",
       adults,
       children,

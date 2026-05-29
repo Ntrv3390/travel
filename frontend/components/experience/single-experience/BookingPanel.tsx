@@ -4,16 +4,38 @@ import { CalendarCheck2, CheckCircle2, ShieldCheck, Smartphone } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useProduct } from "@/context/ProductContext";
 
-interface BookingPanelProps {
-  priceLabel: string;
-  onSelectOptions: () => void;
+function formatDisplayPrice(value: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency || "USD",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency || "USD"} ${value.toFixed(0)}`;
+  }
 }
 
-export function BookingPanel({
-  priceLabel,
-  onSelectOptions,
-}: BookingPanelProps) {
+export function BookingPanel() {
+  const { state } = useProduct();
+  const content = state.singleExperienceContent!;
+
+  const priceLabel = formatDisplayPrice(
+    content.experience.options[0]?.price ?? 0,
+    content.experience.options[0]?.currency ?? "USD",
+  );
+
+  const handleSelectOptions = () => {
+    const target = document.getElementById("packages");
+    if (!target) return;
+    target.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
   return (
     <>
       <aside className="sticky top-[9rem] self-start z-10 h-fit">
@@ -26,7 +48,7 @@ export function BookingPanel({
             </div>
             <Button
               className="mt-3 h-11 w-full rounded-2xl bg-gradient-to-r from-blue-700 to-brand-600 text-base font-bold text-white shadow-[0_14px_28px_rgba(37,99,235,0.35)] hover:-translate-y-0.5 hover:shadow-[0_18px_32px_rgba(37,99,235,0.42)]"
-              onClick={onSelectOptions}
+              onClick={handleSelectOptions}
             >
               Select options
             </Button>
@@ -59,7 +81,7 @@ export function BookingPanel({
         </div>
         <Button
           className="h-10 rounded-xl bg-gradient-to-r from-blue-700 to-brand-600 px-4 text-sm font-extrabold text-white shadow-[0_10px_20px_rgba(37,99,235,0.32)]"
-          onClick={onSelectOptions}
+          onClick={handleSelectOptions}
         >
           Select options
         </Button>

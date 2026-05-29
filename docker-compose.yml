@@ -91,22 +91,6 @@ services:
       - travel-network
     restart: unless-stopped
 
-  # Next.js Web Client
-  web-client:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: travel-web-client
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api-gateway:8080}
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    depends_on:
-      - api-gateway
-    networks:
-      - travel-network
-    restart: unless-stopped
-
 networks:
   travel-network:
     driver: bridge

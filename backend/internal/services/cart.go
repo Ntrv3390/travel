@@ -12,22 +12,26 @@ import (
 )
 
 type CartItem struct {
-	ID           string  `json:"id"`
-	ExperienceID string  `json:"experienceId"`
-	VariantID    string  `json:"variantId"`
-	InventoryID  string  `json:"inventoryId,omitempty"`
-	Date         string  `json:"date"`
-	Adults       int     `json:"adults"`
-	Children     int     `json:"children"`
-	FirstName    string  `json:"firstName,omitempty"`
-	LastName     string  `json:"lastName,omitempty"`
-	Email        string  `json:"email,omitempty"`
-	Phone        string  `json:"phone,omitempty"`
-	PriceAmount  float64 `json:"priceAmount,omitempty"`
-	Currency     string  `json:"currency,omitempty"`
-	Title        string  `json:"title,omitempty"`
-	ImageURL     string  `json:"imageUrl,omitempty"`
-	AddedAt      string  `json:"addedAt"`
+	ID            string  `json:"id"`
+	ExperienceID  string  `json:"experienceId"`
+	ProductID     string  `json:"productId,omitempty"`
+	VariantID     string  `json:"variantId"`
+	InventoryID   string  `json:"inventoryId,omitempty"`
+	InventoryType string  `json:"inventoryType,omitempty"`
+	Date          string  `json:"date"`
+	StartDateTime string  `json:"startDateTime,omitempty"`
+	EndDateTime   string  `json:"endDateTime,omitempty"`
+	Adults        int     `json:"adults"`
+	Children      int     `json:"children"`
+	FirstName     string  `json:"firstName,omitempty"`
+	LastName      string  `json:"lastName,omitempty"`
+	Email         string  `json:"email,omitempty"`
+	Phone         string  `json:"phone,omitempty"`
+	PriceAmount   float64 `json:"priceAmount,omitempty"`
+	Currency      string  `json:"currency,omitempty"`
+	Title         string  `json:"title,omitempty"`
+	ImageURL      string  `json:"imageUrl,omitempty"`
+	AddedAt       string  `json:"addedAt"`
 }
 
 type Cart struct {
@@ -95,22 +99,26 @@ func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartIt
 
 	itemID := uuid.New().String()
 	cartItem := models.CartItem{
-		CartID:       model.ID,
-		UUID:         itemID,
-		ExperienceID: item.ExperienceID,
-		VariantID:    item.VariantID,
-		InventoryID:  item.InventoryID,
-		Date:         item.Date,
-		Adults:       item.Adults,
-		Children:     item.Children,
-		FirstName:    item.FirstName,
-		LastName:     item.LastName,
-		Email:        item.Email,
-		Phone:        item.Phone,
-		PriceAmount:  item.PriceAmount,
-		Currency:     item.Currency,
-		Title:        item.Title,
-		ImageURL:     item.ImageURL,
+		CartID:        model.ID,
+		UUID:          itemID,
+		ExperienceID:  item.ExperienceID,
+		ProductID:     item.ProductID,
+		VariantID:     item.VariantID,
+		InventoryID:   item.InventoryID,
+		InventoryType: item.InventoryType,
+		Date:          item.Date,
+		StartDateTime: item.StartDateTime,
+		EndDateTime:   item.EndDateTime,
+		Adults:        item.Adults,
+		Children:      item.Children,
+		FirstName:     item.FirstName,
+		LastName:      item.LastName,
+		Email:         item.Email,
+		Phone:         item.Phone,
+		PriceAmount:   item.PriceAmount,
+		Currency:      item.Currency,
+		Title:         item.Title,
+		ImageURL:      item.ImageURL,
 	}
 
 	if err := s.db.WithContext(ctx).Create(&cartItem).Error; err != nil {
@@ -188,22 +196,26 @@ func (s *CartService) modelToCart(m *models.Cart) *Cart {
 	}
 	for _, item := range m.Items {
 		cart.Items = append(cart.Items, CartItem{
-			ID:           item.UUID,
-			ExperienceID: item.ExperienceID,
-			VariantID:    item.VariantID,
-			InventoryID:  item.InventoryID,
-			Date:         item.Date,
-			Adults:       item.Adults,
-			Children:     item.Children,
-			FirstName:    item.FirstName,
-			LastName:     item.LastName,
-			Email:        item.Email,
-			Phone:        item.Phone,
-			PriceAmount:  item.PriceAmount,
-			Currency:     item.Currency,
-			Title:        item.Title,
-			ImageURL:     item.ImageURL,
-			AddedAt:      item.CreatedAt.Format(time.RFC3339),
+			ID:            item.UUID,
+			ExperienceID:  item.ExperienceID,
+			ProductID:     item.ProductID,
+			VariantID:     item.VariantID,
+			InventoryID:   item.InventoryID,
+			InventoryType: item.InventoryType,
+			Date:          item.Date,
+			StartDateTime: item.StartDateTime,
+			EndDateTime:   item.EndDateTime,
+			Adults:        item.Adults,
+			Children:      item.Children,
+			FirstName:     item.FirstName,
+			LastName:      item.LastName,
+			Email:         item.Email,
+			Phone:         item.Phone,
+			PriceAmount:   item.PriceAmount,
+			Currency:      item.Currency,
+			Title:         item.Title,
+			ImageURL:      item.ImageURL,
+			AddedAt:       item.CreatedAt.Format(time.RFC3339),
 		})
 	}
 	return cart

@@ -16,21 +16,24 @@ export default function CartPage() {
 
   function handleCheckout(item: CartItem) {
     const params = new URLSearchParams({
-      experienceId: item.experienceId,
+      productId: item.productId || item.experienceId,
       variantId: item.variantId,
       inventoryId: item.inventoryId ?? "",
+      inventoryType: item.inventoryType || "NORMAL",
       date: item.date,
+      startDateTime: item.startDateTime || "",
+      endDateTime: item.endDateTime || "",
       adults: String(item.adults),
       children: String(item.children),
-      title: item.variantTitle,
-      price: String(item.totalPrice),
+      title: item.title,
+      price: String(item.priceAmount),
       currency: item.currency,
     });
-    if (item.time) params.set("time", item.time);
     router.push(`/checkout?${params.toString()}`);
   }
 
   const items = cart?.items ?? [];
+  const totalPrice = items.reduce((sum, i) => sum + (i.priceAmount || 0), 0);
 
   return (
     <div className="container py-section">
@@ -77,11 +80,11 @@ export default function CartPage() {
                 </div>
               </div>
             ))}
-            {cart && (
+            {items.length > 0 && (
               <Card className="sticky bottom-4">
                 <CardContent className="flex items-center justify-between p-4">
                   <span className="font-semibold">
-                    Total: <PriceDisplay amount={cart.totalPrice} currency={cart.currency} />
+                    Total: <PriceDisplay amount={totalPrice} currency={items[0]?.currency || "USD"} />
                   </span>
                   <Button onClick={() => router.push(`/checkout?multi=true&bookingIds=${items.map(i => i.id).join(",")}`)}>
                     Checkout All

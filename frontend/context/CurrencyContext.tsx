@@ -13,7 +13,7 @@ interface CurrencyContextValue {
   currency: string
   setCurrency: (code: string) => void
   supportedCurrencies: CurrencyInfo[]
-  formatPrice: (amount: number) => string
+  formatPrice: (amount: number, currencyOverride?: string) => string
 }
 
 const CurrencyContext = createContext<CurrencyContextValue>({
@@ -58,16 +58,17 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   }, [router])
 
   const formatPrice = useCallback(
-    (amount: number) => {
+    (amount: number, currencyOverride?: string) => {
+      const cur = currencyOverride ?? currency
       try {
         return new Intl.NumberFormat("en-US", {
           style: "currency",
-          currency,
+          currency: cur,
           minimumFractionDigits: 0,
           maximumFractionDigits: 2,
         }).format(amount)
       } catch {
-        return `${currency} ${amount.toFixed(2)}`
+        return `${cur} ${amount.toFixed(2)}`
       }
     },
     [currency],

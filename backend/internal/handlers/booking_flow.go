@@ -81,39 +81,54 @@ type availabilitySlot struct {
 }
 
 type createBookingRequest struct {
-	ExperienceID    string `json:"experienceId"`
-	VariantID       string `json:"variantId"`
-	InventoryID     string `json:"inventoryId,omitempty"`
-	Date            string `json:"date"`
-	Adults          int    `json:"adults"`
-	Children        int    `json:"children"`
-	FirstName       string `json:"firstName"`
-	LastName        string `json:"lastName"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	SpecialRequests string `json:"specialRequests,omitempty"`
-	CurrencyCode    string `json:"currencyCode,omitempty"`
-	VariantInputFields []map[string]interface{} `json:"variantInputFields,omitempty"`
-	IdempotencyKey  string `json:"-"`
+	ProductID           string `json:"productId"`
+	ProductName         string `json:"productName"`
+	VariantID           string `json:"variantId"`
+	VariantName         string `json:"variantName"`
+	InventoryID         string `json:"inventoryId,omitempty"`
+	InventoryType       string `json:"inventoryType,omitempty"`
+	Date                string `json:"date"`
+	StartDateTime       string `json:"startDateTime,omitempty"`
+	EndDateTime         string `json:"endDateTime,omitempty"`
+	Adults              int    `json:"adults"`
+	Children            int    `json:"children"`
+	FirstName           string `json:"firstName"`
+	LastName            string `json:"lastName"`
+	Email               string `json:"email"`
+	Phone               string `json:"phone"`
+	SpecialRequests     string `json:"specialRequests,omitempty"`
+	CurrencyCode        string `json:"currencyCode,omitempty"`
+	PriceAmount         float64 `json:"priceAmount,omitempty"`
+	VariantInputFields  []map[string]interface{} `json:"variantInputFields,omitempty"`
+	IdempotencyKey      string `json:"-"`
+	SessionID           string `json:"-"`
 }
 
 type bookingResponse struct {
 	BookingID             string  `json:"bookingId"`
-	HeadoutReference      string  `json:"headoutReference"`
+	PartnerReferenceID    string  `json:"partnerReferenceId"`
 	Status                string  `json:"status"`
+	StartDateTime         string  `json:"startDateTime"`
 	TotalAmount           float64 `json:"totalAmount"`
 	Currency              string  `json:"currency"`
+	VoucherURL            string  `json:"voucherUrl"`
 	ConfirmationEmailSent bool    `json:"confirmationEmailSent"`
 }
 
 type headoutBookingResponse struct {
-	BookingID        string
-	HeadoutReference string
-	TotalAmount      float64
-	Currency         string
-	Status           string
-	TicketURL        string
-	TicketData       []byte
+	BookingID           string
+	PartnerReferenceID  string
+	HeadoutReference    string
+	TotalAmount         float64
+	Currency            string
+	Status              string
+	StartDateTime       string
+	VoucherURL          string
+	TicketData          []byte
+	ProductID           string
+	ProductName         string
+	VariantID           string
+	VariantName         string
 }
 
 func NewBookingFlowHandler(cfg *config.Config) *BookingFlowHandler {
@@ -328,6 +343,10 @@ func (h *BookingFlowHandler) GetAvailability(c *gin.Context) {
 
 func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	sessionID := strings.TrimSpace(c.GetHeader("X-Session-ID"))
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(c.Query("sessionId"))
+	}
 
 	var req createBookingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -336,6 +355,7 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	}
 
 	req.IdempotencyKey = idempotencyKey
+	req.SessionID = sessionID
 
 	req.VariantID = strings.TrimSpace(req.VariantID)
 	req.Email = strings.TrimSpace(req.Email)
@@ -346,6 +366,10 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	if req.VariantID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "variantId is required"})
+		return
+	}
+	if req.InventoryID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "inventoryId is required"})
 		return
 	}
 	if req.Date == "" {
@@ -384,25 +408,19 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		if err == nil {
 			c.JSON(http.StatusOK, bookingResponse{
 				BookingID:             existing.BookingID,
-				HeadoutReference:      existing.HeadoutReference,
+				PartnerReferenceID:    existing.PartnerReferenceID,
 				Status:                existing.Status,
-				TotalAmount:           existing.TotalPrice,
-				Currency:              existing.Currency,
-				ConfirmationEmailSent: true,
+				StartDateTime:         existing.StartDateTime.Format("2006-01-02T15:04:05"),
+				TotalAmount:           existing.TotalAmount,
+				Currency:              existing.CurrencyCode,
+				VoucherURL:            existing.VoucherURL,
+				ConfirmationEmailSent: existing.ConfirmationEmailSent,
 			})
 			return
 		}
 	}
 
 	inventoryID := strings.TrimSpace(req.InventoryID)
-	if inventoryID == "" {
-		resolvedID, err := h.resolveInventoryID(c, req.VariantID, req.Date)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("could not find available inventory: %v", err)})
-			return
-		}
-		inventoryID = resolvedID
-	}
 
 	totalPax := req.Adults + req.Children
 	if totalPax < 1 {
@@ -411,18 +429,17 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	customers := make([]map[string]interface{}, 0, totalPax)
 	for i := 0; i < max(1, req.Adults); i++ {
-		customer := map[string]interface{}{
-			"personType": "ADULT",
-			"isPrimary":  i == 0,
-			"inputFields": []map[string]interface{}{
-				{"id": "FIRST_NAME", "value": req.FirstName},
-				{"id": "LAST_NAME", "value": req.LastName},
-				{"id": "EMAIL", "value": req.Email},
-			},
+		inputFields := []map[string]interface{}{
+			{"id": "NAME", "value": req.FirstName + " " + req.LastName},
+			{"id": "EMAIL", "value": req.Email},
 		}
 		if req.Phone != "" {
-			customer["inputFields"] = append(customer["inputFields"].([]map[string]interface{}),
-				map[string]interface{}{"id": "PHONE_NUMBER", "value": req.Phone})
+			inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "value": req.Phone})
+		}
+		customer := map[string]interface{}{
+			"personType":  "ADULT",
+			"isPrimary":   i == 0,
+			"inputFields": inputFields,
 		}
 		customers = append(customers, customer)
 	}
@@ -431,8 +448,7 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 			"personType": "CHILD",
 			"isPrimary":  false,
 			"inputFields": []map[string]interface{}{
-				{"id": "FIRST_NAME", "value": req.FirstName},
-				{"id": "LAST_NAME", "value": req.LastName},
+				{"id": "NAME", "value": req.FirstName + " " + req.LastName},
 			},
 		})
 	}
@@ -442,14 +458,24 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		vif = []map[string]interface{}{}
 	}
 
+	totalAmount := req.PriceAmount
+	if totalAmount <= 0 && len(customers) > 0 {
+		totalAmount = 0
+	}
+
 	headoutPayload := map[string]interface{}{
-		"variantId":   req.VariantID,
+		"productId":  req.ProductID,
+		"variantId":  req.VariantID,
 		"inventoryId": inventoryID,
 		"customersDetails": map[string]interface{}{
 			"count":     totalPax,
 			"customers": customers,
 		},
 		"variantInputFields": vif,
+		"price": map[string]interface{}{
+			"amount":       totalAmount,
+			"currencyCode": req.CurrencyCode,
+		},
 	}
 
 	bodyBytes, err := json.Marshal(headoutPayload)
@@ -459,7 +485,7 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	}
 
 	upstream, err := retryHeadoutCall(func() (*services.UpstreamResponse, error) {
-		return h.authService.Post(c.Request.Context(), "/v1/booking", url.Values{}, bodyBytes, true)
+		return h.authService.Post(c.Request.Context(), "/v2/bookings/", url.Values{}, bodyBytes, true)
 	})
 	if err != nil {
 		h.handleProxyError(c, err)
@@ -478,29 +504,26 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	headoutResp := parseHeadoutBookingResponse(upstream.Body)
 
-	go func() {
-		saveCtx := c.Request.Context()
-		if err := h.saveBookingToDB(saveCtx, req, headoutResp); err != nil {
-			logger.Errorf("Booking created on Headout but local save failed: %v", err)
-		}
-	}()
+	if err := h.saveBookingToDB(c.Request.Context(), req, headoutResp); err != nil {
+		logger.Errorf("Booking created on Headout but local save failed: %v", err)
+	}
 
 	go func() {
 		ticketText := ""
-		if headoutResp.TicketURL != "" && headoutResp.TicketURL != "embedded" {
-			ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.TicketURL)
+		if headoutResp.VoucherURL != "" && headoutResp.VoucherURL != "embedded" {
+			ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
 		}
 		services.SendBookingConfirmation(services.BookingConfirmationData{
 			BookingID:        headoutResp.BookingID,
 			HeadoutReference: headoutResp.HeadoutReference,
 			CustomerName:     req.FirstName + " " + req.LastName,
 			CustomerEmail:    req.Email,
-			ExperienceName:   "",
+			ExperienceName:   req.ProductName,
 			ExperienceDate:   req.Date,
 			TotalAmount:      headoutResp.TotalAmount,
 			Currency:         headoutResp.Currency,
 			Quantity:         totalPax,
-			TicketURL:        headoutResp.TicketURL,
+			TicketURL:        headoutResp.VoucherURL,
 			TicketData:       ticketText,
 		})
 		if len(headoutResp.TicketData) > 0 {
@@ -510,10 +533,12 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	c.JSON(http.StatusOK, bookingResponse{
 		BookingID:             headoutResp.BookingID,
-		HeadoutReference:      headoutResp.HeadoutReference,
-		Status:                "CONFIRMED",
+		PartnerReferenceID:    headoutResp.PartnerReferenceID,
+		Status:                headoutResp.Status,
+		StartDateTime:         headoutResp.StartDateTime,
 		TotalAmount:           headoutResp.TotalAmount,
 		Currency:              headoutResp.Currency,
+		VoucherURL:            headoutResp.VoucherURL,
 		ConfirmationEmailSent: true,
 	})
 }
@@ -987,42 +1012,64 @@ func parseHeadoutBookingResponse(body []byte) headoutBookingResponse {
 	if err := json.Unmarshal(body, &raw); err != nil {
 		logger.Warnf("failed to parse headout booking response: %v", err)
 		return headoutBookingResponse{
-			BookingID:   "unknown",
-			Status:      "PENDING",
-			Currency:    "USD",
+			BookingID: "unknown",
+			Status:    "FAILED",
+			Currency:  "USD",
 		}
 	}
 
 	resp := headoutBookingResponse{
-		BookingID:   getStringField(raw, "bookingId", "booking_id", "id"),
-		Status:      getStringField(raw, "status", "bookingStatus"),
-		Currency:    getStringField(raw, "currency", "currencyCode", "currency_code"),
-		TicketURL:   getStringField(raw, "ticketUrl", "voucherUrl", "ticketURL", "voucherURL", "ticket_url", "voucher_url"),
+		BookingID:          getStringField(raw, "bookingId"),
+		PartnerReferenceID: getStringField(raw, "partnerReferenceId"),
+		Status:             getStringField(raw, "status"),
+		StartDateTime:      getStringField(raw, "startDateTime"),
+		VoucherURL:         getStringField(raw, "voucherUrl"),
 	}
 
-	if ref, ok := raw["referenceNumber"].(string); ok && ref != "" {
-		resp.HeadoutReference = ref
-	} else if ref, ok := raw["headoutReference"].(string); ok && ref != "" {
+	if ref, ok := raw["headoutReference"].(string); ok && ref != "" {
 		resp.HeadoutReference = ref
 	} else {
 		resp.HeadoutReference = resp.BookingID
 	}
 
-	if price, ok := toFloat64FromRaw(raw, "price", "totalPrice", "total_price", "amount"); ok {
-		resp.TotalAmount = price
+	if priceObj, ok := raw["price"].(map[string]interface{}); ok {
+		if amount, ok := toFloat64(priceObj["amount"]); ok {
+			resp.TotalAmount = amount
+		}
+		if currency, ok := priceObj["currencyCode"].(string); ok {
+			resp.Currency = currency
+		}
 	}
 
-	if ticketData, ok := raw["ticket"].(string); ok && ticketData != "" {
-		resp.TicketData = []byte(ticketData)
-	} else if ticketData, ok := raw["voucher"].(string); ok && ticketData != "" {
-		resp.TicketData = []byte(ticketData)
-	} else {
-		ticketJSON, _ := json.Marshal(raw)
-		resp.TicketData = ticketJSON
+	if productObj, ok := raw["product"].(map[string]interface{}); ok {
+		if id, ok := productObj["id"].(string); ok {
+			resp.ProductID = id
+		}
+		if name, ok := productObj["name"].(string); ok {
+			resp.ProductName = name
+		}
+		if variantObj, ok := productObj["variant"].(map[string]interface{}); ok {
+			if vid, ok := variantObj["id"].(string); ok {
+				resp.VariantID = vid
+			}
+			if vname, ok := variantObj["name"].(string); ok {
+				resp.VariantName = vname
+			}
+		}
 	}
 
-	if resp.TicketURL == "" && resp.TicketData != nil {
-		resp.TicketURL = "embedded"
+	if resp.VoucherURL == "" {
+		resp.VoucherURL = getStringField(raw, "voucherUrl")
+	}
+
+	ticketJSON, _ := json.Marshal(raw)
+	resp.TicketData = ticketJSON
+
+	if resp.Currency == "" {
+		resp.Currency = "USD"
+	}
+	if resp.Status == "" {
+		resp.Status = "UNCAPTURED"
 	}
 
 	return resp
@@ -1068,20 +1115,61 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 
 	expDate, _ := time.Parse("2006-01-02", req.Date)
 
+	var startDT, endDT time.Time
+	if req.StartDateTime != "" {
+		startDT, _ = time.Parse("2006-01-02T15:04:05", req.StartDateTime)
+	}
+	if req.EndDateTime != "" {
+		endDT, _ = time.Parse("2006-01-02T15:04:05", req.EndDateTime)
+	}
+
+	customerData := buildCustomerDataJSON(req)
+	vifJSON := "[]"
+	if len(req.VariantInputFields) > 0 {
+		if b, err := json.Marshal(req.VariantInputFields); err == nil {
+			vifJSON = string(b)
+		}
+	}
+
 	booking := models.Booking{
-		BookingID:       headoutResp.BookingID,
-		UserID:          req.Email,
-		HeadoutReference: headoutResp.HeadoutReference,
-		Status:          "CONFIRMED",
-		Quantity:        max(1, req.Adults+req.Children),
-		TotalPrice:      headoutResp.TotalAmount,
-		Currency:        firstNonEmptyString(headoutResp.Currency, "USD"),
-		BookingDate:     time.Now(),
-		ExperienceDate:  expDate,
-		CustomerEmail:   req.Email,
-		CustomerPhone:   req.Phone,
-		SpecialRequests: req.SpecialRequests,
-		IdempotencyKey:  req.IdempotencyKey,
+		BookingID:          headoutResp.BookingID,
+		PartnerReferenceID: headoutResp.PartnerReferenceID,
+		SessionID:          req.SessionID,
+		Status:             headoutResp.Status,
+
+		ProductID:   req.ProductID,
+		ProductName: req.ProductName,
+		VariantID:   req.VariantID,
+		VariantName: req.VariantName,
+		InventoryType: req.InventoryType,
+
+		InventoryID:   req.InventoryID,
+		StartDateTime: startDT,
+		EndDateTime:   endDT,
+
+		CustomerCount: max(1, req.Adults+req.Children),
+		Adults:        max(0, req.Adults),
+		Children:      max(0, req.Children),
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		Email:         req.Email,
+		Phone:         req.Phone,
+		CustomerData:  customerData,
+		VariantInputFields: vifJSON,
+
+		TotalAmount:   headoutResp.TotalAmount,
+		CurrencyCode:  firstNonEmptyString(headoutResp.Currency, req.CurrencyCode, "USD"),
+
+		HeadoutReference:      headoutResp.HeadoutReference,
+		VoucherURL:            headoutResp.VoucherURL,
+		Tickets:               "[]",
+
+		IdempotencyKey:        req.IdempotencyKey,
+		SpecialRequests:       req.SpecialRequests,
+		ConfirmationEmailSent: true,
+
+		BookingDate:    time.Now(),
+		ExperienceDate: expDate,
 	}
 
 	if err := db.WithContext(ctx).Create(&booking).Error; err != nil {
@@ -1090,6 +1178,40 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 
 	logger.Infof("Booking saved locally: %s (Headout: %s)", headoutResp.BookingID, headoutResp.HeadoutReference)
 	return nil
+}
+
+func buildCustomerDataJSON(req createBookingRequest) string {
+	customers := make([]map[string]interface{}, 0)
+
+	for i := 0; i < max(1, req.Adults); i++ {
+		inputFields := []map[string]interface{}{
+			{"id": "NAME", "name": "Name", "value": req.FirstName + " " + req.LastName},
+			{"id": "EMAIL", "name": "Email", "value": req.Email},
+		}
+		if req.Phone != "" {
+			inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "name": "Phone", "value": req.Phone})
+		}
+		customers = append(customers, map[string]interface{}{
+			"personType":  "ADULT",
+			"isPrimary":   i == 0,
+			"inputFields": inputFields,
+		})
+	}
+	for i := 0; i < req.Children; i++ {
+		customers = append(customers, map[string]interface{}{
+			"personType": "CHILD",
+			"isPrimary":  false,
+			"inputFields": []map[string]interface{}{
+				{"id": "NAME", "name": "Name", "value": req.FirstName + " " + req.LastName},
+			},
+		})
+	}
+
+	b, err := json.Marshal(customers)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 func isPastTimedInventorySlot(dateKey string, startDateTime string, now time.Time, todayKey string) bool {

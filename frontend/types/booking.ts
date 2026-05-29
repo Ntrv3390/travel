@@ -1,51 +1,59 @@
 export interface BookingRequest {
-  experienceId: string;
-  inventoryId: string;
+  productId: string;
+  productName: string;
   variantId: string;
+  variantName: string;
+  inventoryId: string;
+  inventoryType: string;
   date: string;
-  time?: string;
+  startDateTime: string;
+  endDateTime: string;
   adults: number;
   children: number;
-  currencyCode: string;
-  idempotencyKey: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
+  currencyCode: string;
+  priceAmount: number;
   specialRequests?: string;
   variantInputFields?: Array<{ id: string; value: string }>;
 }
 
+export interface BookingResponse {
+  bookingId: string;
+  partnerReferenceId: string;
+  status: string;
+  startDateTime: string;
+  totalAmount: number;
+  currency: string;
+  voucherUrl: string;
+  confirmationEmailSent: boolean;
+}
+
 export interface CartItem {
-  id: string
-  experienceId: string
-  experience?: import("./experience").Experience
-  variantId: string
-  variantTitle: string
-  inventoryId?: string
-  date: string
-  time?: string
-  adults: number
-  children: number
-  unitPrice: number
-  totalPrice: number
-  currency: string
+  id: string;
+  experienceId: string;
+  productId: string;
+  variantId: string;
+  inventoryId: string;
+  inventoryType: string;
+  date: string;
+  startDateTime: string;
+  endDateTime: string;
+  adults: number;
+  children: number;
+  title: string;
+  priceAmount: number;
+  currency: string;
+  imageUrl: string;
+  addedAt: string;
 }
 
 export interface Cart {
-  sessionId: string
-  items: CartItem[]
-  totalItems: number
-  totalPrice: number
-  currency: string
-}
-
-export interface BookingResponse {
-  bookingId: string;
-  headoutReference: string;
-  status: "PENDING" | "CONFIRMED" | "CANCELLED";
-  totalAmount: number;
+  sessionId: string;
+  items: CartItem[];
+  totalItems: number;
+  totalPrice: number;
   currency: string;
-  voucherUrl?: string;
-  confirmationEmailSent: boolean;
 }

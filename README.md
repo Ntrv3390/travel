@@ -656,3 +656,224 @@ Not required. Currencies are served from a hardcoded list in the backend handler
 - **Price display** across all product cards and detail pages uses the currency returned by the API (which reflects the requested `currencyCode`). The `PriceDisplay` component auto-formats with `Intl.NumberFormat`.
 - **Instant update:** When the user selects a different currency, the dropdown closes, the new currency is persisted, and all visible data re-fetches automatically with the new currency code. No page reload needed.
 - **Server-side rendering:** The homepage reads the currency from cookies to fetch experiences in the correct currency on first load.
+
+---
+
+# Booking Feature (Create a new booking)
+
+## Backend
+
+### API Endpoint
+
+- **Path:** `POST /api/v1/bookings`
+- **Method:** POST
+- **Authentication:** Requires `Headout-Auth` header (proxied upstream to Headout's authenticated v2 booking API)
+
+### Database Schema
+
+#### `bookings` Table
+
+```sql
+CREATE TABLE bookings (
+    id                      BIGSERIAL PRIMARY KEY,
+    booking_id              VARCHAR(255) NOT NULL UNIQUE,          -- Headout's unique booking ID
+    partner_reference_id    VARCHAR(255),                           -- Partner's own reference ID
+    session_id              VARCHAR(255),                           -- Cart session ID (links back to cart)
+    status                  VARCHAR(50) NOT NULL DEFAULT 'UNCAPTURED',
+                                                                   -- UNCAPTURED, PENDING, COMPLETED, CANCELLED, FAILED, CAPTURE_TIMEDOUT
+
+    -- Product Info
+    product_id              VARCHAR(255),                           -- Headout product ID
+    product_name            TEXT,                                   -- Product display name
+    variant_id              VARCHAR(255),                           -- Headout variant ID
+    variant_name            TEXT,                                   -- Variant display name
+    inventory_type          VARCHAR(50),                            -- NORMAL or SEATMAP
+
+    -- Slot Info
+    inventory_id            VARCHAR(255),                           -- Headout inventory slot ID
+    start_date_time         TIMESTAMP,                              -- Scheduled start date/time
+    end_date_time           TIMESTAMP,                              -- Scheduled end date/time
+    inventory_seat_ids      JSONB,                                  -- Seat IDs for seatmap products (null for NORMAL)
+
+    -- Customer Details (primary customer / summary)
+    customer_count          INTEGER NOT NULL DEFAULT 1,             -- Total number of customers
+    adults                  INTEGER NOT NULL DEFAULT 1,
+    children                INTEGER NOT NULL DEFAULT 0,
+    first_name              VARCHAR(255) NOT NULL,                  -- Primary customer's first name
+    last_name               VARCHAR(255) NOT NULL,                  -- Primary customer's last name
+    email                   VARCHAR(255) NOT NULL,                  -- Primary customer's email
+    phone                   VARCHAR(50),                            -- Primary customer's phone
+    customer_data           JSONB,                                  -- Detailed per-person customer data (personType, isPrimary, inputFields)
+    variant_input_fields    JSONB,                                  -- Booking-level input fields
+
+    -- Pricing
+    total_amount            DECIMAL(12, 2),                         -- Total price paid
+    currency_code           VARCHAR(10) DEFAULT 'USD',              -- Currency code
+    original_amount         DECIMAL(12, 2),                         -- Original price before discount
+    discount                DECIMAL(5, 2),                          -- Discount percentage
+
+    -- Headout Response
+    headout_reference       VARCHAR(255),                           -- Headout reference number
+    voucher_url             TEXT,                                   -- Voucher PDF URL
+    tickets                 JSONB,                                  -- Ticket data (array of ticket objects)
+
+    -- Metadata
+    idempotency_key         VARCHAR(255) UNIQUE,                    -- Idempotency key for safe retry
+    special_requests        TEXT,                                   -- Special requests from customer
+    confirmation_email_sent BOOLEAN DEFAULT FALSE,                  -- Whether confirmation email was sent
+
+    -- Timestamps
+    booking_date            TIMESTAMP NOT NULL DEFAULT NOW(),       -- When booking was created
+    experience_date         DATE,                                   -- The date of the experience
+    created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at              TIMESTAMP                               -- Soft delete
+);
+
+-- Indexes
+CREATE INDEX idx_bookings_session_id ON bookings(session_id);
+CREATE INDEX idx_bookings_status ON bookings(status);
+CREATE INDEX idx_bookings_email ON bookings(email);
+CREATE INDEX idx_bookings_experience_date ON bookings(experience_date);
+```
+
+#### Relationships
+
+- `session_id` links a booking back to the cart session that created it
+- `booking_id` is the primary external identifier from Headout (unique)
+- `customer_data` stores the full per-person customer payload as JSONB for audit trail
+
+### External Headout APIs / Services
+
+| API | Base URL | Endpoint | Auth |
+|-----|----------|----------|------|
+| Headout Create Booking (v2) | Same as configured `HEADOUT_URL` | `/api/public/v2/bookings/` | API Key (`Headout-Auth`) |
+
+### API Details
+
+- **Purpose:** Creates a booking in `UNCAPTURED` state. The booking is two-step: `CreateBooking` reserves the slot and returns a `bookingId`, then `CaptureBooking` captures it. Bookings not captured within 1 hour auto-expire to `CAPTURE_TIMEDOUT`.
+- **Business logic:** Receives a booking request from the frontend (productId, variantId, inventoryId, customersDetails, price), forwards it to the Headout v2 bookings API, saves a reference record locally, and returns the booking response.
+- **Validation rules:**
+  - `variantId` — required
+  - `inventoryId` — required
+  - `date` — required, must be `YYYY-MM-DD` format
+  - `email` — required, must contain `@` and `.`
+  - `firstName`, `lastName` — required
+  - `adults` / `children` — must be non-negative, at least 1 total
+- **Booking flow (direct / single-item):**
+  - Frontend calls `POST /api/v1/bookings` with customer details and selected slot
+  - Backend creates the booking on Headout (v2 API), saves local reference, returns `bookingId`
+- **Booking flow (cart / multi-item):**
+  - Items are added to cart via `POST /api/v1/cart/items`
+  - Checkout via `POST /api/v1/cart/checkout` iterates all items and creates bookings
+  - Each item is booked individually via the same Headout v2 API
+
+### Request (Direct Booking)
+
+```json
+{
+  "productId": "string",
+  "variantId": "string",
+  "inventoryId": "string",
+  "date": "YYYY-MM-DD",
+  "adults": 1,
+  "children": 0,
+  "firstName": "string",
+  "lastName": "string",
+  "email": "string",
+  "phone": "string",
+  "currencyCode": "USD",
+  "price": {
+    "amount": 77.08,
+    "currencyCode": "USD"
+  },
+  "variantInputFields": []
+}
+```
+
+### Response
+
+```json
+{
+  "bookingId": "126890",
+  "partnerReferenceId": null,
+  "status": "UNCAPTURED",
+  "startDateTime": "2025-04-12T19:30:00",
+  "voucherUrl": "https://...",
+  "price": {
+    "amount": 77.08,
+    "currencyCode": "USD"
+  }
+}
+```
+
+---
+
+## Frontend
+
+### Pages
+
+| Page | Path | Purpose |
+|------|------|---------|
+| Product Detail | `/[city]/[slug]` | Contains AvailabilityCalendar + SlotPanel with "Book Now" / "Add to Cart" |
+| Cart | `/cart` | Lists cart items, remove items, "Checkout All" |
+| Checkout | `/checkout` | Customer details form + order summary, submits booking(s) |
+| Confirmation | `/checkout/confirmation` | Shows booking confirmation with reference number |
+
+### Components
+
+#### SlotPanel (modified)
+- **Current:** Shows time slots with pricing tables
+- **Changes:** Add quantity selectors (adults, children) per slot, "Book Now" button (direct to checkout), "Add to Cart" button (adds to cart)
+- **Loading state:** Skeleton/pulse while slots load
+- **Error state:** Error message with retry button
+- **Empty state:** "No slots available" message
+
+#### AvailabilityCalendar (modified)
+- Track selected slot ID alongside selected date
+- Pass productId, variantId, selected date, and selected slot info down to SlotPanel
+- No changes to calendar grid structure
+
+#### CartItemCard (existing — works for products too)
+- Shows product image, title, date, time, guest count, price
+- Remove button
+
+#### CheckoutForm (existing — minor updates)
+- Handles both single-item (Book Now) and multi-item (cart) checkout
+- For multi-item: submits all items sequentially via checkout endpoint
+- For single: submits via createBooking endpoint
+
+#### OrderSummary (existing — minor updates)
+- Shows title, guests, total price
+
+### State Management
+
+**CartContext** (existing):
+- SWR-based cart with session ID from localStorage
+- `addItem`, `removeItem`, `clearCart` functions
+- Auto-revalidates every 30s
+
+**Selected Slot State** (local to SlotPanel / AvailabilityCalendar):
+- `selectedSlotId` — string | null (tracks which slot the user selected)
+- `adultCount`, `childCount` — number (per slot quantity selectors)
+
+### API Integration
+
+| Function | File | API Called | Behaviour |
+|----------|------|------------|-----------|
+| `addCartItem()` | `frontend/lib/api.ts` | `POST /api/v1/cart/items` | Adds a slot to the cart |
+| `removeCartItem()` | `frontend/lib/api.ts` | `DELETE /api/v1/cart/items/:id` | Removes an item from cart |
+| `createBooking()` | `frontend/lib/api.ts` | `POST /api/v1/bookings` | Direct booking (single item) |
+| Cart checkout | `POST /api/v1/cart/checkout` | `POST /api/v1/cart/checkout` | Checkout all cart items |
+
+### UI/UX Notes
+
+- **"Book Now"** navigates to `/checkout?experienceId=...&variantId=...&inventoryId=...&date=...&time=...&adults=...&children=...&price=...&currency=...&title=...`
+- **"Add to Cart"** calls `addCartItem()` with slot details, shows a brief toast confirmation, cart badge updates
+- **Cart page** has a sticky bottom bar with total and "Checkout All" button
+- **Checkout page** shows a single-column form on mobile, two columns on desktop (form + summary)
+- **Confirmation page** shows reference number and "Explore more" CTA
+- **Edge cases:**
+  - Slot becomes unavailable between viewing and booking → handle error gracefully with "Slot no longer available" message
+  - Cart is empty → disabled checkout button, show empty state
+  - Network error during booking → show error with retry option

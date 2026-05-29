@@ -388,11 +388,13 @@ export async function getAvailability(experienceId: string, date: string): Promi
   }
 }
 
-export async function createBooking(payload: BookingRequest): Promise<ApiResult<BookingResponse>> {
+export async function createBooking(payload: BookingRequest, sessionId?: string): Promise<ApiResult<BookingResponse>> {
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (sessionId) headers["X-Session-ID"] = sessionId;
     const res = await fetch(`${API_BASE}/api/v1/bookings`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
       cache: "no-store",
     });
@@ -404,27 +406,45 @@ export async function createBooking(payload: BookingRequest): Promise<ApiResult<
 
 export interface CartItemPayload {
   experienceId: string;
+  productId?: string;
   variantId: string;
+  inventoryId?: string;
+  inventoryType?: string;
   date: string;
+  startDateTime?: string;
+  endDateTime?: string;
   adults: number;
   children: number;
   priceAmount?: number;
   currency?: string;
   title?: string;
   imageUrl?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
 }
 
 interface CartItemResponse {
   id: string;
   experienceId: string;
+  productId: string;
   variantId: string;
+  inventoryId: string;
+  inventoryType: string;
   date: string;
+  startDateTime: string;
+  endDateTime: string;
   adults: number;
   children: number;
-  priceAmount?: number;
-  currency?: string;
-  title?: string;
-  imageUrl?: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  priceAmount: number;
+  currency: string;
+  title: string;
+  imageUrl: string;
   addedAt: string;
 }
 

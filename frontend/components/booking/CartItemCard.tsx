@@ -9,6 +9,7 @@ import { PriceDisplay } from "@/components/common/PriceDisplay"
 import { useCart } from "@/hooks/useCart"
 import type { CartItem } from "@/types/booking"
 
+
 export function CartItemCard({ item }: { item: CartItem }) {
   const { removeItem } = useCart()
 
@@ -16,10 +17,10 @@ export function CartItemCard({ item }: { item: CartItem }) {
     <Card>
       <CardContent className="flex items-start gap-4 p-4">
         <div className="relative h-20 w-20 flex-none overflow-hidden rounded-lg">
-          {item.experience?.images?.[0]?.url ? (
+          {item.imageUrl ? (
             <Image
-              src={item.experience.images[0].url}
-              alt={item.variantTitle || "Experience"}
+              src={item.imageUrl}
+              alt={item.title || "Experience"}
               fill
               className="object-cover"
               sizes="80px"
@@ -32,20 +33,20 @@ export function CartItemCard({ item }: { item: CartItem }) {
         </div>
         <div className="min-w-0 flex-1">
           <Link
-            href={item.experience ? `/${item.experience.citySlug}/${item.experience.slug}` : "#"}
+            href={item.experienceId ? `/products?cityCode=${item.experienceId}` : "#"}
             className="font-semibold hover:text-brand-600 transition-colors line-clamp-1"
           >
-            {item.variantTitle || "Experience"}
+            {item.title || "Experience"}
           </Link>
           <p className="text-sm text-muted-foreground">
-            {item.date}{item.time ? ` · ${item.time}` : ""}
+            {item.date}{item.startDateTime ? ` · ${item.startDateTime.split("T")[1]?.slice(0, 5)}` : ""}
           </p>
           <p className="text-sm text-muted-foreground">
             {item.adults > 0 && `${item.adults} adult${item.adults > 1 ? "s" : ""}`}
             {item.children > 0 && `, ${item.children} child${item.children > 1 ? "ren" : ""}`}
           </p>
           <p className="mt-1 font-semibold">
-            <PriceDisplay amount={item.totalPrice} currency={item.currency} />
+            <PriceDisplay amount={item.priceAmount} currency={item.currency} />
           </p>
         </div>
         <div className="flex-none">

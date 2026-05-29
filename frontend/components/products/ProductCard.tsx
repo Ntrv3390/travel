@@ -19,7 +19,6 @@ export function ProductCard({ product }: { product: Product }) {
   const {
     id,
     name,
-    canonicalUrl,
     media,
     city,
     productType,

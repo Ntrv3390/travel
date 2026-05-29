@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { checkoutFormSchema, type CheckoutFormValues } from "@/lib/validations";
 import { createBooking } from "@/lib/api";
 import { useCheckout } from "@/context/CheckoutContext";
+import { getCartSessionId } from "@/lib/api";
 
 export function CheckoutForm() {
   const router = useRouter();
@@ -30,21 +31,29 @@ export function CheckoutForm() {
   const onSubmit = async (values: CheckoutFormValues) => {
     setSubmitting(true);
     const idempotencyKey = crypto.randomUUID?.() ?? `bk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const sessionId = getCartSessionId();
+
     const result = await createBooking({
-      experienceId: info.experienceId,
+      productId: info.productId,
+      productName: info.productName,
       variantId: info.variantId,
+      variantName: info.variantName,
       inventoryId: info.inventoryId,
+      inventoryType: info.inventoryType,
       date: info.date,
+      startDateTime: info.startDateTime,
+      endDateTime: info.endDateTime,
       adults: info.adults,
       children: info.children,
-      currencyCode: info.currency,
-      idempotencyKey,
       firstName: values.firstName,
       lastName: values.lastName,
       email: values.email,
       phone: values.phone,
+      currencyCode: info.currency,
+      priceAmount: info.price * info.guests,
       specialRequests: values.specialRequests,
-    });
+      idempotencyKey,
+    }, sessionId);
 
     if (result.error) {
       alert("Booking failed: " + result.error);
@@ -56,7 +65,7 @@ export function CheckoutForm() {
     const params = new URLSearchParams();
     params.set("title", info.title);
     if (booking) {
-      params.set("bookingRef", booking.headoutReference || booking.bookingId);
+      params.set("bookingRef", booking.partnerReferenceId || booking.bookingId);
       params.set("bookingId", booking.bookingId);
       params.set("status", booking.status);
       params.set("emailSent", String(booking.confirmationEmailSent));

@@ -80,15 +80,20 @@ export function PricingBox() {
     try {
       await addItem({
         experienceId: experience.id,
+        productId: "",
         variantId: selectedVariant.id,
-        variantTitle: selectedVariant.title,
+        inventoryId: "",
+        inventoryType: "",
         date,
+        startDateTime: "",
+        endDateTime: "",
         adults,
         children: childCount,
-        unitPrice: selectedVariant.price,
-        totalPrice: total,
+        title: selectedVariant.title,
+        priceAmount: selectedVariant.price,
         currency: selectedVariant.currency ?? "USD",
-        experience,
+        imageUrl: experience.images?.[0]?.url ?? "",
+        addedAt: new Date().toISOString(),
       });
       toast({ title: "Added to cart", description: `${experience.title} has been added to your cart.`, variant: "success" });
     } catch {

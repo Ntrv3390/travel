@@ -8,9 +8,8 @@ interface PriceDisplayProps {
   className?: string;
 }
 
-export function PriceDisplay({ amount, currency: propCurrency, className }: PriceDisplayProps) {
-  const { currency: contextCurrency, formatPrice } = useCurrency();
-  const currency = propCurrency ?? contextCurrency;
+export function PriceDisplay({ amount, currency, className }: PriceDisplayProps) {
+  const { formatPrice } = useCurrency();
 
-  return <span className={className}>{formatPrice(amount)}</span>;
+  return <span className={className}>{formatPrice(amount, currency)}</span>;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ProductDetailProvider } from "@/context/ProductDetailContext";
 import { AvailabilityCalendar } from "@/components/products/AvailabilityCalendar";
 import {
   Star,
@@ -436,8 +437,15 @@ export function ProductDetail({ product }: ProductDetailProps) {
       )}
 
       {/* ── 6. Availability + Slots (Normal inventory only) ── */}
-      {product.inventorySelectionType === "NORMAL" && selectedVariantId && product.id && (
-        <AvailabilityCalendar productId={product.id} variantId={selectedVariantId} />
+      {product.inventorySelectionType === "NORMAL" && selectedVariantId != null && product.id && (
+        <ProductDetailProvider
+          productId={String(product.id)}
+          productName={product.name}
+          variantId={selectedVariantId!}
+          variantName={product.variants?.find(v => v.id === selectedVariantId)?.name ?? ""}
+        >
+          <AvailabilityCalendar />
+        </ProductDetailProvider>
       )}
 
       {/* ── 7. POI Schedules ── */}

@@ -59,7 +59,7 @@ func (h *CheckoutHandler) Checkout(c *gin.Context) {
 	allSucceeded := true
 
 	for _, item := range cart.Items {
-		result := h.processCartItem(c.Request.Context(), item)
+		result := h.processCartItem(c.Request.Context(), item, sessionID)
 		if result.Error != "" {
 			allSucceeded = false
 		}
@@ -78,7 +78,7 @@ func (h *CheckoutHandler) Checkout(c *gin.Context) {
 	})
 }
 
-func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.CartItem) checkoutItemResult {
+func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.CartItem, sessionID string) checkoutItemResult {
 	result := checkoutItemResult{
 		ItemID: item.ID,
 		Title:  item.Title,
@@ -100,35 +100,43 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		totalPax = 1
 	}
 
+	productID := item.ProductID
+	if productID == "" {
+		productID = item.ExperienceID
+	}
+
 	customers := make([]map[string]interface{}, 0, totalPax)
 	for i := 0; i < max(1, item.Adults); i++ {
-		customer := map[string]interface{}{
-			"personType": "ADULT",
-			"isPrimary":  i == 0,
-			"inputFields": []map[string]interface{}{
-				{"id": "FIRST_NAME", "value": item.FirstName},
-				{"id": "LAST_NAME", "value": item.LastName},
-				{"id": "EMAIL", "value": item.Email},
-			},
+		inputFields := []map[string]interface{}{
+			{"id": "NAME", "value": item.FirstName + " " + item.LastName},
+			{"id": "EMAIL", "value": item.Email},
 		}
 		if item.Phone != "" {
-			customer["inputFields"] = append(customer["inputFields"].([]map[string]interface{}),
-				map[string]interface{}{"id": "PHONE_NUMBER", "value": item.Phone})
+			inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "value": item.Phone})
 		}
-		customers = append(customers, customer)
+		customers = append(customers, map[string]interface{}{
+			"personType":  "ADULT",
+			"isPrimary":   i == 0,
+			"inputFields": inputFields,
+		})
 	}
 	for i := 0; i < item.Children; i++ {
 		customers = append(customers, map[string]interface{}{
 			"personType": "CHILD",
 			"isPrimary":  false,
 			"inputFields": []map[string]interface{}{
-				{"id": "FIRST_NAME", "value": item.FirstName},
-				{"id": "LAST_NAME", "value": item.LastName},
+				{"id": "NAME", "value": item.FirstName + " " + item.LastName},
 			},
 		})
 	}
 
+	totalAmount := item.PriceAmount
+	if totalAmount <= 0 {
+		totalAmount = 0
+	}
+
 	headoutPayload := map[string]interface{}{
+		"productId":   productID,
 		"variantId":   item.VariantID,
 		"inventoryId": inventoryID,
 		"customersDetails": map[string]interface{}{
@@ -136,6 +144,10 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			"customers": customers,
 		},
 		"variantInputFields": []map[string]interface{}{},
+		"price": map[string]interface{}{
+			"amount":       totalAmount,
+			"currencyCode": item.Currency,
+		},
 	}
 
 	bodyBytes, err := json.Marshal(headoutPayload)
@@ -145,7 +157,7 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		return result
 	}
 
-	upstream, err := h.authService.Post(ctx, "/v1/booking", url.Values{}, bodyBytes, true)
+	upstream, err := h.authService.Post(ctx, "/v2/bookings/", url.Values{}, bodyBytes, true)
 	if err != nil {
 		result.Status = "FAILED"
 		result.Error = err.Error()
@@ -160,13 +172,13 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 
 	headoutResp := parseHeadoutBookingResponse(upstream.Body)
 
-	if err := saveCheckoutBooking(ctx, item, headoutResp); err != nil {
+	if err := saveCheckoutBooking(ctx, item, headoutResp, sessionID); err != nil {
 		logger.Errorf("Checkout: booking created on Headout but local save failed: %v", err)
 	}
 
 	ticketText := ""
-	if headoutResp.TicketURL != "" && headoutResp.TicketURL != "embedded" {
-		ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.TicketURL)
+	if headoutResp.VoucherURL != "" && headoutResp.VoucherURL != "embedded" {
+		ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
 	}
 	services.SendBookingConfirmation(services.BookingConfirmationData{
 		BookingID:        headoutResp.BookingID,
@@ -178,17 +190,103 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		TotalAmount:      headoutResp.TotalAmount,
 		Currency:         headoutResp.Currency,
 		Quantity:         totalPax,
-		TicketURL:        headoutResp.TicketURL,
+		TicketURL:        headoutResp.VoucherURL,
 		TicketData:       ticketText,
 	})
 	if len(headoutResp.TicketData) > 0 {
 		services.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData)
 	}
 
-	result.Status = "CONFIRMED"
+	result.Status = headoutResp.Status
 	result.BookingID = headoutResp.BookingID
 	result.HeadoutRef = headoutResp.HeadoutReference
 	return result
+}
+
+func saveCheckoutBooking(ctx context.Context, item services.CartItem, headoutResp headoutBookingResponse, sessionID string) error {
+	db := database.GetDB()
+
+	expDate, _ := time.Parse("2006-01-02", item.Date)
+
+	var startDT, endDT time.Time
+	if item.StartDateTime != "" {
+		startDT, _ = time.Parse("2006-01-02T15:04:05", item.StartDateTime)
+	}
+	if item.EndDateTime != "" {
+		endDT, _ = time.Parse("2006-01-02T15:04:05", item.EndDateTime)
+	}
+
+	productID := item.ProductID
+	if productID == "" {
+		productID = item.ExperienceID
+	}
+
+	booking := models.Booking{
+		BookingID:          headoutResp.BookingID,
+		PartnerReferenceID: headoutResp.PartnerReferenceID,
+		SessionID:          sessionID,
+		Status:             headoutResp.Status,
+
+		ProductID:   productID,
+		ProductName: item.Title,
+		VariantID:   item.VariantID,
+		VariantName: item.Title,
+		InventoryType: item.InventoryType,
+
+		InventoryID:   item.InventoryID,
+		StartDateTime: startDT,
+		EndDateTime:   endDT,
+
+		CustomerCount: max(1, item.Adults+item.Children),
+		Adults:        max(0, item.Adults),
+		Children:      max(0, item.Children),
+		FirstName:     item.FirstName,
+		LastName:      item.LastName,
+		Email:         item.Email,
+		Phone:         item.Phone,
+		CustomerData:  buildCustomerDataJSON(convertItemToReq(item)),
+		VariantInputFields: "[]",
+
+		TotalAmount:   headoutResp.TotalAmount,
+		CurrencyCode:  firstNonEmptyString(headoutResp.Currency, item.Currency, "USD"),
+
+		HeadoutReference:      headoutResp.HeadoutReference,
+		VoucherURL:            headoutResp.VoucherURL,
+		Tickets:               "[]",
+
+		ConfirmationEmailSent: true,
+
+		BookingDate:    time.Now(),
+		ExperienceDate: expDate,
+	}
+
+	if err := db.WithContext(ctx).Create(&booking).Error; err != nil {
+		return fmt.Errorf("create booking record: %w", err)
+	}
+
+	logger.Infof("Checkout: booking saved locally: %s (Headout: %s)", headoutResp.BookingID, headoutResp.HeadoutReference)
+	return nil
+}
+
+func convertItemToReq(item services.CartItem) createBookingRequest {
+	return createBookingRequest{
+		ProductID:   item.ProductID,
+		ProductName: item.Title,
+		VariantID:   item.VariantID,
+		VariantName: item.Title,
+		InventoryID: item.InventoryID,
+		Date:        item.Date,
+		StartDateTime: item.StartDateTime,
+		EndDateTime:   item.EndDateTime,
+		Adults:      item.Adults,
+		Children:    item.Children,
+		FirstName:   item.FirstName,
+		LastName:    item.LastName,
+		Email:       item.Email,
+		Phone:       item.Phone,
+		CurrencyCode: item.Currency,
+		PriceAmount: item.PriceAmount,
+	}
 }
 
 func (h *CheckoutHandler) resolveInventoryID(ctx context.Context, variantID string, dateStr string) (string, error) {
@@ -266,31 +364,4 @@ func (h *CheckoutHandler) fetchInventoryByVariant(ctx context.Context, variantID
 	}
 
 	return items, nil
-}
-
-func saveCheckoutBooking(ctx context.Context, item services.CartItem, headoutResp headoutBookingResponse) error {
-	db := database.GetDB()
-
-	expDate, _ := time.Parse("2006-01-02", item.Date)
-
-	booking := models.Booking{
-		BookingID:       headoutResp.BookingID,
-		UserID:          item.Email,
-		HeadoutReference: headoutResp.HeadoutReference,
-		Status:          "CONFIRMED",
-		Quantity:        max(1, item.Adults+item.Children),
-		TotalPrice:      headoutResp.TotalAmount,
-		Currency:        firstNonEmptyString(headoutResp.Currency, "USD"),
-		BookingDate:     time.Now(),
-		ExperienceDate:  expDate,
-		CustomerEmail:   item.Email,
-		CustomerPhone:   item.Phone,
-	}
-
-	if err := db.WithContext(ctx).Create(&booking).Error; err != nil {
-		return fmt.Errorf("create booking record: %w", err)
-	}
-
-	logger.Infof("Checkout: booking saved locally: %s (Headout: %s)", headoutResp.BookingID, headoutResp.HeadoutReference)
-	return nil
 }

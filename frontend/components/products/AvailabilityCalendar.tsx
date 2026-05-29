@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useCurrency } from "@/hooks/useCurrency"
+import { useProductDetail } from "@/context/ProductDetailContext"
 import { getVariantAvailabilities, getSlotInventory } from "@/lib/api"
 import { SlotPanel } from "@/components/products/SlotPanel"
 import type { VariantAvailability, SlotItem } from "@/types/product"
@@ -29,12 +30,8 @@ function todayStr() {
   return formatDateStr(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-interface Props {
-  productId: string
-  variantId: string | number
-}
-
-export function AvailabilityCalendar({ productId, variantId }: Props) {
+export function AvailabilityCalendar() {
+  const { productId, variantId } = useProductDetail()
   const { currency, formatPrice } = useCurrency()
   const [availabilities, setAvailabilities] = useState<VariantAvailability[]>([])
   const [loading, setLoading] = useState(true)
