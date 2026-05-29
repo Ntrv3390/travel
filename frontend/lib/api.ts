@@ -4,6 +4,7 @@ import { toSlug } from "@/lib/utils";
 import type { SearchParams } from "@/types/api";
 import type { BookingRequest, BookingResponse } from "@/types/booking";
 import type { Experience, ExperienceOption } from "@/types/experience";
+import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse } from "@/types/product";
 
 const API_BASE = env.API_URL;
 
@@ -206,6 +207,85 @@ export async function getCities(offset = 0, limit = 20) {
     return { data: json.data ?? json, error: null };
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getProducts(params: ProductsQueryParams): Promise<ApiResult<ProductsResponse>> {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/products`);
+    url.searchParams.set("cityCode", params.cityCode);
+    if (params.collectionId) url.searchParams.set("collectionId", params.collectionId);
+    if (params.categoryId) url.searchParams.set("categoryId", params.categoryId);
+    if (params.subCategoryId) url.searchParams.set("subCategoryId", params.subCategoryId);
+    if (params.languageCode) url.searchParams.set("languageCode", params.languageCode);
+    if (params.currencyCode) url.searchParams.set("currencyCode", params.currencyCode);
+    if (params.campaignName) url.searchParams.set("campaignName", params.campaignName);
+    if (params.offset !== undefined) url.searchParams.set("offset", String(params.offset));
+    if (params.limit !== undefined) url.searchParams.set("limit", String(params.limit));
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return readJson<ProductsResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function getVariantAvailabilities(
+  productId: string,
+  variantId: string | number,
+  options?: { currencyCode?: string; startDate?: string; endDate?: string },
+): Promise<ApiResult<VariantAvailabilityResponse>> {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/availabilities`);
+    if (options?.currencyCode) url.searchParams.set("currencyCode", options.currencyCode);
+    if (options?.startDate) url.searchParams.set("startDate", options.startDate);
+    if (options?.endDate) url.searchParams.set("endDate", options.endDate);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return readJson<VariantAvailabilityResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function getSlotInventory(
+  tourId: string | number,
+  startDateTime: string,
+  endDateTime: string,
+  currencyCode: string,
+): Promise<ApiResult<SlotInventoryResponse>> {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/inventory`);
+    url.searchParams.set("tourId", String(tourId));
+    url.searchParams.set("startDateTime", startDateTime);
+    url.searchParams.set("endDateTime", endDateTime);
+    url.searchParams.set("currencyCode", currencyCode);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return readJson<SlotInventoryResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function getProductById(
+  id: string,
+  options?: { languageCode?: string; currencyCode?: string },
+): Promise<ApiResult<Product>> {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/products/${encodeURIComponent(id)}`);
+    if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
+    if (options?.currencyCode) url.searchParams.set("currencyCode", options.currencyCode);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    if (!res.ok) {
+      if (res.status === 404) {
+        return { data: null, error: "Product not found" };
+      }
+      if (res.status === 502 || res.status === 503) {
+        return { data: null, error: "Service temporarily unavailable. Please try again." };
+      }
+      return { data: null, error: "Failed to load product details" };
+    }
+    return readJson<Product>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
   }
 }
 

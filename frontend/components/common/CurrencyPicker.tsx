@@ -1,38 +1,15 @@
 "use client"
 
 import { useCurrency } from "@/hooks/useCurrency"
-import useSWR from "swr"
 import { useState, useEffect, useRef } from "react"
 import { ChevronDown } from "lucide-react"
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url)
-  if (!res.ok) return []
-  const json = await res.json()
-  return json.data ?? json
-}
-
-const FALLBACK_CURRENCIES = [
-  { code: "USD", symbol: "$", name: "US Dollar" },
-  { code: "EUR", symbol: "€", name: "Euro" },
-  { code: "GBP", symbol: "£", name: "British Pound" },
-  { code: "INR", symbol: "₹", name: "Indian Rupee" },
-]
-
 export function CurrencyPicker() {
-  const { currency, setCurrency } = useCurrency()
+  const { currency, setCurrency, supportedCurrencies } = useCurrency()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  const { data: currencies } = useSWR("/api/currencies", fetcher, {
-    revalidateOnFocus: false,
-    refreshInterval: 86400000,
-    fallbackData: FALLBACK_CURRENCIES,
-  })
-
-  const activeCurrency = (Array.isArray(currencies) ? currencies : FALLBACK_CURRENCIES).find(
-    (c: { code: string }) => c.code === currency
-  )
+  const activeCurrency = supportedCurrencies.find((c) => c.code === currency)
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -62,26 +39,24 @@ export function CurrencyPicker() {
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-lg border bg-white p-1 shadow-lg">
-          {(Array.isArray(currencies) ? currencies : FALLBACK_CURRENCIES).map(
-            (c: { code: string; symbol: string; name: string }) => (
-              <button
-                key={c.code}
-                onClick={() => {
-                  setCurrency(c.code)
-                  setOpen(false)
-                }}
-                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
-                  currency === c.code
-                    ? "bg-brand-50 text-brand-700 font-medium"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <span className="w-6 text-center">{c.symbol}</span>
-                <span>{c.code}</span>
-                <span className="text-xs text-slate-400">- {c.name}</span>
-              </button>
-            )
-          )}
+          {supportedCurrencies.map((c) => (
+            <button
+              key={c.code}
+              onClick={() => {
+                setCurrency(c.code)
+                setOpen(false)
+              }}
+              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+                currency === c.code
+                  ? "bg-brand-50 text-brand-700 font-medium"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className="w-6 text-center">{c.symbol}</span>
+              <span>{c.code}</span>
+              <span className="text-xs text-slate-400">- {c.name}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

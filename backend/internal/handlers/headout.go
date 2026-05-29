@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/services"
@@ -109,6 +110,42 @@ func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
 }
 
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
+	q := c.Request.URL.Query()
+
+	cityCode := strings.TrimSpace(q.Get("cityCode"))
+	if cityCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cityCode is required"})
+		return
+	}
+
+	offset := 0
+	if v := q.Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
+			return
+		}
+		offset = parsed
+	}
+	q.Set("offset", strconv.Itoa(offset))
+
+	limit := 20
+	if v := q.Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
+			return
+		}
+		if parsed > 100 {
+			limit = 100
+		} else {
+			limit = parsed
+		}
+	}
+	q.Set("limit", strconv.Itoa(limit))
+
+	c.Request.URL.RawQuery = q.Encode()
+
 	h.proxyGet(c, "/v2/products", true)
 }
 
@@ -118,6 +155,42 @@ func (h *HeadoutHandler) ListCategoriesV2(c *gin.Context) {
 
 func (h *HeadoutHandler) ListCollectionsV2(c *gin.Context) {
 	h.proxyGet(c, "/v2/collections", true)
+}
+
+func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	if productID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId is required"})
+		return
+	}
+	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(productID))
+	h.proxyGet(c, path, true)
+}
+
+func (h *HeadoutHandler) ListNormalAvailabilities(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	variantID := strings.TrimSpace(c.Param("variantId"))
+	if productID == "" || variantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId and variantId are required"})
+		return
+	}
+	path := fmt.Sprintf("/v2/products/%s/variants/%s/availabilities/", url.PathEscape(productID), url.PathEscape(variantID))
+	h.proxyGet(c, path, true)
+}
+
+func (h *HeadoutHandler) ListNormalInventory(c *gin.Context) {
+	q := c.Request.URL.Query()
+	tourID := strings.TrimSpace(q.Get("tourId"))
+	startDT := strings.TrimSpace(q.Get("startDateTime"))
+	endDT := strings.TrimSpace(q.Get("endDateTime"))
+	currencyCode := strings.TrimSpace(q.Get("currencyCode"))
+
+	if tourID == "" || startDT == "" || endDT == "" || currencyCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tourId, startDateTime, endDateTime, and currencyCode are required"})
+		return
+	}
+
+	h.proxyGet(c, "/v2/inventory/list-by/tour/", true)
 }
 
 func (h *HeadoutHandler) ListSubcategoriesV2(c *gin.Context) {

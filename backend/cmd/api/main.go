@@ -107,8 +107,11 @@ func main() {
 		headoutGroup.GET("/v1/category/list-by/city", headoutHandler.ListCategoriesByCityV1)
 		headoutGroup.GET("/v2/cities", headoutHandler.ListCitiesV2)
 		headoutGroup.GET("/v2/products", headoutHandler.ListProductsV2)
+		headoutGroup.GET("/v2/products/:productId", headoutHandler.GetProductByIDV2)
+		headoutGroup.GET("/v2/products/:productId/variants/:variantId/availabilities", headoutHandler.ListNormalAvailabilities)
 		headoutGroup.GET("/v2/categories", headoutHandler.ListCategoriesV2)
 		headoutGroup.GET("/v2/collections", headoutHandler.ListCollectionsV2)
+		headoutGroup.GET("/v2/inventory", headoutHandler.ListNormalInventory)
 		headoutGroup.GET("/v2/subcategories", headoutHandler.ListSubcategoriesV2)
 	}
 

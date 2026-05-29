@@ -68,6 +68,9 @@ export function Navbar() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+              <Link href="/products">Products</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
               <Link href="/cities">Cities</Link>
             </Button>
             <CurrencyPicker />
