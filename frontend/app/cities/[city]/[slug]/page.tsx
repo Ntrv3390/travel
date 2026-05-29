@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: { params: { city: string; slu
       type: "website",
     },
     alternates: {
-      canonical: `/${params.city}/${params.slug}`,
+      canonical: `/cities/${params.city}/${params.slug}`,
     },
   };
 }

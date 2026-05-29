@@ -10,7 +10,7 @@ export function CityCard({ city, className, priority = false }: { city: City; cl
     : "/images/fallback-experience.svg";
 
   return (
-    <Link href={`/${toSlug(city.name)}`} className="group block">
+    <Link href={`/cities/${toSlug(city.name)}`} className="group block">
       <Card
         className={cn(
           "overflow-hidden border-0 shadow-sm transition-all duration-300 ease-out",
