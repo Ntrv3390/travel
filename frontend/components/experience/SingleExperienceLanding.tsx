@@ -1,20 +1,13 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import type { Experience } from "@/types/experience";
-import { buildSingleExperienceContent } from "@/components/experience/single-experience/contentData";
+import { useProduct } from "@/context/ProductContext";
 import { HeroGallery } from "@/components/experience/single-experience/HeroGallery";
 import { ExperienceHeader } from "@/components/experience/single-experience/ExperienceHeader";
 import { SectionNav } from "@/components/experience/single-experience/SectionNav";
 import { ContentSections } from "@/components/experience/single-experience/ContentSections";
 import { BookingPanel } from "@/components/experience/single-experience/BookingPanel";
 import { PackageOptionsSection } from "@/components/experience/single-experience/PackageOptionsSection";
-
-interface SingleExperienceLandingProps {
-  experience: Experience;
-  related: Experience[];
-}
 
 const sectionMotion = {
   hidden: { opacity: 0, y: 20 },
@@ -42,53 +35,18 @@ function formatDisplayPrice(value: number, currency: string) {
   }
 }
 
-export function SingleExperienceLanding({ experience, related }: SingleExperienceLandingProps) {
-  const content = buildSingleExperienceContent(experience, related);
+export function SingleExperienceLanding() {
+  const { state } = useProduct();
+  const content = state.singleExperienceContent!;
 
-  const [cardImageTick, setCardImageTick] = useState(0);
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedSlot, setSelectedSlot] = useState("");
-  const moreWaysRailRef = useRef<HTMLDivElement | null>(null);
-
-  const variantId = content.experience.options[0]?.headoutVariantId;
   const priceLabel = formatDisplayPrice(
     content.experience.options[0]?.price ?? 0,
     content.experience.options[0]?.currency ?? "USD",
   );
 
-  useEffect(() => {
-    const imageInterval = window.setInterval(() => {
-      setCardImageTick((current) => current + 1);
-    }, 4000);
-    return () => window.clearInterval(imageInterval);
-  }, []);
-
-  const scrollMoreWays = (direction: "left" | "right") => {
-    const rail = moreWaysRailRef.current;
-    if (!rail) {
-      return;
-    }
-
-    const card = rail.querySelector<HTMLElement>("[data-card-width]");
-    const fallbackAmount = Math.max(rail.clientWidth * 0.82, 240);
-    const scrollBy = card?.offsetWidth ? card.offsetWidth + 12 : fallbackAmount;
-
-    rail.scrollBy({
-      left: direction === "left" ? -scrollBy : scrollBy,
-      behavior: "smooth",
-    });
-  };
-
-  const handleDateChange = (value: string) => {
-    setSelectedDate(value);
-    setSelectedSlot("");
-  };
-
   const handleSelectOptions = () => {
     const target = document.getElementById("packages");
-    if (!target) {
-      return;
-    }
+    if (!target) return;
     target.scrollIntoView({
       behavior: "smooth",
       block: "start",
@@ -118,39 +76,19 @@ export function SingleExperienceLanding({ experience, related }: SingleExperienc
         </motion.div>
 
         <motion.div initial="hidden" animate="show" variants={sectionMotion} transition={{ duration: 0.45 }}>
-          <HeroGallery
-            gallery={content.gallery}
-            activeImageIndex={0}
-          />
+          <HeroGallery />
         </motion.div>
 
         <motion.div initial="hidden" animate="show" variants={sectionMotion} transition={{ duration: 0.4, delay: 0.06 }}>
-          <ExperienceHeader experience={content.experience} />
+          <ExperienceHeader />
         </motion.div>
 
         <SectionNav links={sectionLinks} />
 
         <div className="relative grid grid-cols-1 items-start gap-4 md:gap-6 lg:grid-cols-[minmax(0,calc(100%_-_392px))_360px] lg:gap-8">
           <main className="min-w-0 overflow-hidden">
-            <PackageOptionsSection
-              variantId={variantId ?? ""}
-              headoutId={content.experience.headoutId}
-              experienceId={content.experience.headoutId}
-              title={content.experience.title}
-              imageUrl={content.experience.images[0]?.url ?? ""}
-              price={content.experience.options[0]?.price ?? 0}
-              currency={content.experience.options[0]?.currency ?? "USD"}
-              selectedDate={selectedDate}
-              selectedSlot={selectedSlot}
-              onDateChange={handleDateChange}
-              onSlotChange={setSelectedSlot}
-            />
-            <ContentSections
-              content={content}
-              cardImageTick={cardImageTick}
-              moreWaysRailRef={moreWaysRailRef}
-              onScrollMoreWays={scrollMoreWays}
-            />
+            <PackageOptionsSection />
+            <ContentSections />
           </main>
 
           <BookingPanel

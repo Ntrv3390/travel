@@ -12,7 +12,7 @@ import type { CartItem } from "@/types/booking";
 
 export default function CartPage() {
   const router = useRouter();
-  const { cart, isLoading, removeItem, clearCart, itemCount } = useCart();
+  const { cart, isLoading, clearCart, itemCount } = useCart();
 
   function handleCheckout(item: CartItem) {
     const params = new URLSearchParams({
@@ -69,7 +69,7 @@ export default function CartPage() {
           <div className="space-y-4">
             {items.map((item) => (
               <div key={item.id} className="group relative">
-                <CartItemCard item={item} onRemove={removeItem} />
+                <CartItemCard item={item} />
                 <div className="mt-2 flex justify-end">
                   <Button size="sm" onClick={() => handleCheckout(item)}>
                     Book now

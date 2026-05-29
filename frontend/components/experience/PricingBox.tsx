@@ -15,10 +15,13 @@ import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { useAvailability } from "@/hooks/useAvailability";
 import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/components/ui/toaster";
-import type { Experience } from "@/types/experience";
+import { useProduct } from "@/context/ProductContext";
 
-export function PricingBox({ experience }: { experience: Experience }) {
+export function PricingBox() {
   const router = useRouter();
+  const { state } = useProduct();
+  const experience = state.experience!;
+
   const [date, setDate] = useState("");
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
   const [inventoryId, setInventoryId] = useState("");
@@ -37,12 +40,11 @@ export function PricingBox({ experience }: { experience: Experience }) {
   const { availability, isError } = useAvailability(experience.id, variantId, date);
 
   const slots: Slot[] = availability?.slots ?? [];
-  
-  // Auto-select first available slot when date/variant changes
+
   useEffect(() => {
     const available = availability?.slots;
     if (available && available.length > 0) {
-      if (inventoryId && available.some(s => s.inventoryId === inventoryId)) return;
+      if (inventoryId && available.some((s: Slot) => s.inventoryId === inventoryId)) return;
       setInventoryId(available[0].inventoryId);
     } else if (inventoryId) {
       setInventoryId("");

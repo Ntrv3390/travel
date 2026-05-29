@@ -2,15 +2,13 @@
 
 import { Heart, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { GalleryItem } from "@/components/experience/single-experience/types";
+import { useProduct } from "@/context/ProductContext";
 
-interface HeroGalleryProps {
-  gallery: GalleryItem[];
-  activeImageIndex: number;
-}
-
-export function HeroGallery({ gallery, activeImageIndex }: HeroGalleryProps) {
-  const activeImage = gallery[activeImageIndex] ?? gallery[0];
+export function HeroGallery() {
+  const { state } = useProduct();
+  const content = state.singleExperienceContent!;
+  const gallery = content.gallery;
+  const activeImage = gallery[0];
 
   return (
     <section className="relative mx-auto max-w-[1280px] overflow-hidden rounded-2xl bg-white shadow-[0_22px_44px_rgba(15,23,42,0.12)]">

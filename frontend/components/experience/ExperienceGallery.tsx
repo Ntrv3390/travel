@@ -1,7 +1,14 @@
-import Image from "next/image";
-import type { ExperienceImage } from "@/types/experience";
+"use client";
 
-export function ExperienceGallery({ images, title }: { images: ExperienceImage[]; title: string }) {
+import Image from "next/image";
+import { useProduct } from "@/context/ProductContext";
+
+export function ExperienceGallery() {
+  const { state } = useProduct();
+  const experience = state.experience!;
+  const images = experience.images;
+  const title = experience.title;
+
   const uniqueImages = images.filter((image, index, array) => array.findIndex((candidate) => candidate.url === image.url) === index);
   const heroImage = uniqueImages[0]?.url ?? "/images/fallback-experience.svg";
   const thumbnailImages = uniqueImages.slice(1, 5);

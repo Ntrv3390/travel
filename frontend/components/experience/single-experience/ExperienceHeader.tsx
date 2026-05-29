@@ -1,10 +1,8 @@
+"use client";
+
 import { Clock3, Languages, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { Experience } from "@/types/experience";
-
-interface ExperienceHeaderProps {
-  experience: Experience;
-}
+import { useProduct } from "@/context/ProductContext";
 
 function formatDuration(minSeconds: number, maxSeconds: number) {
   const minHours = minSeconds > 0 ? minSeconds / 3600 : 1.5;
@@ -15,7 +13,10 @@ function formatDuration(minSeconds: number, maxSeconds: number) {
   return `${minHours.toFixed(1)} to ${maxHours.toFixed(1)} hours`;
 }
 
-export function ExperienceHeader({ experience }: ExperienceHeaderProps) {
+export function ExperienceHeader() {
+  const { state } = useProduct();
+  const experience = state.singleExperienceContent!.experience;
+
   return (
     <header className="mb-4 mt-5 md:my-5">
       <div className="mb-3 flex flex-wrap items-center gap-2">

@@ -6,10 +6,10 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-export function SearchBar({ compact = false, initialQuery = "", initialCity = "" }: { compact?: boolean; initialQuery?: string; initialCity?: string }) {
+export function SearchBar({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const [query, setQuery] = useState(initialQuery);
-  const [city, setCity] = useState(initialCity);
+  const [query, setQuery] = useState("");
+  const [city, setCity] = useState("");
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();

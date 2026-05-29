@@ -1,9 +1,13 @@
+"use client";
+
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
 import { EmptyState } from "@/components/common/EmptyState";
-import type { Experience } from "@/types/experience";
+import { useExperiences } from "@/context/ExperiencesContext";
 
-export function SearchResults({ experiences }: { experiences: Experience[] }) {
-  if (!experiences.length) {
+export function SearchResults() {
+  const { state } = useExperiences();
+
+  if (!state.experiences.length) {
     return (
       <EmptyState
         title="No results found"
@@ -13,5 +17,5 @@ export function SearchResults({ experiences }: { experiences: Experience[] }) {
     );
   }
 
-  return <ExperienceGrid experiences={experiences} />;
+  return <ExperienceGrid />;
 }

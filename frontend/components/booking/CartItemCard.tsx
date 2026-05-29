@@ -6,14 +6,12 @@ import { Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PriceDisplay } from "@/components/common/PriceDisplay"
+import { useCart } from "@/hooks/useCart"
 import type { CartItem } from "@/types/booking"
 
-interface CartItemCardProps {
-  item: CartItem
-  onRemove: (itemId: string) => void
-}
+export function CartItemCard({ item }: { item: CartItem }) {
+  const { removeItem } = useCart()
 
-export function CartItemCard({ item, onRemove }: CartItemCardProps) {
   return (
     <Card>
       <CardContent className="flex items-start gap-4 p-4">
@@ -55,7 +53,7 @@ export function CartItemCard({ item, onRemove }: CartItemCardProps) {
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-red-600"
-            onClick={() => onRemove(item.id)}
+            onClick={() => removeItem(item.id)}
           >
             <Trash2 className="h-4 w-4" />
           </Button>

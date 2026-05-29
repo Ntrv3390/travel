@@ -1,6 +1,14 @@
-import { CheckCircle2, XCircle } from "lucide-react";
+"use client";
 
-export function ExperienceFeatures({ inclusions, exclusions }: { inclusions: string[]; exclusions: string[] }) {
+import { CheckCircle2, XCircle } from "lucide-react";
+import { useProduct } from "@/context/ProductContext";
+
+export function ExperienceFeatures() {
+  const { state } = useProduct();
+  const experience = state.experience!;
+  const inclusions = experience.options[0]?.inclusions ?? [];
+  const exclusions = experience.options[0]?.exclusions ?? [];
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="space-y-3">

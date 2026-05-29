@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExperiencesProvider } from "@/context/ExperiencesContext";
 import { getTopExperiences } from "@/lib/api";
 import type { SearchParams } from "@/types/api";
 
@@ -25,7 +26,13 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   const currentCount = result.data?.experiences.length ?? 0;
 
   return (
-    <>
+    <ExperiencesProvider
+      initialExperiences={result.data?.experiences ?? []}
+      totalCount={result.data?.count ?? 0}
+      page={page}
+      totalPages={totalPages}
+      error={result.error}
+    >
       <ExperienceHero />
 
       <section className="container py-section">
@@ -39,9 +46,9 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           <Alert>
             <AlertDescription>Experiences are temporarily unavailable. Please refresh in a moment.</AlertDescription>
           </Alert>
-        ) : result.data && currentCount ? (
+        ) : currentCount ? (
           <>
-            <ExperienceGrid experiences={result.data.experiences} />
+            <ExperienceGrid />
             {totalPages > 1 && (
               <div className="mt-8 flex items-center justify-center gap-4">
                 {page > 1 && (
@@ -91,6 +98,6 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           </Card>
         </div>
       </section>
-    </>
+    </ExperiencesProvider>
   );
 }

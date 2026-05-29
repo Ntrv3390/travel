@@ -1,11 +1,14 @@
-import type { MutableRefObject } from "react";
+"use client";
+
+import { useState, useEffect, useRef } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { RelatedCard, SingleExperienceContent } from "@/components/experience/single-experience/types";
+import { useProduct } from "@/context/ProductContext";
+import type { RelatedCard } from "@/components/experience/single-experience/types";
 
 const sectionCardClass =
   "scroll-mt-[10.2rem] rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] md:p-5 lg:scroll-mt-[10.5rem]";
@@ -129,14 +132,33 @@ function RelatedCardView({ item, seed, tick, className, imageHeightClass }: { it
   );
 }
 
-interface ContentSectionsProps {
-  content: SingleExperienceContent;
-  cardImageTick: number;
-  moreWaysRailRef: MutableRefObject<HTMLDivElement | null>;
-  onScrollMoreWays: (direction: "left" | "right") => void;
-}
+export function ContentSections() {
+  const { state } = useProduct();
+  const content = state.singleExperienceContent!;
+  const [cardImageTick, setCardImageTick] = useState(0);
+  const moreWaysRailRef = useRef<HTMLDivElement | null>(null);
 
-export function ContentSections({ content, cardImageTick, moreWaysRailRef, onScrollMoreWays }: ContentSectionsProps) {
+  useEffect(() => {
+    const imageInterval = window.setInterval(() => {
+      setCardImageTick((current) => current + 1);
+    }, 4000);
+    return () => window.clearInterval(imageInterval);
+  }, []);
+
+  const scrollMoreWays = (direction: "left" | "right") => {
+    const rail = moreWaysRailRef.current;
+    if (!rail) return;
+
+    const card = rail.querySelector<HTMLElement>("[data-card-width]");
+    const fallbackAmount = Math.max(rail.clientWidth * 0.82, 240);
+    const scrollBy = card?.offsetWidth ? card.offsetWidth + 12 : fallbackAmount;
+
+    rail.scrollBy({
+      left: direction === "left" ? -scrollBy : scrollBy,
+      behavior: "smooth",
+    });
+  };
+
   return (
     <div className="relative z-0 grid min-w-0 content-start gap-4">
       <article id="included" className="min-w-0">
@@ -260,10 +282,10 @@ export function ContentSections({ content, cardImageTick, moreWaysRailRef, onScr
             <div className="flex min-w-0 items-start justify-between gap-3">
               <h2 className="font-[Sora,Inter,Manrope,sans-serif] text-xl font-extrabold leading-tight tracking-tight text-slate-900">More ways to experience {content.experience.city}</h2>
               <div className="inline-flex gap-1.5">
-                <Button variant="outline" size="sm" className="h-8 w-8 rounded-full p-0 text-blue-900" aria-label="Scroll cards left" onClick={() => onScrollMoreWays("left")}>
+                <Button variant="outline" size="sm" className="h-8 w-8 rounded-full p-0 text-blue-900" aria-label="Scroll cards left" onClick={() => scrollMoreWays("left")}>
                   <ChevronLeft size={16} />
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 w-8 rounded-full p-0 text-blue-900" aria-label="Scroll cards right" onClick={() => onScrollMoreWays("right")}>
+                <Button variant="outline" size="sm" className="h-8 w-8 rounded-full p-0 text-blue-900" aria-label="Scroll cards right" onClick={() => scrollMoreWays("right")}>
                   <ChevronRight size={16} />
                 </Button>
               </div>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getCartSessionId, addCartItem } from "@/lib/api";
+import { useProduct } from "@/context/ProductContext";
 
 type CalendarDay = {
   date: string;
@@ -24,20 +25,6 @@ type CalendarApiResponse = {
   maxBookableQuantity?: number | null;
   error?: string;
 };
-
-interface PackageOptionsSectionProps {
-  variantId: string;
-  headoutId: string;
-  experienceId: string;
-  title: string;
-  imageUrl: string;
-  price: number;
-  currency: string;
-  selectedDate: string;
-  selectedSlot: string;
-  onDateChange: (value: string) => void;
-  onSlotChange: (value: string) => void;
-}
 
 function parseDate(value: string) {
   return new Date(`${value}T00:00:00`);
@@ -121,20 +108,22 @@ function toMinutes(slot: string) {
   return hour * 60 + minute;
 }
 
-export function PackageOptionsSection({
-  variantId,
-  headoutId,
-  experienceId,
-  title,
-  imageUrl,
-  price,
-  currency,
-  selectedDate,
-  selectedSlot,
-  onDateChange,
-  onSlotChange,
-}: PackageOptionsSectionProps) {
+export function PackageOptionsSection() {
   const router = useRouter();
+  const { state } = useProduct();
+  const content = state.singleExperienceContent!;
+  const experience = content.experience;
+
+  const variantId = experience.options[0]?.headoutVariantId ?? "";
+  const headoutId = experience.headoutId;
+  const experienceId = experience.headoutId;
+  const title = experience.title;
+  const imageUrl = experience.images[0]?.url ?? "";
+  const price = experience.options[0]?.price ?? 0;
+  const currency = experience.options[0]?.currency ?? "USD";
+
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState("");
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
@@ -196,11 +185,10 @@ export function PackageOptionsSection({
   );
   const visibleSlots = selectedDay?.slots ?? [];
 
-  // If no available days, clear selection
   useEffect(() => {
     if (availableDays.length === 0 && selectedDate) {
-      onDateChange("");
-      onSlotChange("");
+      setSelectedDate("");
+      setSelectedSlot("");
     }
   }, [availableDays.length]);
   const today = useMemo(() => (clientNow ? startOfToday(clientNow) : null), [clientNow]);
@@ -319,10 +307,10 @@ export function PackageOptionsSection({
 
   useEffect(() => {
     if (!selectedDate && quickPickDays.length) {
-      onDateChange(quickPickDays[0].date);
-      onSlotChange(quickPickDays[0].slots[0] ?? "");
+      setSelectedDate(quickPickDays[0].date);
+      setSelectedSlot(quickPickDays[0].slots[0] ?? "");
     }
-  }, [onDateChange, onSlotChange, quickPickDays, selectedDate]);
+  }, [quickPickDays, selectedDate]);
 
   useEffect(() => {
     if (!selectedDate || !visibleSlots.length) {
@@ -330,9 +318,9 @@ export function PackageOptionsSection({
     }
 
     if (!selectedSlot || !visibleSlots.includes(selectedSlot)) {
-      onSlotChange(visibleSlots[0]);
+      setSelectedSlot(visibleSlots[0]);
     }
-  }, [onSlotChange, selectedDate, selectedSlot, visibleSlots]);
+  }, [selectedDate, selectedSlot, visibleSlots]);
 
   const effectiveMaxQuantity = maxBookableQuantity ?? 99;
   const canCheckout = Boolean(selectedDate && selectedSlot && quantity > 0);
@@ -386,8 +374,8 @@ export function PackageOptionsSection({
                                       : "border-slate-200 bg-white text-slate-700 hover:border-brand-300",
                                   )}
                                   onClick={() => {
-                                    onDateChange(day.date);
-                                    onSlotChange(day.slots[0] ?? "");
+                                    setSelectedDate(day.date);
+                                    setSelectedSlot(day.slots[0] ?? "");
                                   }}
                                 >
                                   <span className="text-[11px] font-semibold">{label.month}</span>
@@ -486,8 +474,8 @@ export function PackageOptionsSection({
                                     if (!day) {
                                       return;
                                     }
-                                    onDateChange(day.date);
-                                    onSlotChange(day.slots[0] ?? "");
+                                    setSelectedDate(day.date);
+                                    setSelectedSlot(day.slots[0] ?? "");
                                     setIsCalendarPopupOpen(false);
                                   }}
                                 >
@@ -532,7 +520,7 @@ export function PackageOptionsSection({
                               "flex items-center justify-between rounded-xl border px-3 py-2 text-left transition",
                               isActive ? "border-brand-600 bg-blue-50" : "border-slate-200 bg-white hover:border-brand-300",
                             )}
-                            onClick={() => onSlotChange(slot)}
+                            onClick={() => setSelectedSlot(slot)}
                           >
                             <span className="text-sm font-bold text-slate-900">{slot}</span>
                             <span className="text-xs text-slate-500">{formatSlotLabel(slot)}</span>
@@ -546,7 +534,7 @@ export function PackageOptionsSection({
                 <div>
                   <p className="mb-2 text-sm font-bold text-slate-800">Select quantity</p>
                   {maxBookableQuantity != null ? (
-                    <p className="mb-2 text-xs text-brand-700">Can’t select more than {maxBookableQuantity} for this package</p>
+                    <p className="mb-2 text-xs text-brand-700">Can&apos;t select more than {maxBookableQuantity} for this package</p>
                   ) : null}
                   <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
                     <div>

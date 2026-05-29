@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
@@ -9,19 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { checkoutFormSchema, type CheckoutFormValues } from "@/lib/validations";
 import { createBooking } from "@/lib/api";
+import { useCheckout } from "@/context/CheckoutContext";
 
 export function CheckoutForm() {
   const router = useRouter();
-  const search = useSearchParams();
+  const { info } = useCheckout();
   const [submitting, setSubmitting] = useState(false);
-
-  const experienceId = search.get("experienceId") ?? "";
-  const variantId = search.get("variantId") ?? "";
-  const inventoryId = search.get("inventoryId") ?? "";
-  const date = search.get("date") ?? "";
-  const adults = parseInt(search.get("adults") ?? "1", 10);
-  const children = parseInt(search.get("children") ?? "0", 10);
-  const currency = search.get("currency") ?? "USD";
 
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutFormSchema),
@@ -38,13 +31,13 @@ export function CheckoutForm() {
     setSubmitting(true);
     const idempotencyKey = crypto.randomUUID?.() ?? `bk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const result = await createBooking({
-      experienceId,
-      variantId,
-      inventoryId,
-      date,
-      adults,
-      children,
-      currencyCode: currency,
+      experienceId: info.experienceId,
+      variantId: info.variantId,
+      inventoryId: info.inventoryId,
+      date: info.date,
+      adults: info.adults,
+      children: info.children,
+      currencyCode: info.currency,
       idempotencyKey,
       firstName: values.firstName,
       lastName: values.lastName,
@@ -60,13 +53,15 @@ export function CheckoutForm() {
     }
 
     const booking = result.data;
-    const params = new URLSearchParams(search.toString());
+    const params = new URLSearchParams();
+    params.set("title", info.title);
     if (booking) {
       params.set("bookingRef", booking.headoutReference || booking.bookingId);
       params.set("bookingId", booking.bookingId);
       params.set("status", booking.status);
       params.set("emailSent", String(booking.confirmationEmailSent));
     }
+    params.set("firstName", values.firstName);
     router.push(`/checkout/confirmation?${params.toString()}`);
   };
 

@@ -6,8 +6,11 @@ import { SingleExperienceLanding } from "@/components/experience/SingleExperienc
 import { SearchFilters } from "@/components/search/SearchFilters";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ExperiencesProvider } from "@/context/ExperiencesContext";
+import { ProductProvider } from "@/context/ProductContext";
 import { getCityExperiences } from "@/lib/api";
 import { getSingleExperiencePayloadBySlugOrID } from "@/lib/experience/singleExperience";
+import { buildSingleExperienceContent } from "@/components/experience/single-experience/contentData";
 import type { SearchParams } from "@/types/api";
 
 export const dynamic = "force-dynamic";
@@ -64,36 +67,50 @@ export default async function CityPage({
   if (!isValidCity(params.city)) notFound();
   const cookieStore = await cookies();
   const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
-  const cityResult = await getCityExperiences(params.city, { ...searchParams, limit: searchParams.limit ?? "1", page: searchParams.page ?? "1", currency });
-  if (!cityResult.data?.experiences.length) {
-    const payload = await getSingleExperiencePayloadBySlugOrID(params.city);
-    if (payload) {
-      return <SingleExperienceLanding experience={payload.experience} related={payload.related} />;
-    }
+
+  const singlePayload = await getSingleExperiencePayloadBySlugOrID(params.city);
+  if (singlePayload) {
+    const content = buildSingleExperienceContent(singlePayload.experience, singlePayload.related);
+    return (
+      <ProductProvider
+        experience={singlePayload.experience}
+        relatedExperiences={singlePayload.related}
+        singleExperienceContent={content}
+      >
+        <SingleExperienceLanding />
+      </ProductProvider>
+    );
   }
 
   const result = await getCityExperiences(params.city, { ...searchParams, currency });
 
   return (
-    <div className="container py-section">
-      <div className="mb-6 space-y-3">
-        <h1 className="text-display-sm font-bold">Things to do in {params.city.replace(/-/g, " ")}</h1>
-        <p className="text-sm text-muted-foreground">{result.data?.count ?? result.data?.experiences.length ?? 0} experiences found</p>
-      </div>
+    <ExperiencesProvider
+      initialExperiences={result.data?.experiences ?? []}
+      totalCount={result.data?.count ?? 0}
+      page={parseInt(searchParams.page ?? "1", 10)}
+      error={result.error}
+    >
+      <div className="container py-section">
+        <div className="mb-6 space-y-3">
+          <h1 className="text-display-sm font-bold">Things to do in {params.city.replace(/-/g, " ")}</h1>
+          <p className="text-sm text-muted-foreground">{result.data?.count ?? result.data?.experiences.length ?? 0} experiences found</p>
+        </div>
 
-      <div className="mb-6">
-        <SearchFilters />
-      </div>
+        <div className="mb-6">
+          <SearchFilters />
+        </div>
 
-      {result.error ? (
-        <Alert className="mb-6">
-          <AlertDescription>We could not load experiences right now. Please try again in a moment.</AlertDescription>
-        </Alert>
-      ) : result.data?.experiences.length ? (
-        <ExperienceGrid experiences={result.data.experiences} />
-      ) : (
-        <EmptyState title="No experiences yet" description="Try changing filters or search another destination." action={{ label: "Back home", href: "/" }} />
-      )}
-    </div>
+        {result.error ? (
+          <Alert className="mb-6">
+            <AlertDescription>We could not load experiences right now. Please try again in a moment.</AlertDescription>
+          </Alert>
+        ) : result.data?.experiences.length ? (
+          <ExperienceGrid />
+        ) : (
+          <EmptyState title="No experiences yet" description="Try changing filters or search another destination." action={{ label: "Back home", href: "/" }} />
+        )}
+      </div>
+    </ExperiencesProvider>
   );
 }
