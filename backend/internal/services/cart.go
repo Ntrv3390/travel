@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -23,6 +24,7 @@ type CartItem struct {
 	EndDateTime   string  `json:"endDateTime,omitempty"`
 	Adults        int     `json:"adults"`
 	Children      int     `json:"children"`
+	GuestCounts   map[string]int `json:"guestCounts,omitempty"`
 	FirstName     string  `json:"firstName,omitempty"`
 	LastName      string  `json:"lastName,omitempty"`
 	Email         string  `json:"email,omitempty"`
@@ -111,6 +113,7 @@ func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartIt
 		EndDateTime:   item.EndDateTime,
 		Adults:        item.Adults,
 		Children:      item.Children,
+		GuestCounts:   encodeGuestCounts(item.GuestCounts),
 		FirstName:     item.FirstName,
 		LastName:      item.LastName,
 		Email:         item.Email,
@@ -207,6 +210,7 @@ func (s *CartService) modelToCart(m *models.Cart) *Cart {
 			EndDateTime:   item.EndDateTime,
 			Adults:        item.Adults,
 			Children:      item.Children,
+			GuestCounts:   parseGuestCounts(item.GuestCounts),
 			FirstName:     item.FirstName,
 			LastName:      item.LastName,
 			Email:         item.Email,
@@ -226,4 +230,24 @@ func sanitizeSessionID(id string) string {
 		id = id[:256]
 	}
 	return id
+}
+
+func encodeGuestCounts(counts map[string]int) string {
+	if counts == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(counts)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+func parseGuestCounts(data string) map[string]int {
+	counts := make(map[string]int)
+	if data == "" {
+		return counts
+	}
+	json.Unmarshal([]byte(data), &counts)
+	return counts
 }

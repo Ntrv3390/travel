@@ -15,11 +15,11 @@ export interface CheckoutInfo {
   startDateTime: string
   endDateTime: string
   time: string
-  adults: number
-  children: number
+  guestCounts: Record<string, number>
   currency: string
   title: string
   price: number
+  bookingPrice: number
   guests: number
 }
 
@@ -35,11 +35,11 @@ const defaultCheckout: CheckoutInfo = {
   startDateTime: "",
   endDateTime: "",
   time: "",
-  adults: 1,
-  children: 0,
+  guestCounts: { ADULT: 1 },
   currency: "USD",
   title: "Experience",
   price: 0,
+  bookingPrice: 0,
   guests: 1,
 }
 
@@ -53,9 +53,18 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   const search = useSearchParams()
 
   const info = useMemo<CheckoutInfo>(() => {
-    const adults = parseInt(search.get("adults") ?? "1", 10)
-    const children = parseInt(search.get("children") ?? "0", 10)
+    let guestCounts: Record<string, number> = { ADULT: 1 }
+    try {
+      const parsed = JSON.parse(search.get("guestCounts") || "{}")
+      if (Object.keys(parsed).length > 0) guestCounts = parsed
+    } catch {
+      const adults = parseInt(search.get("adults") ?? "1", 10)
+      const children = parseInt(search.get("children") ?? "0", 10)
+      guestCounts = { ADULT: adults }
+      if (children > 0) guestCounts.CHILD = children
+    }
     const price = parseFloat(search.get("price") ?? "0")
+    const bookingPrice = parseFloat(search.get("bookingPrice") ?? String(price))
     const experienceId = search.get("experienceId") ?? ""
     const productId = search.get("productId") ?? experienceId
     return {
@@ -70,12 +79,12 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       startDateTime: search.get("startDateTime") ?? "",
       endDateTime: search.get("endDateTime") ?? "",
       time: search.get("time") ?? "",
-      adults,
-      children,
+      guestCounts,
       currency: search.get("currency") ?? "USD",
       title: search.get("title") ?? "Experience",
       price,
-      guests: adults + children,
+      bookingPrice,
+      guests: Object.values(guestCounts).reduce((a, b) => a + b, 0),
     }
   }, [search])
 

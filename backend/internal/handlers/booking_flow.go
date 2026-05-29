@@ -93,6 +93,7 @@ type createBookingRequest struct {
 	EndDateTime         string `json:"endDateTime,omitempty"`
 	Adults              int    `json:"adults"`
 	Children            int    `json:"children"`
+	GuestCounts         map[string]int `json:"guestCounts,omitempty"`
 	FirstName           string `json:"firstName"`
 	LastName            string `json:"lastName"`
 	Email               string `json:"email"`
@@ -428,45 +429,81 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	inventoryID := strings.TrimSpace(req.InventoryID)
 
-	totalPax := req.Adults + req.Children
+	totalPax := 0
+	if req.GuestCounts != nil && len(req.GuestCounts) > 0 {
+		for _, count := range req.GuestCounts {
+			totalPax += count
+		}
+	} else {
+		totalPax = req.Adults + req.Children
+		req.GuestCounts = map[string]int{
+			"ADULT": req.Adults,
+		}
+		if req.Children > 0 {
+			req.GuestCounts["CHILD"] = req.Children
+		}
+	}
 	if totalPax < 1 {
 		totalPax = 1
 	}
 
 	guestIndex := 1
 	customers := make([]map[string]interface{}, 0, totalPax)
-	for i := 0; i < max(1, req.Adults); i++ {
-		name := req.FirstName + " " + req.LastName
-		if guestIndex > 1 {
-			name = fmt.Sprintf("%s (Guest %d)", name, guestIndex)
+	
+	guestTypes := make([]string, 0, len(req.GuestCounts))
+	for pt := range req.GuestCounts {
+		guestTypes = append(guestTypes, pt)
+	}
+	sort.Slice(guestTypes, func(i, j int) bool {
+		if guestTypes[i] == "ADULT" { return true }
+		if guestTypes[j] == "ADULT" { return false }
+		return guestTypes[i] < guestTypes[j]
+	})
+
+	isFirst := true
+	for _, pt := range guestTypes {
+		count := req.GuestCounts[pt]
+		for i := 0; i < count; i++ {
+			name := req.FirstName + " " + req.LastName
+			if !isFirst {
+				name = fmt.Sprintf("%s (%s %d)", name, pt, i+1)
+			}
+			
+			inputFields := []map[string]interface{}{
+				{"id": "NAME", "value": name},
+			}
+			
+			if isFirst {
+				inputFields = append(inputFields, map[string]interface{}{"id": "EMAIL", "value": req.Email})
+				if req.Phone != "" {
+					inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "value": req.Phone})
+				}
+			}
+
+			customer := map[string]interface{}{
+				"personType":  pt,
+				"isPrimary":   isFirst,
+				"inputFields": inputFields,
+			}
+			customers = append(customers, customer)
+			isFirst = false
+			guestIndex++
 		}
+	}
+	
+	if len(customers) == 0 {
 		inputFields := []map[string]interface{}{
-			{"id": "NAME", "value": name},
+			{"id": "NAME", "value": req.FirstName + " " + req.LastName},
 			{"id": "EMAIL", "value": req.Email},
 		}
 		if req.Phone != "" {
 			inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "value": req.Phone})
 		}
-		customer := map[string]interface{}{
+		customers = append(customers, map[string]interface{}{
 			"personType":  "ADULT",
-			"isPrimary":   i == 0,
+			"isPrimary":   true,
 			"inputFields": inputFields,
-		}
-		customers = append(customers, customer)
-		guestIndex++
-	}
-	for i := 0; i < req.Children; i++ {
-		name := fmt.Sprintf("%s %s (Child %d)", req.FirstName, req.LastName, i+1)
-		inputFields := []map[string]interface{}{
-			{"id": "NAME", "value": name},
-		}
-		customer := map[string]interface{}{
-			"personType":  "CHILD",
-			"isPrimary":   false,
-			"inputFields": inputFields,
-		}
-		customers = append(customers, customer)
-		guestIndex++
+		})
 	}
 
 	vif := req.VariantInputFields
@@ -1183,6 +1220,12 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 	}
 
 	customerData := buildCustomerDataJSON(req)
+	
+	guestCountsJSON := "{}"
+	if b, err := json.Marshal(req.GuestCounts); err == nil && string(b) != "null" {
+		guestCountsJSON = string(b)
+	}
+
 	vifJSON := "[]"
 	if len(req.VariantInputFields) > 0 {
 		if b, err := json.Marshal(req.VariantInputFields); err == nil {
@@ -1217,6 +1260,7 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 		CustomerCount: max(1, req.Adults+req.Children),
 		Adults:        max(0, req.Adults),
 		Children:      max(0, req.Children),
+		GuestCounts:   guestCountsJSON,
 		FirstName:     req.FirstName,
 		LastName:      req.LastName,
 		Email:         req.Email,
@@ -1250,7 +1294,39 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 func buildCustomerDataJSON(req createBookingRequest) string {
 	customers := make([]map[string]interface{}, 0)
 
-	for i := 0; i < max(1, req.Adults); i++ {
+	guestTypes := make([]string, 0, len(req.GuestCounts))
+	for pt := range req.GuestCounts {
+		guestTypes = append(guestTypes, pt)
+	}
+	sort.Slice(guestTypes, func(i, j int) bool {
+		if guestTypes[i] == "ADULT" { return true }
+		if guestTypes[j] == "ADULT" { return false }
+		return guestTypes[i] < guestTypes[j]
+	})
+
+	isFirst := true
+	for _, pt := range guestTypes {
+		count := req.GuestCounts[pt]
+		for i := 0; i < count; i++ {
+			inputFields := []map[string]interface{}{
+				{"id": "NAME", "name": "Name", "value": req.FirstName + " " + req.LastName},
+			}
+			if isFirst {
+				inputFields = append(inputFields, map[string]interface{}{"id": "EMAIL", "name": "Email", "value": req.Email})
+				if req.Phone != "" {
+					inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "name": "Phone", "value": req.Phone})
+				}
+			}
+			customers = append(customers, map[string]interface{}{
+				"personType":  pt,
+				"isPrimary":   isFirst,
+				"inputFields": inputFields,
+			})
+			isFirst = false
+		}
+	}
+	
+	if len(customers) == 0 {
 		inputFields := []map[string]interface{}{
 			{"id": "NAME", "name": "Name", "value": req.FirstName + " " + req.LastName},
 			{"id": "EMAIL", "name": "Email", "value": req.Email},
@@ -1260,17 +1336,8 @@ func buildCustomerDataJSON(req createBookingRequest) string {
 		}
 		customers = append(customers, map[string]interface{}{
 			"personType":  "ADULT",
-			"isPrimary":   i == 0,
+			"isPrimary":   true,
 			"inputFields": inputFields,
-		})
-	}
-	for i := 0; i < req.Children; i++ {
-		customers = append(customers, map[string]interface{}{
-			"personType": "CHILD",
-			"isPrimary":  false,
-			"inputFields": []map[string]interface{}{
-				{"id": "NAME", "name": "Name", "value": req.FirstName + " " + req.LastName},
-			},
 		})
 	}
 

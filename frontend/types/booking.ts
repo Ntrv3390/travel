@@ -10,6 +10,7 @@ export interface BookingRequest {
   endDateTime: string;
   adults: number;
   children: number;
+  guestCounts?: Record<string, number>;
   firstName: string;
   lastName: string;
   email: string;
@@ -43,6 +44,7 @@ export interface CartItem {
   endDateTime: string;
   adults: number;
   children: number;
+  guestCounts?: Record<string, number>;
   title: string;
   priceAmount: number;
   currency: string;

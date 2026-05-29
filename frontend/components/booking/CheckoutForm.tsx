@@ -44,14 +44,15 @@ export function CheckoutForm() {
       date: info.date,
       startDateTime: info.startDateTime,
       endDateTime: info.endDateTime,
-      adults: info.adults,
-      children: info.children,
+      adults: info.guestCounts?.ADULT || 1,
+      children: info.guestCounts?.CHILD || 0,
+      guestCounts: info.guestCounts,
       firstName: values.firstName,
       lastName: values.lastName,
       email: values.email,
       phone: values.phone,
       currencyCode: info.currency,
-      priceAmount: info.price * info.guests,
+      priceAmount: info.bookingPrice,
       specialRequests: values.specialRequests,
     }, sessionId, idempotencyKey);
 

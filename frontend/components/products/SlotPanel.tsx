@@ -26,8 +26,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
   const { productId, productName, variantId, variantName } = useProductDetail()
   const { toast } = useToast()
   const router = useRouter()
-  const [adults, setAdults] = useState(1)
-  const [children, setChildren] = useState(0)
+  const [guests, setGuests] = useState<Record<string, number>>({ ADULT: 1 })
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [addingToCart, setAddingToCart] = useState(false)
 
@@ -56,7 +55,31 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
     )
   }
 
+  const getPriceForType = (slot: SlotItem, type: string) => {
+    const person = slot.pricing.persons.find(p => p.type === type)
+    return person?.headoutSellingPrice ?? person?.price ?? slot.pricing.persons[0]?.headoutSellingPrice ?? 0
+  }
+
+  const getBookingPriceForType = (slot: SlotItem, type: string) => {
+    const person = slot.pricing.persons.find(p => p.type === type)
+    return person?.price ?? person?.headoutSellingPrice ?? slot.pricing.persons[0]?.price ?? 0
+  }
+
+  const calculateTotalPrice = (slot: SlotItem) => {
+    return Object.entries(guests).reduce((total, [type, count]) => {
+      return total + (getPriceForType(slot, type) * count)
+    }, 0)
+  }
+
+  const calculateTotalBookingPrice = (slot: SlotItem) => {
+    return Object.entries(guests).reduce((total, [type, count]) => {
+      return total + (getBookingPriceForType(slot, type) * count)
+    }, 0)
+  }
+
   const handleBookNow = (slot: SlotItem) => {
+    const totalPrice = calculateTotalPrice(slot)
+    const totalBookingPrice = calculateTotalBookingPrice(slot)
     const params = new URLSearchParams({
       productId,
       productName: productName ?? "Experience",
@@ -67,9 +90,9 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
       date: selectedDate,
       startDateTime: slot.startDateTime,
       endDateTime: slot.endDateTime,
-      adults: String(adults),
-      children: String(children),
-      price: String(slot.pricing.persons[0]?.headoutSellingPrice ?? 0),
+      guestCounts: JSON.stringify(guests),
+      price: String(totalPrice),
+      bookingPrice: String(totalBookingPrice),
       currency: currency ?? "USD",
       title: variantName ?? productName ?? "Experience",
     })
@@ -79,6 +102,8 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
   const handleAddToCart = async (slot: SlotItem) => {
     setAddingToCart(true)
     setSelectedSlotId(slot.id)
+    const totalPrice = calculateTotalPrice(slot)
+    const totalBookingPrice = calculateTotalBookingPrice(slot)
     try {
       await addItem({
         experienceId: productId,
@@ -89,10 +114,10 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
         date: selectedDate,
         startDateTime: slot.startDateTime,
         endDateTime: slot.endDateTime,
-        adults,
-        children,
+        guestCounts: guests,
         title: variantName ?? productName ?? "Experience",
-        priceAmount: slot.pricing.persons[0]?.headoutSellingPrice ?? 0,
+        priceAmount: totalPrice,
+        bookingPriceAmount: totalBookingPrice,
         currency: currency ?? "USD",
         imageUrl: "",
         addedAt: new Date().toISOString(),
@@ -106,7 +131,8 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
     }
   }
 
-  const peopleSummary = `${adults} adult${adults !== 1 ? "s" : ""}${children > 0 ? `, ${children} child${children !== 1 ? "ren" : ""}` : ""}`
+  const totalGuests = Object.values(guests).reduce((a, b) => a + b, 0)
+  const peopleSummary = Object.entries(guests).map(([type, count]) => count > 0 ? `${count} ${type.toLowerCase()}${count !== 1 ? "s" : ""}` : "").filter(Boolean).join(", ")
 
   return (
     <div className="mt-3 space-y-2">
@@ -117,42 +143,27 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
         <p className="text-xs text-muted-foreground">{peopleSummary}</p>
       </div>
 
-      {/* Guest selector */}
-      <div className="flex items-center gap-4 rounded-lg border bg-muted/10 p-2.5">
+      <div className="flex flex-col gap-2 rounded-lg border bg-muted/10 p-2.5">
         <span className="text-xs font-medium text-muted-foreground">Guests</span>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setAdults(Math.max(1, adults - 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="min-w-[3ch] text-center text-sm font-medium">{adults}</span>
-            <button
-              onClick={() => setAdults(Math.min(20, adults + 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-            <span className="text-xs text-muted-foreground">Adults</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setChildren(Math.max(0, children - 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="min-w-[3ch] text-center text-sm font-medium">{children}</span>
-            <button
-              onClick={() => setChildren(Math.min(10, children + 1))}
-              className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-            <span className="text-xs text-muted-foreground">Children</span>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {slots[0].pricing.persons.map((p) => (
+            <div key={p.type} className="flex items-center gap-1.5">
+              <button
+                onClick={() => setGuests(prev => ({ ...prev, [p.type]: Math.max(0, (prev[p.type] || 0) - 1) }))}
+                className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <span className="min-w-[3ch] text-center text-sm font-medium">{guests[p.type] || 0}</span>
+              <button
+                onClick={() => setGuests(prev => ({ ...prev, [p.type]: Math.min(20, (prev[p.type] || 0) + 1) }))}
+                className="flex h-6 w-6 items-center justify-center rounded border text-muted-foreground hover:bg-muted"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+              <span className="text-xs text-muted-foreground capitalize">{p.type.toLowerCase()}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -166,7 +177,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
             ? "bg-amber-100 text-amber-700 border-amber-200"
             : "bg-green-100 text-green-700 border-green-200"
 
-        const totalPrice = (slot.pricing.persons[0]?.headoutSellingPrice ?? 0) * (adults + children)
+        const totalPrice = calculateTotalPrice(slot)
 
         return (
           <Card key={slot.id} className={isClosed ? "opacity-50" : ""}>
@@ -180,12 +191,6 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
                   <Badge className={`border text-[10px] font-medium ${availBadge}`}>
                     {slot.availability === "UNLIMITED" ? "Unlimited" : slot.availability === "LIMITED" ? "Limited" : "Closed"}
                   </Badge>
-                  {slot.remaining < 20 && !isClosed && (
-                    <Badge className="border-amber-200 bg-amber-50 text-[10px] text-amber-700">
-                      <Users className="mr-0.5 h-2.5 w-2.5" />
-                      {slot.remaining} left
-                    </Badge>
-                  )}
                 </div>
               </div>
 
@@ -237,7 +242,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
                   <div>
                     <p className="text-sm font-bold">{formatPrice(totalPrice)}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {adults + children} guest{adults + children !== 1 ? "s" : ""}
+                      {totalGuests} guest{totalGuests !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <div className="flex gap-2">

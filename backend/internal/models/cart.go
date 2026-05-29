@@ -25,6 +25,7 @@ type CartItem struct {
 	EndDateTime   string    `json:"end_date_time"`
 	Adults        int       `json:"adults"`
 	Children      int       `json:"children"`
+	GuestCounts   string    `gorm:"type:jsonb" json:"guest_counts"`
 	FirstName     string    `json:"first_name"`
 	LastName      string    `json:"last_name"`
 	Email         string    `json:"email"`

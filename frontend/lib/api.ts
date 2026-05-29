@@ -416,6 +416,7 @@ export interface CartItemPayload {
   endDateTime?: string;
   adults: number;
   children: number;
+  guestCounts?: Record<string, number>;
   priceAmount?: number;
   currency?: string;
   title?: string;
@@ -438,6 +439,7 @@ interface CartItemResponse {
   endDateTime: string;
   adults: number;
   children: number;
+  guestCounts?: Record<string, number>;
   firstName: string;
   lastName: string;
   email: string;

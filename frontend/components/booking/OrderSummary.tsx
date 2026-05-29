@@ -6,7 +6,7 @@ import { useCheckout } from "@/context/CheckoutContext";
 
 export function OrderSummary() {
   const { info } = useCheckout();
-  const total = info.price * info.guests;
+  const total = info.price;
 
   return (
     <Card>
@@ -26,7 +26,14 @@ export function OrderSummary() {
             <> · {info.startDateTime.split("T")[1]?.slice(0, 5)}</>
           )}
         </p>
-        <p className="text-muted-foreground">Guests: {info.guests}</p>
+        <div className="text-muted-foreground">
+          Guests: {info.guests}
+          {info.guestCounts && Object.keys(info.guestCounts).length > 0 && (
+            <span className="ml-1 text-xs">
+              ({Object.entries(info.guestCounts).map(([type, count]) => `${count} ${type.toLowerCase()}${count !== 1 ? 's' : ''}`).join(', ')})
+            </span>
+          )}
+        </div>
         <div className="flex items-center justify-between border-t pt-2">
           <span className="font-medium">Total</span>
           <PriceDisplay amount={total} currency={info.currency} className="font-semibold" />

@@ -27,6 +27,7 @@ type Booking struct {
 	CustomerCount int    `gorm:"not null;default:1" json:"customer_count"`
 	Adults        int    `gorm:"not null;default:1" json:"adults"`
 	Children      int    `gorm:"not null;default:0" json:"children"`
+	GuestCounts   string `gorm:"type:jsonb" json:"guest_counts"`
 	FirstName     string `gorm:"not null" json:"first_name"`
 	LastName      string `gorm:"not null" json:"last_name"`
 	Email         string `gorm:"not null" json:"email"`
