@@ -49,12 +49,12 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
     <div className="rounded-lg border">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold hover:bg-muted/50"
+        className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm font-semibold hover:bg-muted/50"
       >
         {title}
-        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
-      {open && <div className="px-4 pb-3 pt-1">{children}</div>}
+      {open && <div className="border-t px-5 pb-4 pt-3">{children}</div>}
     </div>
   );
 }
@@ -151,19 +151,19 @@ function OperatingScheduleTable({ schedules }: { schedules: Array<{ dayOfWeek: s
     <table className="w-full text-xs">
       <thead>
         <tr className="border-b text-muted-foreground">
-          <th className="py-1 pr-2 text-left font-medium">Day</th>
-          <th className="py-1 px-2 text-left font-medium">Open</th>
-          <th className="py-1 px-2 text-left font-medium">Close</th>
-          <th className="py-1 pl-2 text-left font-medium">Last Entry</th>
+          <th className="py-1.5 pr-2 text-left font-medium">Day</th>
+          <th className="py-1.5 px-2 text-left font-medium">Open</th>
+          <th className="py-1.5 px-2 text-left font-medium">Close</th>
+          <th className="py-1.5 pl-2 text-left font-medium">Last Entry</th>
         </tr>
       </thead>
       <tbody>
         {sorted.map((s, i) => (
           <tr key={i} className={cn("border-b last:border-0", s.closed && "text-muted-foreground")}>
-            <td className="py-1 pr-2 font-medium">{s.dayOfWeek.charAt(0) + s.dayOfWeek.slice(1).toLowerCase()}</td>
-            <td className="py-1 px-2">{s.closed ? "—" : s.openingTime ?? "—"}</td>
-            <td className="py-1 px-2">{s.closed ? "—" : s.closingTime ?? "—"}</td>
-            <td className="py-1 pl-2">{s.closed ? "Closed" : s.lastEntryTime ?? "—"}</td>
+            <td className="py-1.5 pr-2 font-medium">{s.dayOfWeek.charAt(0) + s.dayOfWeek.slice(1).toLowerCase()}</td>
+            <td className="py-1.5 px-2">{s.closed ? "—" : s.openingTime ?? "—"}</td>
+            <td className="py-1.5 px-2">{s.closed ? "—" : s.closingTime ?? "—"}</td>
+            <td className="py-1.5 pl-2">{s.closed ? "Closed" : s.lastEntryTime ?? "—"}</td>
           </tr>
         ))}
       </tbody>
@@ -193,8 +193,9 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const cutoffTime = (product as { cutoffTimeInMinutes?: number | null }).cutoffTimeInMinutes;
 
   return (
-    <div className="mx-auto max-w-5xl">
-      {/* Hero Section */}
+    <div className="mx-auto max-w-5xl space-y-10">
+
+      {/* ── 1. Hero Section ── */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Image Gallery */}
         <div>
@@ -210,7 +211,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 <Ticket className="h-16 w-16" />
               </div>
             )}
-            <Badge className={`absolute right-2 top-2 border text-xs font-medium shadow-sm ${typeColor}`}>
+            <Badge className={`absolute right-3 top-3 border text-xs font-medium shadow-sm ${typeColor}`}>
               {product.productType === "AIRPORT_TRANSFER"
                 ? "Airport Transfer"
                 : product.productType.charAt(0) + product.productType.slice(1).toLowerCase()}
@@ -239,10 +240,10 @@ export function ProductDetail({ product }: ProductDetailProps) {
           )}
         </div>
 
-        {/* Product Info Header */}
-        <div className="space-y-4">
+        {/* Title & Meta */}
+        <div className="flex flex-col justify-center space-y-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{product.name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{product.name}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5" />
@@ -258,7 +259,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </div>
           </div>
 
-          {/* Policy + Feature Badges */}
+          {/* Quick info badges */}
           <div className="flex flex-wrap gap-1.5">
             {product.cancellationPolicy?.cancellable && (
               <Badge className="border-emerald-200 bg-emerald-50 text-xs text-emerald-700">
@@ -286,25 +287,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
             )}
           </div>
 
-          {/* Pricing */}
-          {hasPricing && (
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="text-xs text-muted-foreground">Starting from</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">{symbol}{finalPrice.toFixed(2)}</span>
-                {discount > 0 && originalPrice && (
-                  <>
-                    <span className="text-lg text-muted-foreground line-through">{symbol}{originalPrice.toFixed(2)}</span>
-                    <Badge className="bg-rose-500 text-xs font-bold text-white">{discount}% OFF</Badge>
-                  </>
-                )}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                per person &middot; {product.pricing.profileType === "PER_GROUP" ? "per group" : "per person"} pricing
-              </p>
-            </div>
-          )}
-
           {/* Categories */}
           <div className="flex flex-wrap gap-2 text-xs">
             {product.primaryCategory && (
@@ -321,7 +303,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
             )}
           </div>
 
-          {/* Cutoff Time */}
           {cutoffTime != null && (
             <p className="text-xs text-muted-foreground">
               <Calendar className="mr-1 inline h-3 w-3" />
@@ -331,8 +312,27 @@ export function ProductDetail({ product }: ProductDetailProps) {
         </div>
       </div>
 
-      {/* Content Sections */}
-      <div className="mt-8 space-y-3">
+      {/* ── 2. Pricing Panel ── */}
+      {hasPricing && (
+        <div className="rounded-xl border bg-gradient-to-r from-brand-50 to-white p-6 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Starting from</p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <span className="text-4xl font-bold tracking-tight">{symbol}{finalPrice.toFixed(2)}</span>
+            {discount > 0 && originalPrice && (
+              <>
+                <span className="text-xl text-muted-foreground line-through">{symbol}{originalPrice.toFixed(2)}</span>
+                <Badge className="bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{discount}% OFF</Badge>
+              </>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            per person &middot; {product.pricing.profileType === "PER_GROUP" ? "per group" : "per person"} pricing
+          </p>
+        </div>
+      )}
+
+      {/* ── 3. Content Sections ── */}
+      <div className="space-y-3">
         {product.content?.highlights && (
           <Section title="Highlights">
             <div
@@ -375,52 +375,43 @@ export function ProductDetail({ product }: ProductDetailProps) {
         )}
       </div>
 
-      {/* Ticket Delivery Info */}
-      {product.content?.ticketDeliveryInfoHtml && (
-        <div className="mt-3 rounded-lg border bg-muted/20 p-4">
-          <p className="mb-1 text-xs font-semibold text-muted-foreground">Ticket Delivery</p>
-          <div
-            className="text-sm leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: product.content.ticketDeliveryInfoHtml }}
-          />
-        </div>
-      )}
-
-      {/* Address */}
-      {address && (
-        <div className="mt-3 rounded-lg border bg-muted/20 p-4">
-          <p className="mb-1 text-xs font-semibold text-muted-foreground">Location</p>
-          <p className="text-sm">
-            {[address.address, address.city, address.postalCode, address.country].filter(Boolean).join(", ")}
-          </p>
-        </div>
-      )}
-
-      {/* Start / End Locations */}
-      {(product.startLocation || product.endLocation) && (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {product.startLocation && (
+      {/* ── 4. Location ── */}
+      {(address || product.startLocation || product.endLocation) && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-bold">Location</h2>
+          {address && (
             <div className="rounded-lg border bg-muted/20 p-4">
-              <p className="mb-1 text-xs font-semibold text-muted-foreground">Meeting Point</p>
               <p className="text-sm">
-                {[product.startLocation.address, product.startLocation.city, product.startLocation.country].filter(Boolean).join(", ")}
+                {[address.address, address.city, address.postalCode, address.country].filter(Boolean).join(", ")}
               </p>
             </div>
           )}
-          {product.endLocation && product.endLocation.address && (
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <p className="mb-1 text-xs font-semibold text-muted-foreground">End Point</p>
-              <p className="text-sm">
-                {[product.endLocation.address, product.endLocation.city, product.endLocation.country].filter(Boolean).join(", ")}
-              </p>
+          {(product.startLocation || product.endLocation) && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {product.startLocation && (
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">Meeting Point</p>
+                  <p className="text-sm">
+                    {[product.startLocation.address, product.startLocation.city, product.startLocation.country].filter(Boolean).join(", ")}
+                  </p>
+                </div>
+              )}
+              {product.endLocation && product.endLocation.address && (
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">End Point</p>
+                  <p className="text-sm">
+                    {[product.endLocation.address, product.endLocation.city, product.endLocation.country].filter(Boolean).join(", ")}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Variants Section */}
+      {/* ── 5. Variants ── */}
       {product.variants && product.variants.length > 0 && (
-        <div className="mt-8">
+        <div>
           <h2 className="mb-4 text-lg font-bold">
             Available Options
             <span className="ml-2 text-sm font-normal text-muted-foreground">({product.variants.length})</span>
@@ -444,16 +435,14 @@ export function ProductDetail({ product }: ProductDetailProps) {
         </div>
       )}
 
-      {/* Availability Calendar (Normal products only) */}
+      {/* ── 6. Availability + Slots (Normal inventory only) ── */}
       {product.inventorySelectionType === "NORMAL" && selectedVariantId && product.id && (
-        <div className="mt-6">
-          <AvailabilityCalendar productId={product.id} variantId={selectedVariantId} />
-        </div>
+        <AvailabilityCalendar productId={product.id} variantId={selectedVariantId} />
       )}
 
-      {/* POI Section */}
+      {/* ── 7. POI Schedules ── */}
       {poi && poi.length > 0 && (
-        <div className="mt-8">
+        <div>
           <h2 className="mb-4 text-lg font-bold">
             Points of Interest
             <span className="ml-2 text-sm font-normal text-muted-foreground">({poi.length})</span>
@@ -484,9 +473,9 @@ export function ProductDetail({ product }: ProductDetailProps) {
         </div>
       )}
 
-      {/* Cancellation & Reschedule Policy */}
-      <Separator className="my-8" />
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* ── 8. Policies ── */}
+      <Separator />
+      <div className="grid gap-6 sm:grid-cols-2">
         <div>
           <h3 className="text-sm font-semibold">Cancellation Policy</h3>
           {product.cancellationPolicy?.cancellable ? (
@@ -508,6 +497,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
           )}
         </div>
       </div>
+
     </div>
   );
 }
