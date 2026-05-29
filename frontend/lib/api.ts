@@ -388,11 +388,12 @@ export async function getAvailability(experienceId: string, date: string): Promi
   }
 }
 
-export async function createBooking(payload: BookingRequest, sessionId?: string): Promise<ApiResult<BookingResponse>> {
+export async function createBooking(payload: BookingRequest, sessionId?: string, idempotencyKey?: string): Promise<ApiResult<BookingResponse>> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (sessionId) headers["X-Session-ID"] = sessionId;
-    const res = await fetch(`${API_BASE}/api/v1/bookings`, {
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    const res = await fetch("/api/bookings", {
       method: "POST",
       headers,
       body: JSON.stringify(payload),

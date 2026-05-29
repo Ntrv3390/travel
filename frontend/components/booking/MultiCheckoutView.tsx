@@ -70,8 +70,7 @@ export function MultiCheckoutView() {
         currencyCode: item.currency,
         priceAmount: item.priceAmount,
         specialRequests: values.specialRequests,
-        idempotencyKey,
-      }, sessionId);
+      }, sessionId, idempotencyKey);
 
       if (result.error) {
         bookingResults.push({ title: item.title, status: "FAILED", error: result.error });

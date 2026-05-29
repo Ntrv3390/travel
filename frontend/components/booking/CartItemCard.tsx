@@ -7,11 +7,22 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PriceDisplay } from "@/components/common/PriceDisplay"
 import { useCart } from "@/hooks/useCart"
+import { useToast } from "@/components/ui/toaster"
 import type { CartItem } from "@/types/booking"
 
 
 export function CartItemCard({ item }: { item: CartItem }) {
   const { removeItem } = useCart()
+  const { toast } = useToast()
+
+  const handleRemove = async () => {
+    try {
+      await removeItem(item.id)
+      toast({ title: "Removed from cart", description: `${item.title || "Item"} removed from your cart.`, variant: "success" })
+    } catch {
+      toast({ title: "Failed to remove", description: "Could not remove item from cart.", variant: "error" })
+    }
+  }
 
   return (
     <Card>
@@ -33,7 +44,7 @@ export function CartItemCard({ item }: { item: CartItem }) {
         </div>
         <div className="min-w-0 flex-1">
           <Link
-            href={item.experienceId ? `/products?cityCode=${item.experienceId}` : "#"}
+            href={item.experienceId ? `/experiences/${item.experienceId}` : "#"}
             className="font-semibold hover:text-brand-600 transition-colors line-clamp-1"
           >
             {item.title || "Experience"}
@@ -54,7 +65,7 @@ export function CartItemCard({ item }: { item: CartItem }) {
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-red-600"
-            onClick={() => removeItem(item.id)}
+            onClick={handleRemove}
           >
             <Trash2 className="h-4 w-4" />
           </Button>

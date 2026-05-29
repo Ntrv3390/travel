@@ -57,6 +57,8 @@ function buildRelatedCard(exp: Experience, idx: number): RelatedCard {
     rating: exp.rating ? exp.rating.toFixed(1) : "4.5",
     reviews: exp.reviewCount > 0 ? Intl.NumberFormat("en-US", { notation: "compact" }).format(exp.reviewCount) : "new",
     badge: idx % 4 === 1 ? "Selling out fast" : undefined,
+    slug: exp.slug,
+    headoutId: exp.headoutId,
   };
 }
 

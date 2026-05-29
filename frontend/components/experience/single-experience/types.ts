@@ -19,6 +19,8 @@ export type RelatedCard = {
   rating: string;
   reviews: string;
   badge?: string;
+  slug: string;
+  headoutId: string;
 };
 
 export type GalleryItem = {

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getCartSessionId, addCartItem } from "@/lib/api";
 import { useProduct } from "@/context/ProductContext";
+import { useToast } from "@/components/ui/toaster";
 
 type CalendarDay = {
   date: string;
@@ -110,6 +111,7 @@ function toMinutes(slot: string) {
 
 export function PackageOptionsSection() {
   const router = useRouter();
+  const { toast } = useToast();
   const { state } = useProduct();
   const content = state.singleExperienceContent!;
   const experience = content.experience;
@@ -589,8 +591,9 @@ export function PackageOptionsSection() {
                     imageUrl,
                   });
                   if (result.error) {
-                    alert("Failed to add to cart: " + result.error);
+                    toast({ title: "Failed to add to cart", description: result.error, variant: "error" });
                   } else {
+                    toast({ title: "Added to cart", description: `${title} added to your cart.`, variant: "success" });
                     router.push("/cart");
                   }
                 }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,12 +84,13 @@ function getCardImage(images: string[], seed: number, tick: number) {
 
 function RelatedCardView({ item, seed, tick, className, imageHeightClass }: { item: RelatedCard; seed: number; tick: number; className?: string; imageHeightClass: string }) {
   return (
-    <Card
+    <Link
+      href={`/products/${item.slug}-${item.headoutId}`}
+      key={item.id}
       className={cn(
-        "group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.07)] transition hover:-translate-y-1 hover:shadow-[0_14px_28px_rgba(15,23,42,0.12)]",
+        "group block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.07)] transition hover:-translate-y-1 hover:shadow-[0_14px_28px_rgba(15,23,42,0.12)]",
         className,
       )}
-      key={item.id}
     >
       <div className={cn("relative", imageHeightClass)}>
         <img
@@ -103,7 +105,7 @@ function RelatedCardView({ item, seed, tick, className, imageHeightClass }: { it
           </Badge>
         )}
       </div>
-      <CardContent className="space-y-1 p-3">
+      <div className="space-y-1 p-3">
         <div className="flex items-center gap-1 text-[13px]">
           <span className="inline-flex items-center gap-1 font-bold text-brand-700">
             <Star size={12} /> {item.rating} ({item.reviews})
@@ -124,11 +126,11 @@ function RelatedCardView({ item, seed, tick, className, imageHeightClass }: { it
             )}
           </div>
         </div>
-        <Button variant="link" className="mt-2 h-auto p-0 text-sm font-bold text-brand-600 hover:text-brand-700">
+        <span className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-brand-600 hover:text-brand-700">
           Explore <ArrowRight size={14} className="ml-1" />
-        </Button>
-      </CardContent>
-    </Card>
+        </span>
+      </div>
+    </Link>
   );
 }
 
@@ -293,7 +295,8 @@ export function ContentSections() {
 
             <div className="mt-4 flex min-w-0 w-full snap-x snap-mandatory gap-3 overflow-x-auto overflow-y-hidden pb-1 [&::-webkit-scrollbar]:hidden" ref={moreWaysRailRef}>
               {content.moreWays.map((item, index) => (
-                <Card
+                <Link
+      href={`/products/${item.slug}-${item.headoutId}`}
                   data-card-width
                   className="group flex min-h-0 w-[82vw] flex-none snap-start flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.07)] transition hover:-translate-y-1 hover:shadow-[0_14px_28px_rgba(15,23,42,0.12)] md:min-h-[372px] md:w-[248px] lg:min-h-[390px] lg:w-[272px]"
                   key={item.id}
@@ -311,7 +314,7 @@ export function ContentSections() {
                       </Badge>
                     )}
                   </div>
-                  <CardContent className="flex flex-1 flex-col gap-1 p-3">
+                  <div className="flex flex-1 flex-col gap-1 p-3">
                     <div className="min-h-5 text-[13px]">
                       <span className="inline-flex items-center gap-1 font-bold text-brand-700">
                         <Star size={12} /> {item.rating} ({item.reviews})
@@ -335,11 +338,11 @@ export function ContentSections() {
                         </Badge>
                       </div>
                     </div>
-                    <Button variant="link" className="mt-1 h-auto p-0 text-sm font-bold text-brand-600 hover:text-brand-700">
+                    <span className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-brand-600 hover:text-brand-700">
                       Explore <ArrowRight size={14} className="ml-1" />
-                    </Button>
-                  </CardContent>
-                </Card>
+                    </span>
+                  </div>
+                </Link>
               ))}
             </div>
           </CardContent>

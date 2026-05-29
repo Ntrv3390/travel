@@ -21,7 +21,7 @@ export function ExperienceCard({
   const imageUrl = experience.images[0]?.url ?? "/images/fallback-experience.svg";
 
   return (
-    <Link href={`/${experience.citySlug}/${experience.slug}`} className="group block">
+    <Link href={`/products/${experience.slug}-${experience.headoutId}`} className="group block">
       <Card
         className={cn(
           "overflow-hidden border-0 shadow-sm transition-all duration-300 ease-out",

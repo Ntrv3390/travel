@@ -8,13 +8,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { checkoutFormSchema, type CheckoutFormValues } from "@/lib/validations";
-import { createBooking } from "@/lib/api";
+import { createBooking, getCartSessionId } from "@/lib/api";
 import { useCheckout } from "@/context/CheckoutContext";
-import { getCartSessionId } from "@/lib/api";
+import { useToast } from "@/components/ui/toaster";
 
 export function CheckoutForm() {
   const router = useRouter();
   const { info } = useCheckout();
+  const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
 
   const form = useForm<CheckoutFormValues>({
@@ -52,15 +53,15 @@ export function CheckoutForm() {
       currencyCode: info.currency,
       priceAmount: info.price * info.guests,
       specialRequests: values.specialRequests,
-      idempotencyKey,
-    }, sessionId);
+    }, sessionId, idempotencyKey);
 
     if (result.error) {
-      alert("Booking failed: " + result.error);
+      toast({ title: "Booking failed", description: result.error, variant: "error" });
       setSubmitting(false);
       return;
     }
 
+    toast({ title: "Booking confirmed", description: "Your booking has been confirmed.", variant: "success" });
     const booking = result.data;
     const params = new URLSearchParams();
     params.set("title", info.title);

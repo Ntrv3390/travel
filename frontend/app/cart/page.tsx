@@ -8,11 +8,13 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { CartItemCard } from "@/components/booking/CartItemCard";
 import { useCart } from "@/hooks/useCart";
+import { useToast } from "@/components/ui/toaster";
 import type { CartItem } from "@/types/booking";
 
 export default function CartPage() {
   const router = useRouter();
   const { cart, isLoading, clearCart, itemCount } = useCart();
+  const { toast } = useToast();
 
   function handleCheckout(item: CartItem) {
     const params = new URLSearchParams({
@@ -41,7 +43,14 @@ export default function CartPage() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-display-sm font-bold">Your Cart</h1>
           {itemCount > 0 && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={clearCart}>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={async () => {
+              try {
+                await clearCart()
+                toast({ title: "Cart cleared", description: "All items removed from your cart.", variant: "success" })
+              } catch {
+                toast({ title: "Failed to clear", description: "Could not clear your cart.", variant: "error" })
+              }
+            }}>
               Clear cart
             </Button>
           )}

@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useCurrency } from "@/hooks/useCurrency"
 import { useCartContext } from "@/context/CartContext"
 import { useProductDetail } from "@/context/ProductDetailContext"
+import { useToast } from "@/components/ui/toaster"
 import type { SlotItem } from "@/types/product"
 
 interface SlotPanelProps {
@@ -23,6 +24,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
   const { formatPrice, currency } = useCurrency()
   const { addItem } = useCartContext()
   const { productId, productName, variantId, variantName } = useProductDetail()
+  const { toast } = useToast()
   const router = useRouter()
   const [adults, setAdults] = useState(1)
   const [children, setChildren] = useState(0)
@@ -95,6 +97,9 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
         imageUrl: "",
         addedAt: new Date().toISOString(),
       })
+      toast({ title: "Added to cart", description: `${variantName ?? productName ?? "Experience"} added to your cart.`, variant: "success" })
+    } catch {
+      toast({ title: "Failed to add", description: "Could not add item to cart. Please try again.", variant: "error" })
     } finally {
       setAddingToCart(false)
       setSelectedSlotId(null)

@@ -28,14 +28,41 @@ function getSessionId(): string {
   return id
 }
 
-const CART_SWR_KEY = "cart-data"
+function toCart(raw: any): Cart {
+  const items: CartItem[] = (raw?.items ?? []).map((i: any) => ({
+    id: i.id,
+    experienceId: i.experienceId,
+    productId: i.productId ?? "",
+    variantId: i.variantId,
+    inventoryId: i.inventoryId ?? "",
+    inventoryType: i.inventoryType ?? "",
+    date: i.date,
+    startDateTime: i.startDateTime ?? "",
+    endDateTime: i.endDateTime ?? "",
+    adults: i.adults,
+    children: i.children,
+    title: i.title ?? "",
+    priceAmount: i.priceAmount ?? 0,
+    currency: i.currency ?? "USD",
+    imageUrl: i.imageUrl ?? "",
+    addedAt: i.addedAt ?? "",
+  }))
+  return {
+    sessionId: raw.sessionId ?? "",
+    items,
+    totalItems: items.length,
+    totalPrice: items.reduce((sum, i) => sum + (i.priceAmount || 0), 0),
+    currency: items[0]?.currency ?? "USD",
+  }
+}
 
 async function fetcher(url: string, sessionId: string) {
   const res = await fetch(url, {
     headers: { "X-Session-ID": sessionId },
   })
   if (!res.ok) throw new Error("Failed to fetch cart")
-  return res.json()
+  const json = await res.json()
+  return toCart(json.data ?? json)
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
@@ -53,29 +80,43 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback(async (item: Omit<CartItem, "id">) => {
     if (!sessionId) return
-    await fetch("/api/cart", {
+    const res = await fetch("/api/cart", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Session-ID": sessionId },
       body: JSON.stringify(item),
     })
-    mutate(["/api/cart", sessionId])
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody?.error ?? "Failed to add item to cart")
+    }
+    const json = await res.json()
+    mutate(["/api/cart", sessionId], toCart(json.data ?? json))
   }, [sessionId])
 
   const removeItem = useCallback(async (itemId: string) => {
     if (!sessionId) return
-    await fetch(`/api/cart/${itemId}`, {
+    const res = await fetch(`/api/cart/${itemId}`, {
       method: "DELETE",
       headers: { "X-Session-ID": sessionId },
     })
-    mutate(["/api/cart", sessionId])
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody?.error ?? "Failed to remove item from cart")
+    }
+    const json = await res.json()
+    mutate(["/api/cart", sessionId], toCart(json.data ?? json))
   }, [sessionId])
 
   const clearCart = useCallback(async () => {
     if (!sessionId) return
-    await fetch("/api/cart", {
+    const res = await fetch("/api/cart", {
       method: "DELETE",
       headers: { "X-Session-ID": sessionId },
     })
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody?.error ?? "Failed to clear cart")
+    }
     mutate(["/api/cart", sessionId], { sessionId, items: [], totalItems: 0, totalPrice: 0, currency: "USD" })
   }, [sessionId])
 
