@@ -47,8 +47,8 @@ func Load() *Config {
 		HeadoutAPIKey:         getEnv("HEADOUT_API_KEY", ""),
 		HeadoutURL:            getEnv("HEADOUT_URL", ""),
 		HeadoutEnvironment:    getEnv("HEADOUT_ENV", ""),
-		HeadoutSandboxBaseURL: getEnv("HEADOUT_SANDBOX_BASE_URL", "https://sandbox.api.test-headout.com/api/public"),
-		HeadoutStageBaseURL:   getEnv("HEADOUT_STAGE_BASE_URL", "https://sandbox.api.test-headout.com/api/public"),
+		HeadoutSandboxBaseURL: getEnv("HEADOUT_SANDBOX_BASE_URL", "https://sandbox.api.dev-headout.com/api/public"),
+		HeadoutStageBaseURL:   getEnv("HEADOUT_STAGE_BASE_URL", "https://sandbox.api.dev-headout.com/api/public"),
 		HeadoutProdBaseURL:    getEnv("HEADOUT_PROD_BASE_URL", "https://www.headout.com/api/public"),
 		Environment:           getEnv("ENV", "development"),
 	}

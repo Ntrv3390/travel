@@ -20,7 +20,7 @@ type HeadoutHandler struct {
 
 func NewHeadoutHandler(cfg *config.Config) *HeadoutHandler {
 	publicCfg := *cfg
-	publicCfg.HeadoutURL = cfg.HeadoutProdBaseURL
+	publicCfg.HeadoutURL = cfg.HeadoutURL
 
 	return &HeadoutHandler{
 		service:       services.NewHeadoutProxyService(cfg),
