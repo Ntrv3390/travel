@@ -14,10 +14,10 @@ Not required. Cities are fetched directly from the Headout API — no local data
 
 ### External Headout APIs / Services
 
-| API | Base URL | Endpoint | Auth |
-|-----|----------|----------|------|
-| Headout List Cities (v1) | `https://www.headout.com` | `/api/public/v1/city` | None (public) |
-| Headout List Cities (v2) | `https://www.headout.com` | `/api/public/v2/cities/` | None (public) |
+| API | Sandbox / Stage Base URL | Production Base URL | Endpoint | Auth |
+|-----|--------------------------|---------------------|----------|------|
+| Headout List Cities (v1) | `https://sandbox.api.dev-headout.com` | `https://www.headout.com` | `/api/public/v1/city` | None (public) |
+| Headout List Cities (v2) | `https://sandbox.api.dev-headout.com` | `https://www.headout.com` | `/api/public/v2/cities/` | None (public) |
 
 The backend uses `HeadoutProxyService` (`backend/internal/services/headout_proxy.go`) with the **public** service instance (no API key required) pointed at Headout's production base URL.
 
