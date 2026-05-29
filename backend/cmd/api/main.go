@@ -105,6 +105,7 @@ func main() {
 		headoutGroup.PUT("/v1/booking/:id", headoutHandler.UpdateBooking)
 		headoutGroup.GET("/v1/city", headoutHandler.ListCities)
 		headoutGroup.GET("/v1/category/list-by/city", headoutHandler.ListCategoriesByCityV1)
+		headoutGroup.GET("/v2/cities", headoutHandler.ListCitiesV2)
 		headoutGroup.GET("/v2/products", headoutHandler.ListProductsV2)
 		headoutGroup.GET("/v2/categories", headoutHandler.ListCategoriesV2)
 		headoutGroup.GET("/v2/collections", headoutHandler.ListCollectionsV2)

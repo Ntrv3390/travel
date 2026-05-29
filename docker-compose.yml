@@ -58,8 +58,8 @@ services:
       HEADOUT_API_KEY: ${HEADOUT_API_KEY:-}
       HEADOUT_ENV: ${HEADOUT_ENV:-sandbox}
       HEADOUT_URL: ${HEADOUT_URL:-}
-      HEADOUT_SANDBOX_BASE_URL: ${HEADOUT_SANDBOX_BASE_URL:-https://sandbox.api.test-headout.com/api/public}
-      HEADOUT_STAGE_BASE_URL: ${HEADOUT_STAGE_BASE_URL:-https://sandbox.api.test-headout.com/api/public}
+      HEADOUT_SANDBOX_BASE_URL: ${HEADOUT_SANDBOX_BASE_URL:-https://sandbox.api.dev-headout.com/api/public}
+      HEADOUT_STAGE_BASE_URL: ${HEADOUT_STAGE_BASE_URL:-https://sandbox.api.dev-headout.com/api/public}
       HEADOUT_PROD_BASE_URL: ${HEADOUT_PROD_BASE_URL:-https://www.headout.com/api/public}
       ENV: ${ENV:-development}
       # GTTD Configuration

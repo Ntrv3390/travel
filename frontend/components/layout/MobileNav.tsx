@@ -20,6 +20,9 @@ export function MobileNav() {
             <Link href="/" className="rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
               Home
             </Link>
+            <Link href="/cities" className="rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
+              Cities
+            </Link>
             <Link href="/search" className="rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
               Search
             </Link>

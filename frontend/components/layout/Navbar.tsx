@@ -67,6 +67,9 @@ export function Navbar() {
             <SearchBar compact />
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+              <Link href="/cities">Cities</Link>
+            </Button>
             <CurrencyPicker />
             <Button variant="ghost" size="sm" asChild className="relative h-9 w-9 p-0">
               <Link href="/cart" aria-label="Cart">

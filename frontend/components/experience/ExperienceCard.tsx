@@ -2,9 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { StarRating } from "@/components/common/StarRating";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
+import { CityBadge } from "@/components/common/CityBadge";
 import { formatDuration } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import type { Experience } from "@/types/experience";
@@ -39,9 +39,7 @@ export function ExperienceCard({
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
           <div className="absolute left-3 top-3">
-            <Badge className="border-transparent bg-white/90 text-foreground hover:bg-white/90">
-              {experience.categories[0] ?? "Activity"}
-            </Badge>
+            <CityBadge city={experience.city} />
           </div>
         </div>
 

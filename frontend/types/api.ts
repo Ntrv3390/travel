@@ -21,6 +21,31 @@ export interface CurrencyOption {
   name: string
 }
 
+export interface CityImage {
+  url: string;
+}
+
+export interface CityCountry {
+  code: string;
+  name: string;
+}
+
+export interface City {
+  code: string;
+  name: string;
+  image: CityImage;
+  country: CityCountry;
+  timezone: string;
+}
+
+export interface CitiesResponse {
+  cities: City[];
+  nextUrl: string | null;
+  prevUrl: string | null;
+  total: number;
+  nextOffset: number | null;
+}
+
 export interface SearchParams {
   category?: string;
   sort?: "recommended" | "price_asc" | "price_desc" | "rating";

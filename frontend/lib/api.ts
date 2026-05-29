@@ -193,16 +193,19 @@ export async function getSupportedCurrencies() {
   }
 }
 
-export async function getCities() {
+export async function getCities(offset = 0, limit = 20) {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/headout/v1/city`, {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/cities`);
+    url.searchParams.set("offset", String(offset));
+    url.searchParams.set("limit", String(limit));
+    const res = await fetch(url.toString(), {
       next: { revalidate: 86400 },
     });
-    if (!res.ok) return { data: [], error: null };
+    if (!res.ok) return { data: null, error: null };
     const json = await res.json();
     return { data: json.data ?? json, error: null };
   } catch (error) {
-    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+    return { data: null, error: error instanceof Error ? error.message : "Network error" };
   }
 }
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/services"
@@ -73,6 +74,40 @@ func (h *HeadoutHandler) ListCategoriesByCityV1(c *gin.Context) {
 }
 
 // v2 endpoints
+func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
+	q := c.Request.URL.Query()
+
+	offset := 0
+	if v := q.Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
+			return
+		}
+		offset = parsed
+	}
+	q.Set("offset", strconv.Itoa(offset))
+
+	limit := 20
+	if v := q.Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
+			return
+		}
+		if parsed > 20 {
+			limit = 20
+		} else {
+			limit = parsed
+		}
+	}
+	q.Set("limit", strconv.Itoa(limit))
+
+	c.Request.URL.RawQuery = q.Encode()
+
+	h.proxyGetWithService(c, h.publicService, "/v2/cities/", false)
+}
+
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 	h.proxyGet(c, "/v2/products", true)
 }
