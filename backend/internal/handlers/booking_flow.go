@@ -433,10 +433,15 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		totalPax = 1
 	}
 
+	guestIndex := 1
 	customers := make([]map[string]interface{}, 0, totalPax)
 	for i := 0; i < max(1, req.Adults); i++ {
+		name := req.FirstName + " " + req.LastName
+		if guestIndex > 1 {
+			name = fmt.Sprintf("%s (Guest %d)", name, guestIndex)
+		}
 		inputFields := []map[string]interface{}{
-			{"id": "NAME", "value": req.FirstName + " " + req.LastName},
+			{"id": "NAME", "value": name},
 			{"id": "EMAIL", "value": req.Email},
 		}
 		if req.Phone != "" {
@@ -448,15 +453,20 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 			"inputFields": inputFields,
 		}
 		customers = append(customers, customer)
+		guestIndex++
 	}
 	for i := 0; i < req.Children; i++ {
-		customers = append(customers, map[string]interface{}{
-			"personType": "CHILD",
-			"isPrimary":  false,
-			"inputFields": []map[string]interface{}{
-				{"id": "NAME", "value": req.FirstName + " " + req.LastName},
-			},
-		})
+		name := fmt.Sprintf("%s %s (Child %d)", req.FirstName, req.LastName, i+1)
+		inputFields := []map[string]interface{}{
+			{"id": "NAME", "value": name},
+		}
+		customer := map[string]interface{}{
+			"personType":  "CHILD",
+			"isPrimary":   false,
+			"inputFields": inputFields,
+		}
+		customers = append(customers, customer)
+		guestIndex++
 	}
 
 	vif := req.VariantInputFields
@@ -477,11 +487,14 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 			"count":     totalPax,
 			"customers": customers,
 		},
-		"variantInputFields": vif,
 		"price": map[string]interface{}{
 			"amount":       totalAmount,
 			"currencyCode": req.CurrencyCode,
 		},
+	}
+
+	if len(vif) > 0 {
+		headoutPayload["variantInputFields"] = vif
 	}
 
 	if len(req.InventorySeatIDs) > 0 {
@@ -494,10 +507,25 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		return
 	}
 
+	logger.Infof("Headout Booking Payload: %s", string(bodyBytes))
+
+
 	upstream, err := retryHeadoutCall(func() (*services.UpstreamResponse, error) {
 		return h.authService.Post(c.Request.Context(), "/v2/bookings/", url.Values{}, bodyBytes, true)
 	})
 	if err != nil {
+		// If we have a last upstream response (Headout returned 5xx), pass it
+		// through so the client sees the real error body rather than the generic
+		// "temporarily unavailable" message.
+		if upstream != nil {
+			preview := string(upstream.Body)
+			if len(preview) > 200 {
+				preview = preview[:200]
+			}
+			logger.Errorf("Headout booking failed after retries (status %d): %s", upstream.StatusCode, preview)
+			c.Data(upstream.StatusCode, "application/json", upstream.Body)
+			return
+		}
 		h.handleProxyError(c, err)
 		return
 	}
@@ -627,6 +655,7 @@ func (h *BookingFlowHandler) handleProxyError(c *gin.Context, err error) {
 
 func retryHeadoutCall(fn func() (*services.UpstreamResponse, error)) (*services.UpstreamResponse, error) {
 	var lastErr error
+	var lastResp *services.UpstreamResponse
 	maxAttempts := 3
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
@@ -635,6 +664,8 @@ func retryHeadoutCall(fn func() (*services.UpstreamResponse, error)) (*services.
 
 		resp, err := fn()
 		if err == nil && resp.StatusCode < 500 {
+			// Non-5xx response (including 4xx errors): return immediately so the
+			// caller can pass the real Headout error body through to the client.
 			return resp, nil
 		}
 
@@ -642,11 +673,15 @@ func retryHeadoutCall(fn func() (*services.UpstreamResponse, error)) (*services.
 			lastErr = err
 			logger.Warnf("Headout call attempt %d/%d failed with error: %v", attempt+1, maxAttempts, err)
 		} else {
+			// 5xx — keep the response body so we can surface it after retries.
+			lastResp = resp
 			lastErr = fmt.Errorf("headout returned status %d", resp.StatusCode)
 			logger.Warnf("Headout call attempt %d/%d returned status %d", attempt+1, maxAttempts, resp.StatusCode)
 		}
 	}
-	return nil, fmt.Errorf("headout call failed after %d attempts: %w", maxAttempts, lastErr)
+	// Return lastResp alongside the error so callers can pass the real body
+	// through instead of emitting a generic error message.
+	return lastResp, fmt.Errorf("headout call failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (h *BookingFlowHandler) writeUpstreamResponse(c *gin.Context, upstream *services.UpstreamResponse) {
