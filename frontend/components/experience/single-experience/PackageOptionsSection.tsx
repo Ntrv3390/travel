@@ -135,6 +135,8 @@ export function PackageOptionsSection() {
   const [isCalendarPopupOpen, setIsCalendarPopupOpen] = useState(false);
   const [visibleMonthKey, setVisibleMonthKey] = useState(toMonthKey(new Date()));
   const [clientNow, setClientNow] = useState<Date | null>(null);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isBooking, setIsBooking] = useState(false);
   const calendarPopupRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedCalendarDays = useMemo(() => {
@@ -576,8 +578,9 @@ export function PackageOptionsSection() {
                   : "Complete all required fields to continue."}
               </p>
               <div className="grid grid-cols-2 gap-2 md:flex">
-                <Button variant="outline" className="rounded-xl border-brand-300 text-brand-700 hover:bg-brand-50" disabled={!canCheckout} onClick={async () => {
-                  if (!canCheckout) return;
+                <Button variant="outline" className="rounded-xl border-brand-300 text-brand-700 hover:bg-brand-50" disabled={!canCheckout || isAddingToCart} onClick={async () => {
+                  if (!canCheckout || isAddingToCart) return;
+                  setIsAddingToCart(true);
                   const sessionId = getCartSessionId();
                   const result = await addCartItem(sessionId, {
                     experienceId,
@@ -590,6 +593,7 @@ export function PackageOptionsSection() {
                     title,
                     imageUrl,
                   });
+                  setIsAddingToCart(false);
                   if (result.error) {
                     toast({ title: "Failed to add to cart", description: result.error, variant: "error" });
                   } else {
@@ -597,24 +601,25 @@ export function PackageOptionsSection() {
                     router.push("/cart");
                   }
                 }}>
-                  Add to cart
+                  {isAddingToCart ? "Adding..." : "Add to cart"}
                 </Button>
-                <Button className="rounded-xl bg-gradient-to-r from-blue-700 to-brand-600 text-white hover:from-blue-800 hover:to-brand-700" disabled={!canCheckout} onClick={() => {
-                  if (!canCheckout) return;
+                <Button className="rounded-xl bg-gradient-to-r from-blue-700 to-brand-600 text-white hover:from-blue-800 hover:to-brand-700" disabled={!canCheckout || isBooking} onClick={() => {
+                  if (!canCheckout || isBooking) return;
+                  setIsBooking(true);
+                  const guestCounts = JSON.stringify({ ADULT: quantity });
                   const params = new URLSearchParams({
                     experienceId,
                     variantId,
                     date: selectedDate,
-                    adults: String(quantity),
-                    children: "0",
                     title,
                     price: String(price),
                     currency,
                     imageUrl,
+                    guestCounts,
                   });
                   router.push(`/checkout?${params.toString()}`);
                 }}>
-                  Book now
+                  {isBooking ? "Redirecting..." : "Book now"}
                 </Button>
               </div>
             </div>

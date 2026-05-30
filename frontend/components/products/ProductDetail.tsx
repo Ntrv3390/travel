@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ProductDetailProvider } from "@/context/ProductDetailContext";
+import { useCartContext } from "@/context/CartContext";
 import { AvailabilityCalendar } from "@/components/products/AvailabilityCalendar";
 import {
   Star,
@@ -13,6 +14,7 @@ import {
   Zap,
   ClipboardCheck,
   Tag,
+  ShoppingCart,
   ChevronDown,
   ChevronUp,
   Ticket,
@@ -60,7 +62,7 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
   );
 }
 
-function VariantCard({ variant }: { variant: ProductVariant }) {
+function VariantCard({ variant, inCart }: { variant: ProductVariant; inCart?: boolean }) {
   const pricing = (variant as { pricing?: { headoutSellingPrice?: number; netPrice?: number; currency?: string } }).pricing;
   const vp = (variant as { startingHeadoutSellingPrice?: { amount?: number; currencyCode?: string } }).startingHeadoutSellingPrice;
   const displayPrice = pricing?.headoutSellingPrice ?? vp?.amount;
@@ -69,10 +71,16 @@ function VariantCard({ variant }: { variant: ProductVariant }) {
   return (
     <Card className="overflow-hidden transition-all hover:shadow-md">
       <CardContent className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h4 className="truncate text-sm font-semibold">{variant.name ?? "Default"}</h4>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="truncate text-sm font-semibold">{variant.name ?? "Default"}</h4>
+                  {inCart && (
+                    <Badge className="border-brand-200 bg-brand-50 text-[10px] text-brand-700 shrink-0">
+                      <ShoppingCart className="mr-0.5 h-2.5 w-2.5" />
+                      In Cart
+                    </Badge>
+                  )}
               <Badge className="shrink-0 border-slate-200 bg-slate-50 text-[10px] text-slate-600">
                 {variant.inventoryType
                   ?.replace(/_/g, " ")
@@ -177,9 +185,17 @@ interface ProductDetailProps {
 }
 
 export function ProductDetail({ product }: ProductDetailProps) {
+  const { cart } = useCartContext();
   const [selectedImage, setSelectedImage] = useState(0);
+
+  const cartItem = useMemo(() => {
+    if (!cart?.items) return null;
+    const pid = String(product.id);
+    return cart.items.find((i) => i.experienceId === pid || i.productId === pid) ?? null;
+  }, [cart, product.id]);
+
   const [selectedVariantId, setSelectedVariantId] = useState<string | number | null>(
-    product.variants?.[0]?.id ?? null
+    cartItem?.variantId ?? product.variants?.[0]?.id ?? null
   );
 
   const images = product.media.filter((m) => m.type === "IMAGE");
@@ -429,7 +445,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                   selectedVariantId === variant.id ? "ring-2 ring-brand-500" : "hover:ring-1 hover:ring-brand-300"
                 }`}
               >
-                <VariantCard variant={variant} />
+                <VariantCard variant={variant} inCart={!!cartItem && String(cartItem.variantId) === String(variant.id)} />
               </div>
             ))}
           </div>
@@ -443,6 +459,13 @@ export function ProductDetail({ product }: ProductDetailProps) {
           productName={product.name}
           variantId={selectedVariantId!}
           variantName={product.variants?.find(v => v.id === selectedVariantId)?.name ?? ""}
+          imageUrl={
+            product.media?.find((m) => m.type === "IMAGE")?.url
+              ?.replace(/^\/\//, "https://") ?? ""
+          }
+          cartItemId={cartItem?.id ?? null}
+          initialDate={cartItem?.date ?? null}
+          initialGuests={cartItem?.guestCounts ?? null}
         >
           <AvailabilityCalendar />
         </ProductDetailProvider>

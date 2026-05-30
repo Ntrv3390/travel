@@ -26,8 +26,6 @@ type ExperienceOption struct {
 	CreatedAt            time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt            time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 
-	// Relations
-	Experience *Experience `gorm:"foreignKey:ExperienceID" json:"-"`
 }
 
 // TableName specifies the table name
@@ -40,7 +38,7 @@ type POIMapping struct {
 	ID                  string     `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
 	HeadoutLocationName *string    `gorm:"type:varchar(500)" json:"headout_location_name"`
 	HeadoutCity         *string    `gorm:"type:varchar(255);index" json:"headout_city"`
-	GooglePlaceID       string     `gorm:"type:varchar(500);unique;index" json:"google_place_id"`
+	GooglePlaceID       string     `gorm:"type:varchar(500);unique" json:"google_place_id"`
 	GooglePlaceName     *string    `gorm:"type:varchar(500)" json:"google_place_name"`
 	Latitude            *float64   `gorm:"type:numeric(10,8)" json:"latitude"`
 	Longitude           *float64   `gorm:"type:numeric(11,8)" json:"longitude"`
@@ -56,7 +54,7 @@ func (POIMapping) TableName() string {
 // UpdateExperience to include new GTTD fields
 type ExperienceGTTD struct {
 	ID                 string                 `gorm:"primaryKey;type:uuid" json:"id"`
-	HeadoutID          string                 `gorm:"unique;index" json:"headout_id"`
+	HeadoutID          string                 `gorm:"unique" json:"headout_id"`
 	Title              string                 `json:"title"`
 	Description        string                 `gorm:"type:text" json:"description"`
 	City               string                 `json:"city"`

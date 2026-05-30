@@ -31,7 +31,7 @@ function todayStr() {
 }
 
 export function AvailabilityCalendar() {
-  const { productId, variantId } = useProductDetail()
+  const { productId, variantId, initialDate } = useProductDetail()
   const { currency, formatPrice } = useCurrency()
   const [availabilities, setAvailabilities] = useState<VariantAvailability[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,7 +39,7 @@ export function AvailabilityCalendar() {
   const today = new Date()
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate)
   const [slots, setSlots] = useState<SlotItem[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
@@ -69,6 +69,15 @@ export function AvailabilityCalendar() {
   useEffect(() => {
     fetchAvailabilities()
   }, [fetchAvailabilities])
+
+  useEffect(() => {
+    if (initialDate && availabilities.length > 0 && !slots.length && !slotsLoading) {
+      const match = availabilities.find((a) => a.date === initialDate)
+      if (match && match.availability !== "CLOSED") {
+        fetchSlots(initialDate)
+      }
+    }
+  }, [initialDate, availabilities])
 
   const fetchSlots = useCallback(async (date: string) => {
     setSlotsLoading(true)

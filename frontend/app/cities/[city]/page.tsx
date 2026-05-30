@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
 import { SearchFilters } from "@/components/search/SearchFilters";
+import { SearchBar } from "@/components/search/SearchBar";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ExperiencesProvider } from "@/context/ExperiencesContext";
@@ -54,8 +55,9 @@ export default async function CityPage({
           <p className="text-sm text-muted-foreground">{result.data?.count ?? result.data?.experiences.length ?? 0} experiences found</p>
         </div>
 
-        <div className="mb-6">
-          <SearchFilters />
+        <div className="mb-6 space-y-4">
+          <SearchBar />
+          <SearchFilters showSort />
         </div>
 
         {result.error ? (

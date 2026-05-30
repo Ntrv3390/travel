@@ -1,35 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { checkoutFormSchema, type CheckoutFormValues } from "@/lib/validations";
+import { useState, useRef } from "react";
+import { CustomerDetailsForm } from "@/components/booking/CustomerDetailsForm";
 import { createBooking, getCartSessionId } from "@/lib/api";
 import { useCheckout } from "@/context/CheckoutContext";
+import { useCartContext } from "@/context/CartContext";
 import { useToast } from "@/components/ui/toaster";
 
 export function CheckoutForm() {
   const router = useRouter();
   const { info } = useCheckout();
+  const { removeItem } = useCartContext();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const form = useForm<CheckoutFormValues>({
-    resolver: zodResolver(checkoutFormSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      specialRequests: "",
-    },
-  });
+  const onSubmit = async (values: { firstName: string; lastName: string; email: string; phone: string; specialRequests?: string }) => {
+    if (submitting) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
 
-  const onSubmit = async (values: CheckoutFormValues) => {
     setSubmitting(true);
     const idempotencyKey = crypto.randomUUID?.() ?? `bk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const sessionId = getCartSessionId();
@@ -64,6 +55,9 @@ export function CheckoutForm() {
 
     toast({ title: "Booking confirmed", description: "Your booking has been confirmed.", variant: "success" });
     const booking = result.data;
+    if (info.cartItemId) {
+      removeItem(info.cartItemId).catch(() => {});
+    }
     const params = new URLSearchParams();
     params.set("title", info.title);
     if (booking) {
@@ -76,69 +70,5 @@ export function CheckoutForm() {
     router.push(`/checkout/confirmation?${params.toString()}`);
   };
 
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="firstName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>First Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="John" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="lastName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Last Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="Doe" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <Input type="email" placeholder="john@example.com" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Phone</FormLabel>
-                <FormControl>
-                  <Input type="tel" placeholder="+1 555 0123" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <Button className="w-full" type="submit" disabled={submitting}>
-          {submitting ? "Booking..." : "Confirm & Book"}
-        </Button>
-      </form>
-    </Form>
-  );
+  return <CustomerDetailsForm submitLabel="Confirm & Book" submitting={submitting} onSubmit={onSubmit} />;
 }

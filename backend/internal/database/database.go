@@ -38,6 +38,14 @@ func Init(cfg *config.Config) error {
 		logger.Warnf("Migration failed, continuing without migrations: %v", err)
 	}
 
+	// Ensure cart_items has the guest_counts column (GORM AutoMigrate sometimes misses jsonb columns)
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS guest_counts jsonb DEFAULT '{}';`).Error; err != nil {
+		logger.Warnf("Could not add guest_counts column to cart_items (may not exist yet): %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_counts jsonb DEFAULT '{}';`).Error; err != nil {
+		logger.Warnf("Could not add guest_counts column to bookings: %v", err)
+	}
+
 	return nil
 }
 

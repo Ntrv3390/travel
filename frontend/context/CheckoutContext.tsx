@@ -21,6 +21,7 @@ export interface CheckoutInfo {
   price: number
   bookingPrice: number
   guests: number
+  cartItemId: string
 }
 
 const defaultCheckout: CheckoutInfo = {
@@ -41,6 +42,7 @@ const defaultCheckout: CheckoutInfo = {
   price: 0,
   bookingPrice: 0,
   guests: 1,
+  cartItemId: "",
 }
 
 interface CheckoutContextValue {
@@ -85,6 +87,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       price,
       bookingPrice,
       guests: Object.values(guestCounts).reduce((a, b) => a + b, 0),
+      cartItemId: search.get("cartItemId") ?? "",
     }
   }, [search])
 

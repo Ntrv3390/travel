@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/ui/toaster";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { CartProvider } from "@/context/CartContext";
+import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import "@/styles/globals.css";
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Navbar />
                 <main className="flex-1">{children}</main>
                 <Footer />
+                <GlobalSearchModal />
               </div>
             </Toaster>
           </CartProvider>

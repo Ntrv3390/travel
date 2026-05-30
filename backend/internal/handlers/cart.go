@@ -53,6 +53,33 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 	})
 }
 
+func (h *CartHandler) UpdateItem(c *gin.Context) {
+	sessionID := resolveSessionID(c)
+	itemID := strings.TrimSpace(c.Param("id"))
+
+	if itemID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "item id is required"})
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid update payload"})
+		return
+	}
+
+	cart, err := h.cartService.UpdateItem(c.Request.Context(), sessionID, itemID, updates)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    cart,
+		"message": "Item updated",
+	})
+}
+
 func (h *CartHandler) RemoveItem(c *gin.Context) {
 	sessionID := resolveSessionID(c)
 	itemID := strings.TrimSpace(c.Param("id"))

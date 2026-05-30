@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/products/ProductCard";
@@ -61,15 +61,20 @@ interface ProductsGridProps {
 export function ProductsGrid({ queryParams }: ProductsGridProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { currency } = useCurrency();
+  const fetchTick = useRef(0);
+  const offsetRef = useRef(0);
 
   const fetchProducts = useCallback(
     async (append: boolean) => {
+      const tick = ++fetchTick.current;
       dispatch({ type: "FETCH_START" });
-      const offset = append ? state.nextOffset ?? 0 : 0;
+      const offset = append ? offsetRef.current : 0;
       const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: 20 });
+      if (tick !== fetchTick.current) return;
       if (result.error) {
         dispatch({ type: "FETCH_ERROR", error: result.error });
       } else if (result.data) {
+        if (append) offsetRef.current = result.data.nextOffset ?? 0;
         dispatch({
           type: "FETCH_SUCCESS",
           products: result.data.products,
@@ -81,10 +86,12 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
         dispatch({ type: "FETCH_ERROR", error: "No data returned" });
       }
     },
-    [queryParams, state.nextOffset, currency],
+    [queryParams, currency],
   );
 
   useEffect(() => {
+    offsetRef.current = 0;
+    fetchTick.current = 0;
     dispatch({ type: "RESET" });
     fetchProducts(false);
   }, [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId, currency]);

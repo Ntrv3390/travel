@@ -912,5 +912,638 @@ CREATE INDEX idx_bookings_experience_date ON bookings(experience_date);
 - **Confirmation page** shows reference number and "Explore more" CTA
 - **Edge cases:**
   - Slot becomes unavailable between viewing and booking → handle error gracefully with "Slot no longer available" message
-  - Cart is empty → disabled checkout button, show empty state
-  - Network error during booking → show error with retry option
+   - Cart is empty → disabled checkout button, show empty state
+   - Network error during booking → show error with retry option
+
+---
+
+# Cart Page Refactor
+
+## Current Problem
+
+### 1. No Guest Count Display
+Each `CartItem` stores `adults` and `children` as separate fields, but the cart UI only shows them as text (`"2 adults, 1 child"`). There is no per-item guest counter, and users cannot modify guest counts from the cart page.
+
+### 2. No Guest Counter
+The cart is read-only — users cannot increase/decrease guest quantities. To change a guest count, they must remove the item and re-add it, which is poor UX.
+
+### 3. Duplicate Cart Items
+When a user adds the same activity (same `experienceId` + `variantId` + `date`) to the cart multiple times, the backend creates separate `CartItem` rows. The cart page renders each as a distinct card:
+
+```
+Cart
+──────────────────────────
+Activity A - Jun 09 - 1 Guest      [Book now]
+Activity A - Jun 09 - 1 Guest      [Book now]
+Activity A - Jun 09 - 1 Guest      [Book now]
+```
+
+There is no merging — no deduplication logic exists on frontend or backend.
+
+### 4. Flat Item List
+Cart items are stored as a flat `CartItem[]` array with no grouping. Items for the same experience on different dates appear as completely separate cards with duplicate headers, images, and action buttons.
+
+### 5. No Date Grouping
+Activities with time slots (e.g., multiple time slots on the same day, or the same activity across multiple days) cannot be managed under a single activity card.
+
+### 6. Single-Item Checkout
+The "Book now" button on each cart item navigates to checkout with URL params for a single item. "Checkout All" sends all item IDs comma-separated. Neither approach groups by activity.
+
+---
+
+## Proposed Cart Structure
+
+### Data Model
+
+```ts
+// Normalized cart data (stored in CartContext)
+interface CartData {
+  sessionId: string;
+  items: CartItem[];           // Raw items from API (unchanged at API level)
+  totalItems: number;
+  totalPrice: number;
+  currency: string;
+}
+
+// Grouped cart data (computed for rendering)
+interface GroupedCart {
+  activities: ActivityGroup[];
+  cartTotal: number;
+  currency: string;
+}
+
+interface ActivityGroup {
+  activityId: string;          // experienceId
+  activityName: string;
+  imageUrl: string;
+  variantId: string;
+  pricePerGuest: number;
+  currency: string;
+  bookings: BookingRow[];      // Grouped by date+time
+}
+
+interface BookingRow {
+  cartItemId: string;          // Original CartItem.id (for remove/checkout)
+  date: string;                // "2026-06-09"
+  time: string;                // "09:00 AM"
+  startDateTime: string;
+  endDateTime: string;
+  guests: number;              // Combined guest count
+  subtotal: number;            // guests * pricePerGuest
+}
+```
+
+### Grouping Logic
+
+```
+Raw CartItem[]                           Grouped (for display)
+─────────────────────                    ─────────────────────
+Item A - Jun 09 - 1 guest                Activity X (price: $462)
+Item B (different exp) - Jun 10 - 2      ├─ Jun 09, 09:00 AM | 3 guests | $1,386
+Item A - Jun 09 - 1 guest                ├─ Jun 10, 09:00 AM | 1 guest  | $462
+Item A - Jun 10 - 1 guest                └─ Activity total: $1,848
+                                         Activity Y (price: $300)
+                                         └─ Jun 10, 10:00 AM | 2 guests | $600
+                                         ─────────────────────────────
+                                         Cart total: $2,448
+```
+
+---
+
+## State Shape
+
+```ts
+// CartContext provides:
+interface CartContextValue {
+  // Raw data from API
+  cart: Cart | undefined;
+  isLoading: boolean;
+  error: Error | undefined;
+
+  // Mutations
+  addItem: (item: Omit<CartItem, "id">) => Promise<void>;
+  removeItem: (itemId: string) => Promise<void>;
+  clearCart: () => Promise<void>;
+
+  // Derived / convenience
+  itemCount: number;
+
+  // NEW: Grouped cart for rendering
+  groupedCart: GroupedCart | null;
+
+  // NEW: Update guest count
+  updateGuestCount: (cartItemId: string, newGuests: number) => Promise<void>;
+}
+```
+
+### Computed State (derived via `useMemo`)
+
+```ts
+function groupCartItems(items: CartItem[]): GroupedCart {
+  // 1. Group by experienceId
+  // 2. Within each group, group by date+startDateTime
+  // 3. Merge duplicates (same exp + same date+time → sum guest count)
+  // 4. Compute per-booking subtotal and per-activity totals
+  // 5. Compute cart-wide total
+}
+```
+
+### Grouping Key
+
+```
+groupKey = `${item.experienceId}::${item.date}::${item.startDateTime}`
+```
+
+Items with the same `groupKey` are merged — their guest counts are summed and their `cartItemId` list is tracked for removal of individual bookings.
+
+---
+
+## UI Wireframe
+
+### Desktop
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Your Cart                           [Clear cart]       │
+├─────────────────────────────────────────────────────────┤
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ Kangaroo Island ATV Quad Guided Bike Tour           │ │
+│ │                                                     │ │
+│ │  ┌────────────────────────────────────────────────┐ │ │
+│ │  │ Booking Dates                     [Delete Act.]│ │ │
+│ │  ├────────────────────────────────────────────────┤ │ │
+│ │  │ Jun 09, 2026  |  09:00 AM                     │ │ │
+│ │  │ Guests:  [-]  2  [+]           Subtotal: $924 │ │ │
+│ │  │                                      [Remove]  │ │ │
+│ │  ├────────────────────────────────────────────────┤ │ │
+│ │  │ Jun 10, 2026  |  09:00 AM                     │ │ │
+│ │  │ Guests:  [-]  1  [+]           Subtotal: $462 │ │ │
+│ │  │                                      [Remove]  │ │ │
+│ │  └────────────────────────────────────────────────┘ │ │
+│ │  Activity Total: $1,386                              │ │
+│ └─────────────────────────────────────────────────────┘ │
+│                                                         │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ Sydney Harbour Bridge Climb                         │ │
+│ │  ┌────────────────────────────────────────────────┐ │ │
+│ │  │ Booking Dates                     [Delete Act.]│ │ │
+│ │  ├────────────────────────────────────────────────┤ │ │
+│ │  │ Jun 11, 2026  |  14:00 PM                      │ │ │
+│ │  │ Guests:  [-]  2  [+]           Subtotal: $500 │ │ │
+│ │  │                                      [Remove]  │ │ │
+│ │  └────────────────────────────────────────────────┘ │ │
+│ │  Activity Total: $500                                │ │
+│ └─────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────┤
+│  Cart Total: $1,886                         [Checkout]  │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Mobile
+
+```
+┌─────────────────────────┐
+│ Your Cart   [Clear]     │
+├─────────────────────────┤
+│ Kangaroo Island ATV     │
+│ Quad Guided Bike Tour   │
+│                         │
+│ ── Booking Dates ────   │
+│                         │
+│ Jun 09, 2026           │
+│ 09:00 AM               │
+│ [-] 2 [+]  Sub: $924   │
+│              [Remove]   │
+│                         │
+│ Jun 10, 2026           │
+│ 09:00 AM               │
+│ [-] 1 [+]  Sub: $462   │
+│              [Remove]   │
+│                         │
+│ Activity Total: $1,386  │
+│               [Delete]  │
+├─────────────────────────┤
+│ Cart Total: $1,886      │
+│              [Checkout]  │
+└─────────────────────────┘
+```
+
+---
+
+## Edge Cases
+
+| # | Case | Expected Behavior |
+|---|------|------------------|
+| 1 | User adds same experience + date + time twice | Merge into one booking row, sum guest counts |
+| 2 | User adds same experience, different date | Separate booking rows under same activity |
+| 3 | User adds same experience, same date, different time | Separate booking rows (different time slots) |
+| 4 | Guest count reaches 1, user clicks "-" | Button disabled at 1 — cannot go below minimum |
+| 5 | Guest count reaches capacity limit | "+" button disabled, show "Max reached" tooltip |
+| 6 | User removes the last booking row in an activity | Activity card disappears from cart |
+| 7 | Network error during guest count update | Show toast error, revert count to previous value |
+| 8 | Two users share the same browser (same session) | SWR revalidation picks up external changes within 30s |
+| 9 | Activity has no imageUrl | Show placeholder "No image" box |
+| 10 | Cart is empty | Show EmptyState component with "Browse experiences" CTA |
+| 11 | Loading cart data | Show skeleton cards |
+| 12 | API returns error | Show error state with retry |
+| 13 | User clears cart | Remove all items, show empty state, toast confirmation |
+| 14 | Rapid +/- clicks on guest counter | Debounce API calls — wait for current PATCH to complete before next |
+| 15 | Different currencies in cart | Use the currency of the first item; show all prices in that currency |
+
+---
+
+## API Impact Analysis
+
+### Current API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/cart` | Get cart by session |
+| `POST` | `/api/v1/cart/items` | Add item to cart |
+| `DELETE` | `/api/v1/cart/items/:id` | Remove item from cart |
+| `DELETE` | `/api/v1/cart` | Clear entire cart |
+
+### New Endpoint Required
+
+The current API has no way to **update** an existing cart item's guest count. The remove-and-re-add approach is racy and loses the original `id`. A new PATCH endpoint is needed:
+
+| Method | Endpoint | Description | Request Body |
+|--------|----------|-------------|--------------|
+| `PATCH` | `/api/v1/cart/items/:id` | Update cart item guests | `{ "adults": 3, "children": 0 }` or `{ "guestCounts": { "ADULT": 3 } }` |
+
+**Backend changes required:**
+- Add `PATCH /api/v1/cart/items/:id` route to the Go Gin router
+- Add `UpdateItem` handler in `internal/handlers/cart.go`
+- Add `UpdateItem` service method in `internal/services/cart.go`
+- The handler reads the item ID from the URL param and the updated fields from the JSON body
+- The service finds the existing `CartItem` by UUID, updates guest counts, recalculates totals, and saves
+
+**Frontend changes required:**
+- Add `PATCH` fetch to `app/api/cart/[id]/route.ts` in the Next.js API proxy
+- Add `updateCartItem()` function in `frontend/lib/api.ts`
+- Add `updateGuestCount` method to CartContext
+- Compute `groupedCart` via `useMemo` in CartContext
+- Refactor `CartItemCard` to show guest counter
+- Refactor `CartPage` to render grouped layout
+
+### No Backward Compatibility Issues
+
+- The raw `CartItem[]` structure from the API stays the same
+- The `GET /api/v1/cart` response is unchanged (no migration needed)
+- The new PATCH endpoint is additive — existing clients are unaffected
+- The grouping logic is purely a frontend transformation in `useMemo`; the backend is unchanged for reads
+
+### Checkout Flow Compatibility
+
+- Single-item checkout: uses the `cartItemId` from the booking row → same as current flow
+- Multi-item checkout: "Checkout All" sends all `cartItemId`s → same as current flow
+- No changes needed to `CheckoutForm.tsx`, `OrderSummary.tsx`, or the backend booking handlers
+
+---
+
+# Search System (Global Search)
+
+## Audit Findings (Pre-Implementation)
+
+### Frontend Issues Found
+
+| Issue | File | Status |
+|---|---|---|
+| `SearchFilters.tsx` is a stub returning `null` | `frontend/components/search/SearchFilters.tsx` | Broken |
+| `useSearch.ts` hook is orphaned (never imported) | `frontend/hooks/useSearch.ts` | Orphaned |
+| No autocomplete/suggestions on any search input | All search components | Missing |
+| No debounce on search input | `hero.tsx`, `SearchBar.tsx` | Missing |
+| Search bar does not pre-populate from URL params | `SearchBar.tsx` | Bug |
+| `getTopExperiences` and `getPopularExperiences` are duplicates | `frontend/lib/api.ts` | Duplicate |
+| Two separate search ecosystems (experiences vs Headout products) | `SearchBar` vs `ProductsFilters` | Not integrated |
+
+### Backend Issues Found
+
+| Issue | File | Status |
+|---|---|---|
+| No dedicated search endpoint — search is interleaved with experience listing | `experience.go` | Architectural |
+| No fuzzy matching or typo tolerance | All handlers | Missing |
+| `ExperienceCatalogService` (GORM search) is never wired into router | `services/experience_catalog.go` | Unused |
+| No Elasticsearch/Meilisearch/Algolia — pure string containment | Entire backend | Missing |
+| Search only returns flat `Experience[]`, no typed sections | `experience.go:210` | Missing |
+
+### What Works
+
+- Basic search flow: query → `/api/v1/experiences/search` → string-contains filter → results
+- Pagination on search results page preserves URL params
+- City-specific search via `/cities/[city]` works
+- Empty/error states handled in `SearchResults`
+
+---
+
+## Backend
+
+### API Endpoint
+
+- **Path:** `GET /api/v1/search`
+- **Method:** GET
+- **Authentication:** Requires `Headout-Auth` header (proxied upstream)
+
+### External Headout APIs Used
+
+| API | Endpoint | Purpose |
+|---|---|---|
+| Headout List Cities (v2) | `/api/public/v2/cities/` | Fetch all discoverable cities for city matching |
+| Headout List Products (v2) | `/api/public/v2/products` | Fetch products per city for product matching |
+
+### API Details
+
+- **Purpose:** Unified search that returns typed results — products, cities, categories, and suggestions — from a single endpoint
+- **Business logic:**
+  1. Accepts query string `q`
+  2. Fetches all cities from Headout's v2 cities endpoint
+  3. Fetches products from 30 popular cities concurrently (5 at a time via semaphore)
+  4. Filters and ranks results client-side using score-based matching
+  5. Caches results in-memory for 5 minutes
+  6. Returns a `SearchResponse` with four typed arrays
+- **Matching algorithm:**
+  - Exact match → 100 points
+  - Starts with query → 80 points
+  - Word starts with query → 70 points
+  - Contains query → 60 points
+  - Word contains query → 50 points
+  - Trigram similarity + Levenshtein (fuzzy/typo tolerance) → 20-60 points
+  - City/category attribute match → 60 points
+- **Validation rules:**
+  - `q` — optional, empty returns empty results
+- **Error handling:**
+  - Headout API failures → log and return empty results for that section
+  - Cache hit → immediate response
+
+### Request
+
+```
+GET /api/v1/search?q=dubai
+```
+
+### Response
+
+```json
+{
+  "query": "dubai",
+  "products": [
+    {
+      "id": "19513",
+      "name": "Dubai Desert Safari",
+      "slug": "dubai-desert-safari",
+      "city": "Dubai",
+      "cityCode": "DUBAI",
+      "category": "Tours",
+      "imageUrl": "https://cdn-imgix.headout.com/...",
+      "price": 41.0,
+      "currency": "USD",
+      "rating": 4.3,
+      "reviewCount": 1247,
+      "productType": "ATTRACTION",
+      "url": "/products/dubai-desert-safari-19513"
+    }
+  ],
+  "cities": [
+    {
+      "code": "DUBAI",
+      "name": "Dubai",
+      "country": "United Arab Emirates",
+      "image": "//cdn-imgix.headout.com/...",
+      "slug": "dubai",
+      "url": "/cities/dubai"
+    }
+  ],
+  "categories": [
+    {
+      "id": "desert-safari",
+      "name": "Desert Safari",
+      "slug": "desert-safari",
+      "url": "/categories/desert-safari"
+    }
+  ],
+  "suggestions": [
+    {
+      "text": "Dubai Desert Safari",
+      "type": "product",
+      "url": "/products/dubai-desert-safari-19513",
+      "score": 100
+    }
+  ]
+}
+```
+
+### Caching
+
+- In-memory map with 5-minute TTL
+- Key is normalized query (lowercase, trimmed)
+- Cache is evicted on a per-key basis
+- Max 100 entries with LRU-style eviction
+
+---
+
+## Frontend
+
+### Pages Using Search
+
+| Page | File | Search Integration |
+|---|---|---|
+| Homepage | `frontend/app/page.tsx` | Hero search with autocomplete overlay |
+| Search | `frontend/app/search/page.tsx` | Full search with filters, results page |
+| City | `frontend/app/cities/[city]/page.tsx` | City-specific search with autocomplete |
+| Category | `frontend/app/categories/[slug]/page.tsx` | Category browsing with search |
+| Product Detail | `frontend/app/products/[slug]/page.tsx` | Uses `<SearchBar />` component |
+| All pages | `frontend/app/layout.tsx` | Global `SearchModal` for mobile |
+
+### Components
+
+| Component | File | Responsibility |
+|---|---|---|
+| `SearchBar` | `frontend/components/search/SearchBar.tsx` | Main search input with autocomplete dropdown; supports `compact` prop for navbar |
+| `SearchOverlay` | `frontend/components/search/SearchOverlay.tsx` | Desktop mega dropdown — categorized results in sections |
+| `SearchModal` | `frontend/components/search/SearchModal.tsx` | Mobile fullscreen search modal with body scroll lock |
+| `GlobalSearchModal` | `frontend/components/search/GlobalSearchModal.tsx` | Wires mobile modal into layout via custom event |
+| `SearchResults` | `frontend/components/search/SearchResults.tsx` | Renders `ExperienceGrid` or enhanced empty state with suggestions |
+| `SearchFilters` | `frontend/components/search/SearchFilters.tsx` | Sort filter bar (Recommended, Price asc/desc, Rating) |
+
+### Types
+
+| Type | File | Purpose |
+|---|---|---|
+| `SearchProduct` | `frontend/types/search.ts` | Product result (id, name, city, category, image, price, etc.) |
+| `SearchCity` | `frontend/types/search.ts` | City result (code, name, country, image, slug) |
+| `SearchCategory` | `frontend/types/search.ts` | Category result (id, name, slug) |
+| `SearchSuggestion` | `frontend/types/search.ts` | Suggestion (text, type, url, score) |
+| `SearchAllResponse` | `frontend/types/search.ts` | Full API response shape |
+| `SearchGrouped` | `frontend/types/search.ts` | Grouped results for rendering |
+
+### Hooks
+
+| Hook | File | Responsibility |
+|---|---|---|
+| `useSearchAutocomplete` | `frontend/hooks/useSearchAutocomplete.ts` | Core search hook managing query state, debounce (250ms), API calls, result caching, keyboard navigation, click-outside |
+
+### API Integration
+
+| Function | File | API Called |
+|---|---|---|
+| `searchAll(q, signal?)` | `frontend/lib/api.ts:1` | `GET /api/v1/search?q=...` |
+| `searchExperiences(params)` | `frontend/lib/api.ts:315` | `GET /api/v1/experiences/search` (for search results page) |
+
+### State Management
+
+- No global search state — each `useSearchAutocomplete` instance manages its own state
+- Result cache is module-level via `Map<string, { data, ts }>` with 5-minute TTL
+- `SearchModal` is triggered globally via `CustomEvent("open-search")` dispatched from Navbar/MobileNav
+
+### UI/UX Design
+
+**Desktop Dropdown:**
+- Full-width dropdown below the search input
+- Grouped sections: Attractions, Cities, Categories, Popular Searches
+- Each result type has distinct iconography:
+  - Products: thumbnail image, name, city, category, price
+  - Cities: city image, name, country
+  - Categories: category icon, name
+  - Suggestions: trending icon, text
+- Keyboard navigable with arrow keys, Enter selects, Escape closes
+
+**Mobile Modal:**
+- Fullscreen overlay with slide-down animation
+- Search input auto-focused on open
+- Body scroll locked while open
+- Same grouped results as desktop
+- Touch-optimized targets (48px+ tap areas)
+- Cancel button and back arrow to close
+
+**Empty State (dropdown):**
+- Shows popular destination chips when search is empty/focused
+- Shows "No results found" with suggestions when no matches
+
+**Empty State (search page):**
+- Shows query in "No results for ..." message
+- Links to popular destinations
+- "Go home" fallback link
+
+### Keyboard Support
+
+| Key | Behavior |
+|---|---|
+| `ArrowDown` | Navigate to next result (wraps to first) |
+| `ArrowUp` | Navigate to previous result (wraps to last) |
+| `Enter` | Select highlighted result and navigate |
+| `Escape` | Close dropdown, blur input |
+| `Tab` | Natural tab flow close |
+
+### Accessibility
+
+- `role="combobox"` and `role="listbox"` on search input and dropdown
+- `aria-expanded` and `aria-selected` attributes
+- `aria-label` on all interactive elements
+- Click-outside detection to close dropdown
+- Focus trapping on mobile modal (natural DOM order + Escape handler)
+
+---
+
+## Performance
+
+| Metric | Implementation |
+|---|---|
+| Debounce | 250ms before API call |
+| Request cancellation | `AbortController` aborts pending request on new input |
+| Result caching | Module-level `Map` with 5-minute TTL, max 100 entries |
+| Memoization | `useMemo` for grouped results |
+| Rerender prevention | Stable callback refs, state batching |
+| Target | <100ms UI response on cache hit |
+
+---
+
+## Edge Cases Handled
+
+| Case | Behavior |
+|---|---|
+| Fast typing ("b", "bu", "bur", "burj") | Each keystroke debounces and aborts previous request |
+| Slow network | Dropdown stays stable, no flickering |
+| Empty API response | Returns empty arrays gracefully |
+| API failure | Returns `null`, dropdown shows initial/popular state |
+| Duplicate products across cities | Deduplicated by `id` |
+| Missing product images | Shows placeholder icon |
+| Special characters in query | Normalized by browser `encodeURIComponent` |
+| Spaces ("burj  khalifa") | Normalized to single spaces |
+| Case sensitivity ("BURJ", "burj", "BuRj") | All lowered for matching |
+| Mobile keyboard opening | No layout shift, body scroll locked on modal |
+| Deep linking (`/search?q=burj`) | Search bar pre-populates from URL on mount |
+| Offline | `searchAll` returns null, gracefully degrades |
+
+---
+
+## Analytics Events
+
+| Event | Trigger | Data |
+|---|---|---|
+| `search_query` | User types 2+ characters (debounced) | `{ query }` |
+| `search_result_click` | User clicks a search result | `{ query, type, id, url }` |
+| `search_no_results` | Query returns zero results | `{ query }` |
+| `search_submit` | User presses Enter or clicks Search | `{ query }` |
+
+Analytics events are emitted via `window.dispatchEvent(new CustomEvent("analytics", { detail }))`. Implement the listener in your analytics provider.
+
+---
+
+## Routing
+
+| Pattern | Page | Example |
+|---|---|---|
+| `/products/{slug}-{id}` | Product Detail | `/products/burj-khalifa-at-the-top-123` |
+| `/cities/{slug}` | City Experiences | `/cities/dubai` |
+| `/categories/{slug}` | Category | `/categories/theme-parks` |
+| `/search?q={query}` | Search Results | `/search?q=burj` |
+
+---
+
+# Home Page (Triipzy Landing)
+
+## Frontend
+
+### Pages
+
+- `app/page.tsx` — main landing page, rewrites the existing homepage
+
+### Components (all under `components/home/`)
+
+| Component | Responsibility |
+|---|---|
+| `hero.tsx` | Full-viewport hero with background, search card, floating stats, CTA |
+| `trust-section.tsx` | 4 glass stat cards (experiences, destinations, travelers, rating) |
+| `trending-experiences.tsx` | Horizontal carousel of trending experience cards |
+| `destinations.tsx` | Responsive grid of destination cards |
+| `categories.tsx` | Icon-based category cards (Adventure, Food, etc.) |
+| `why-triipzy.tsx` | Split section with stats + feature cards + CountUp animation |
+| `collections.tsx` | Large feature cards with gradient overlay |
+| `testimonials.tsx` | Auto-scroll carousel of testimonial glass cards |
+| `partners.tsx` | Grid of partner logos |
+| `inspiration.tsx` | Blog-style travel inspiration cards |
+| `newsletter.tsx` | Glass card with email signup |
+
+### State Management
+
+- No global state needed — each section is self-contained
+- Cart context is already provided by the root layout
+
+### Libraries Used
+
+- **framer-motion** — entrance animations (fade-up, stagger, scale), hover effects
+- **countup.js** — animated stats counters in trust section and why-triipzy
+- **lucide-react** — all icons
+- **next/link** — navigation
+- **next/image** — optimized images
+
+### UI/UX Notes
+
+- Full-viewport hero with responsive typography
+- Glassmorphism cards throughout (backdrop-blur, translucent bg)
+- Smooth scroll-based entrance animations via framer-motion `useInView`
+- Mobile-responsive layouts: single-column → grid
+- Auto-scrolling testimonial carousel with pause on hover
+- Horizontal swipe for trending experiences on mobile
+- Newsletter with form validation (basic email check)
+- All sections use consistent `container py-section` spacing

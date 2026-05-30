@@ -289,6 +289,22 @@ export async function getProductById(
   }
 }
 
+import type { SearchAllResponse } from "@/types/search";
+
+export async function searchAll(q: string, signal?: AbortSignal): Promise<SearchAllResponse | null> {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/search`);
+    url.searchParams.set("q", q);
+    const res = await fetch(url.toString(), {
+      signal,
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function getCategories() {
   try {
     const res = await fetch(`${API_BASE}/api/v1/headout/v2/categories`, {

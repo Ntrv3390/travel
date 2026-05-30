@@ -37,9 +37,9 @@ export function PdpContent() {
           <section className="space-y-4">
             <h1 className="text-display-sm font-bold">{experience.title}</h1>
             <div className="flex flex-wrap items-center gap-2">
-              <StarRating />
-              <CityBadge />
-              <CategoryBadge />
+              <StarRating rating={experience.rating} reviewCount={experience.reviewCount} />
+              <CityBadge city={experience.city} />
+              <CategoryBadge category={experience.categories?.[0]} />
             </div>
             <p className="leading-relaxed text-muted-foreground">{experience.description}</p>
           </section>
@@ -55,7 +55,7 @@ export function PdpContent() {
             </Alert>
           ) : null}
 
-          <ExperienceReviews />
+          <ExperienceReviews rating={experience.rating} reviewCount={experience.reviewCount} />
         </div>
 
         <div className="hidden lg:block">

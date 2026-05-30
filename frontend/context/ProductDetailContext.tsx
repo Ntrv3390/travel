@@ -7,6 +7,10 @@ interface ProductDetailContextValue {
   productName: string
   variantId: string | number
   variantName: string
+  imageUrl: string
+  cartItemId: string | null
+  initialDate: string | null
+  initialGuests: Record<string, number> | null
 }
 
 const ProductDetailContext = createContext<ProductDetailContextValue | undefined>(undefined)
@@ -17,9 +21,13 @@ export function ProductDetailProvider({
   productName,
   variantId,
   variantName,
+  imageUrl = "",
+  cartItemId = null,
+  initialDate = null,
+  initialGuests = null,
 }: ProductDetailContextValue & { children: ReactNode }) {
   return (
-    <ProductDetailContext.Provider value={{ productId, productName, variantId, variantName }}>
+    <ProductDetailContext.Provider value={{ productId, productName, variantId, variantName, imageUrl, cartItemId, initialDate, initialGuests }}>
       {children}
     </ProductDetailContext.Provider>
   )

@@ -16,9 +16,6 @@ export default function ProductsPage() {
     <main className="container py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Products</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Browse bookable experiences from Headout. Enter a city code to get started.
-        </p>
       </div>
 
       <ProductsFilters

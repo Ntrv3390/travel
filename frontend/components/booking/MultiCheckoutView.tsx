@@ -1,18 +1,15 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useState, useMemo } from "react";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { CustomerDetailsForm } from "@/components/booking/CustomerDetailsForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
-import { checkoutFormSchema, type CheckoutFormValues } from "@/lib/validations";
 import { createBooking, getCartSessionId } from "@/lib/api";
 import { useCart } from "@/hooks/useCart";
+import { useCartContext } from "@/context/CartContext";
 
 interface BookingResult {
   bookingId?: string;
@@ -24,6 +21,7 @@ interface BookingResult {
 export function MultiCheckoutView() {
   const search = useSearchParams();
   const { cart, isLoading: cartLoading } = useCart();
+  const { removeItem } = useCartContext();
   const [submitting, setSubmitting] = useState(false);
   const [results, setResults] = useState<BookingResult[]>([]);
   const [completed, setCompleted] = useState(false);
@@ -33,18 +31,13 @@ export function MultiCheckoutView() {
     return (cart?.items ?? []).filter((item) => ids.includes(item.id));
   }, [cart, search]);
 
-  const form = useForm<CheckoutFormValues>({
-    resolver: zodResolver(checkoutFormSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      specialRequests: "",
-    },
-  });
+  const currencies = useMemo(() => {
+    const unique = new Set(items.map((i) => i.currency));
+    return Array.from(unique);
+  }, [items]);
 
-  const onSubmit = async (values: CheckoutFormValues) => {
+  const onSubmit = async (values: { firstName: string; lastName: string; email: string; phone: string; specialRequests?: string }) => {
+    if (submitting) return;
     setSubmitting(true);
     const sessionId = getCartSessionId();
     const bookingResults: BookingResult[] = [];
@@ -76,6 +69,7 @@ export function MultiCheckoutView() {
         bookingResults.push({ title: item.title, status: "FAILED", error: result.error });
       } else if (result.data) {
         bookingResults.push({ bookingId: result.data.bookingId, title: item.title, status: result.data.status });
+        removeItem(item.id).catch(() => {});
       }
     }
 
@@ -157,72 +151,21 @@ export function MultiCheckoutView() {
     <div className="container py-section">
       <div className="mx-auto max-w-3xl space-y-6">
         <h1 className="text-display-sm font-bold">Checkout ({items.length} item{items.length !== 1 ? "s" : ""})</h1>
+
+        {currencies.length > 1 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Items have different currencies ({currencies.join(", ")}). Total may not reflect exact conversion.
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="rounded-xl border p-6">
             <h2 className="mb-4 text-lg font-semibold">Your Details</h2>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="firstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>First Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="John" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="lastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Last Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Doe" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="john@example.com" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone</FormLabel>
-                        <FormControl>
-                          <Input type="tel" placeholder="+1 555 0123" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <Button className="w-full" type="submit" disabled={submitting}>
-                  {submitting ? "Booking all items..." : `Confirm & Book All (${items.length})`}
-                </Button>
-              </form>
-            </Form>
+            <CustomerDetailsForm
+              submitLabel={`Confirm & Book All (${items.length})`}
+              submitting={submitting}
+              onSubmit={onSubmit}
+            />
           </div>
           <Card>
             <CardHeader>

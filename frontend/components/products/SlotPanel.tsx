@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Clock, Users, ShoppingCart, ArrowRight, Minus, Plus } from "lucide-react"
+import { Loader2, Clock, ShoppingCart, ArrowRight, Minus, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -22,11 +22,11 @@ interface SlotPanelProps {
 
 export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: SlotPanelProps) {
   const { formatPrice, currency } = useCurrency()
-  const { addItem } = useCartContext()
-  const { productId, productName, variantId, variantName } = useProductDetail()
+  const { cart, addItem, updateCartItem } = useCartContext()
+  const { productId, productName, variantId, variantName, imageUrl, initialGuests, cartItemId } = useProductDetail()
   const { toast } = useToast()
   const router = useRouter()
-  const [guests, setGuests] = useState<Record<string, number>>({ ADULT: 1 })
+  const [guests, setGuests] = useState<Record<string, number>>(initialGuests ?? { ADULT: 1 })
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [addingToCart, setAddingToCart] = useState(false)
 
@@ -102,29 +102,58 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
   const handleAddToCart = async (slot: SlotItem) => {
     setAddingToCart(true)
     setSelectedSlotId(slot.id)
-    const totalPrice = calculateTotalPrice(slot)
     const totalBookingPrice = calculateTotalBookingPrice(slot)
     try {
-      await addItem({
-        experienceId: productId,
-        productId,
-        variantId: String(variantId),
-        inventoryId: slot.id,
-        inventoryType: "NORMAL",
-        date: selectedDate,
-        startDateTime: slot.startDateTime,
-        endDateTime: slot.endDateTime,
-        guestCounts: guests,
-        title: variantName ?? productName ?? "Experience",
-        priceAmount: totalPrice,
-        bookingPriceAmount: totalBookingPrice,
-        currency: currency ?? "USD",
-        imageUrl: "",
-        addedAt: new Date().toISOString(),
-      })
-      toast({ title: "Added to cart", description: `${variantName ?? productName ?? "Experience"} added to your cart.`, variant: "success" })
-    } catch {
-      toast({ title: "Failed to add", description: "Could not add item to cart. Please try again.", variant: "error" })
+      const existing = (cart?.items ?? []).find(
+        (i) =>
+          i.experienceId === productId &&
+          i.variantId === String(variantId) &&
+          i.date === selectedDate &&
+          i.inventoryId === slot.id
+      )
+      if (existing) {
+        const mergedGuests = { ...guests }
+        const currentTotal = Object.values(mergedGuests).reduce((a, b) => a + b, 0)
+        const existingTotal = Object.values(existing.guestCounts ?? {}).reduce((a, b) => a + b, 0)
+        if (existingTotal > 0) {
+          for (const [type, count] of Object.entries(existing.guestCounts ?? {})) {
+            mergedGuests[type] = (mergedGuests[type] ?? 0) + count
+          }
+        }
+        const newTotal = Object.values(mergedGuests).reduce((a, b) => a + b, 0)
+        const unitPrice = existingTotal > 0 ? existing.priceAmount / existingTotal : totalBookingPrice / currentTotal
+        const newPrice = Math.round(newTotal * unitPrice * 100) / 100
+        await updateCartItem(existing.id, {
+          guestCounts: mergedGuests,
+          adults: mergedGuests.ADULT ?? 0,
+          children: mergedGuests.CHILD ?? 0,
+          priceAmount: newPrice,
+        })
+        setGuests(mergedGuests)
+        toast({ title: "Cart updated", description: `Guest count updated for ${variantName ?? productName ?? "Experience"}.`, variant: "success" })
+      } else {
+        await addItem({
+          experienceId: productId,
+          productId,
+          variantId: String(variantId),
+          inventoryId: slot.id,
+          inventoryType: "NORMAL",
+          date: selectedDate,
+          startDateTime: slot.startDateTime,
+          endDateTime: slot.endDateTime,
+          adults: guests.ADULT ?? 1,
+          children: guests.CHILD ?? 0,
+          guestCounts: guests,
+          title: variantName ?? productName ?? "Experience",
+          priceAmount: totalBookingPrice,
+          currency: currency ?? "USD",
+          imageUrl,
+          addedAt: new Date().toISOString(),
+        })
+        toast({ title: "Added to cart", description: `${variantName ?? productName ?? "Experience"} added to your cart.`, variant: "success" })
+      }
+    } catch (err) {
+      toast({ title: "Failed to add", description: err instanceof Error ? err.message : "Could not add item to cart. Please try again.", variant: "error" })
     } finally {
       setAddingToCart(false)
       setSelectedSlotId(null)

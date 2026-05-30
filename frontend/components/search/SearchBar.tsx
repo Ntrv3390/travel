@@ -1,50 +1,99 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useSearchAutocomplete } from "@/hooks/useSearchAutocomplete";
+import { SearchOverlay } from "@/components/search/SearchOverlay";
+import { cn } from "@/lib/utils";
 
 export function SearchBar({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [city, setCity] = useState("");
+  const {
+    query,
+    setQuery,
+    grouped,
+    loading,
+    open,
+    highlightedIndex,
+    openDropdown,
+    closeDropdown,
+    handleKeyDown,
+    inputRef,
+    dropdownRef,
+  } = useSearchAutocomplete();
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    if (city) params.set("city", city);
-    router.push(`/search?${params.toString()}`);
+    if (query.trim()) {
+      closeDropdown();
+      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    }
   };
 
   return (
     <form
       onSubmit={onSubmit}
-      className={
-        compact ? "grid grid-cols-[minmax(0,1fr)_220px_auto] items-center gap-2 lg:grid-cols-[minmax(0,1fr)_260px_auto]" : "grid gap-3 md:grid-cols-[1fr_1fr_auto]"
-      }
+      className={cn("relative", compact ? "w-full" : "")}
     >
-      <Input
-        placeholder="Search experiences"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className={compact ? "h-12 rounded-xl border-slate-200 bg-white/90 text-base shadow-sm focus-visible:ring-sky-500" : ""}
-      />
-      <Input
-        placeholder="City"
-        value={city}
-        onChange={(e) => setCity(e.target.value)}
-        className={compact ? "h-12 rounded-xl border-slate-200 bg-white/90 text-base shadow-sm focus-visible:ring-sky-500" : ""}
-      />
-      <Button
-        type="submit"
-        className={compact ? "h-12 rounded-xl bg-sky-600 px-6 text-2xl font-bold shadow-[0_10px_24px_rgba(14,165,233,0.28)] hover:bg-sky-700 gap-2" : "gap-2"}
+      <div
+        className={cn(
+          compact
+            ? "flex items-center gap-0"
+            : "grid gap-3 md:grid-cols-[1fr_1fr_auto]",
+        )}
       >
-        <Search className="h-4 w-4" />
-        Search
-      </Button>
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            ref={inputRef as React.Ref<HTMLInputElement>}
+            placeholder="Search attractions, cities..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => {
+              if (query.length >= 2) openDropdown();
+            }}
+            onKeyDown={handleKeyDown}
+            className={cn(
+              compact
+                ? "h-12 rounded-xl border-slate-200 bg-white/90 pl-10 text-base shadow-sm focus-visible:ring-sky-500"
+                : "pl-10",
+            )}
+            role="combobox"
+            aria-expanded={open}
+            aria-label="Search"
+            autoComplete="off"
+          />
+          <SearchOverlay
+            grouped={grouped}
+            loading={loading}
+            open={open}
+            query={query}
+            highlightedIndex={highlightedIndex}
+            onClose={closeDropdown}
+            onKeyDown={handleKeyDown}
+            dropdownRef={dropdownRef}
+            inputRef={inputRef}
+            setQuery={setQuery}
+          />
+        </div>
+        {compact ? null : (
+          <>
+            <div className="relative">
+              <Input
+                placeholder="City"
+                className="pl-10"
+              />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+            <Button type="submit" className="gap-2">
+              <Search className="h-4 w-4" />
+              Search
+            </Button>
+          </>
+        )}
+      </div>
     </form>
   );
 }

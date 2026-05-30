@@ -11,6 +11,7 @@ interface CartContextValue {
   addItem: (item: Omit<CartItem, "id">) => Promise<void>
   removeItem: (itemId: string) => Promise<void>
   clearCart: () => Promise<void>
+  updateCartItem: (itemId: string, updates: Record<string, unknown>) => Promise<void>
   itemCount: number
 }
 
@@ -41,6 +42,7 @@ function toCart(raw: any): Cart {
     endDateTime: i.endDateTime ?? "",
     adults: i.adults,
     children: i.children,
+    guestCounts: i.guestCounts ?? (i.adults || i.children ? { ADULT: i.adults, ...(i.children > 0 ? { CHILD: i.children } : {}) } : undefined),
     title: i.title ?? "",
     priceAmount: i.priceAmount ?? 0,
     currency: i.currency ?? "USD",
@@ -120,10 +122,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     mutate(["/api/cart", sessionId], { sessionId, items: [], totalItems: 0, totalPrice: 0, currency: "USD" })
   }, [sessionId])
 
+  const updateCartItem = useCallback(async (itemId: string, updates: Record<string, unknown>) => {
+    if (!sessionId) return
+    const res = await fetch(`/api/cart/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Session-ID": sessionId },
+      body: JSON.stringify(updates),
+    })
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody?.error ?? "Failed to update cart item")
+    }
+    const json = await res.json()
+    mutate(["/api/cart", sessionId], toCart(json.data ?? json))
+  }, [sessionId])
+
   const itemCount = cart?.totalItems ?? 0
 
   return (
-    <CartContext.Provider value={{ cart, isLoading, error, addItem, removeItem, clearCart, itemCount }}>
+    <CartContext.Provider value={{ cart, isLoading, error, addItem, removeItem, clearCart, updateCartItem, itemCount }}>
       {children}
     </CartContext.Provider>
   )

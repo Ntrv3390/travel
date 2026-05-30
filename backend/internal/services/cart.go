@@ -137,6 +137,64 @@ func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartIt
 	return cart, nil
 }
 
+func (s *CartService) UpdateItem(ctx context.Context, sessionID string, itemID string, updates map[string]interface{}) (*Cart, error) {
+	sessionID = sanitizeSessionID(sessionID)
+
+	var model models.Cart
+	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
+		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
+	}
+
+	var cartItem models.CartItem
+	if err := s.db.WithContext(ctx).Where("cart_id = ? AND uuid = ?", model.ID, itemID).First(&cartItem).Error; err != nil {
+		return nil, fmt.Errorf("item %s not found in cart", itemID)
+	}
+
+	updateMap := make(map[string]interface{})
+
+	if gc, ok := updates["guestCounts"]; ok {
+		switch v := gc.(type) {
+		case map[string]interface{}:
+			counts := make(map[string]int)
+			for k, val := range v {
+				if f, ok := val.(float64); ok {
+					counts[k] = int(f)
+				}
+			}
+			updateMap["guest_counts"] = encodeGuestCounts(counts)
+		}
+	}
+
+	if adults, ok := updates["adults"]; ok {
+		if v, ok := adults.(float64); ok {
+			updateMap["adults"] = int(v)
+		}
+	}
+	if children, ok := updates["children"]; ok {
+		if v, ok := children.(float64); ok {
+			updateMap["children"] = int(v)
+		}
+	}
+	if price, ok := updates["priceAmount"]; ok {
+		if v, ok := price.(float64); ok {
+			updateMap["price_amount"] = v
+		}
+	}
+
+	if len(updateMap) == 0 {
+		return nil, fmt.Errorf("no valid fields to update")
+	}
+
+	if err := s.db.WithContext(ctx).Model(&cartItem).Updates(updateMap).Error; err != nil {
+		return nil, fmt.Errorf("failed to update item: %w", err)
+	}
+
+	s.db.Model(&model).Update("updated_at", time.Now())
+
+	s.db.Preload("Items").First(&model, model.ID)
+	return s.modelToCart(&model), nil
+}
+
 func (s *CartService) RemoveItem(ctx context.Context, sessionID string, itemID string) (*Cart, error) {
 	sessionID = sanitizeSessionID(sessionID)
 

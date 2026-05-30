@@ -1,103 +1,49 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
-import { Globe2, ShieldCheck, Zap } from "lucide-react";
-import { ExperienceHero } from "@/components/experience/ExperienceHero";
-import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
-import { EmptyState } from "@/components/common/EmptyState";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExperiencesProvider } from "@/context/ExperiencesContext";
-import { getTopExperiences } from "@/lib/api";
-import type { SearchParams } from "@/types/api";
+import { getTopExperiences, getCities } from "@/lib/api";
+import { Hero } from "@/components/home/hero";
+import { TrustSection } from "@/components/home/trust-section";
+import { TrendingExperiences } from "@/components/home/trending-experiences";
+import { Destinations } from "@/components/home/destinations";
+import { Categories } from "@/components/home/categories";
+import { WhyTriipzy } from "@/components/home/why-triipzy";
+import { Testimonials } from "@/components/home/testimonials";
+import { Newsletter } from "@/components/home/newsletter";
+import type { Experience } from "@/types/experience";
+import type { City } from "@/types/api";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 24;
-
-export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
+export default async function HomePage() {
   const cookieStore = await cookies();
   const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
-  const page = parseInt(searchParams.page ?? "1", 10);
-  const limit = parseInt(searchParams.limit ?? String(PAGE_SIZE), 10);
-  const result = await getTopExperiences(limit, page, currency);
 
-  const totalPages = result.data?.totalPages ?? 1;
-  const currentCount = result.data?.experiences.length ?? 0;
+  const [experiencesResult, citiesResult] = await Promise.all([
+    getTopExperiences(50, 1, currency),
+    getCities(0, 50),
+  ]);
+
+  const experiences: Experience[] = experiencesResult.data?.experiences ?? [];
+  const citiesResponse = citiesResult.data as { cities: City[]; total: number } | null;
+  const cities: City[] = citiesResponse?.cities ?? [];
+
+  const totalExperiences = experiencesResult.data?.count ?? 0;
+  const totalDestinations = citiesResponse?.total ?? cities.length;
+  const avgRating =
+    experiences.length > 0
+      ? experiences.reduce((sum, e) => sum + e.rating, 0) / experiences.length
+      : 0;
+  const totalReviews = experiences.reduce((sum, e) => sum + e.reviewCount, 0);
 
   return (
-    <ExperiencesProvider
-      initialExperiences={result.data?.experiences ?? []}
-      totalCount={result.data?.count ?? 0}
-      page={page}
-      totalPages={totalPages}
-      error={result.error}
-    >
-      <ExperienceHero />
-
-      <section className="container py-section">
-        <div className="mb-6 flex items-end justify-between">
-          <h2 className="text-display-sm font-bold">Top Experiences</h2>
-          <Button asChild variant="outline">
-            <Link href="/search">View all</Link>
-          </Button>
-        </div>
-        {result.error ? (
-          <Alert>
-            <AlertDescription>Experiences are temporarily unavailable. Please refresh in a moment.</AlertDescription>
-          </Alert>
-        ) : currentCount ? (
-          <>
-            <ExperienceGrid />
-            {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-4">
-                {page > 1 && (
-                  <Button asChild variant="outline">
-                    <Link href={`/?page=${page - 1}&limit=${limit}`}>Previous</Link>
-                  </Button>
-                )}
-                <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages}
-                </span>
-                {page < totalPages && (
-                  <Button asChild variant="outline">
-                    <Link href={`/?page=${page + 1}&limit=${limit}`}>Next</Link>
-                  </Button>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <EmptyState title="No experiences yet" description="Try again later or explore another destination." />
-        )}
-      </section>
-
-      <section className="container pb-section">
-        <h2 className="mb-6 text-display-sm font-bold">Why Traviia</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <Globe2 className="h-6 w-6 text-brand-600" />
-              <CardTitle className="text-xl">Worldwide inventory</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">Curated tours and attractions across top global destinations.</CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Zap className="h-6 w-6 text-brand-600" />
-              <CardTitle className="text-xl">Fast booking</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">Optimized performance and real-time availability checks before purchase.</CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <ShieldCheck className="h-6 w-6 text-brand-600" />
-              <CardTitle className="text-xl">Trusted pricing</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">Consistent pricing between search, product pages, and checkout.</CardContent>
-          </Card>
-        </div>
-      </section>
-    </ExperiencesProvider>
+    <>
+      <Hero stats={{ totalExperiences, totalDestinations, avgRating }} />
+      <TrustSection stats={{ totalExperiences, totalDestinations, avgRating, totalReviews }} />
+      <TrendingExperiences experiences={experiences} />
+      <Destinations cities={cities} />
+      <Categories />
+      <WhyTriipzy />
+      <Testimonials />
+      <Newsletter />
+    </>
   );
 }

@@ -4,7 +4,7 @@ import { useCurrency } from "@/hooks/useCurrency"
 import { useState, useEffect, useRef } from "react"
 import { ChevronDown } from "lucide-react"
 
-export function CurrencyPicker() {
+export function CurrencyPicker({ className }: { className?: string }) {
   const { currency, setCurrency, supportedCurrencies } = useCurrency()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -25,7 +25,9 @@ export function CurrencyPicker() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+        className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+          className || "text-slate-700 hover:bg-slate-100"
+        }`}
       >
         {activeCurrency ? (
           <>
@@ -35,7 +37,7 @@ export function CurrencyPicker() {
         ) : (
           <span>{currency}</span>
         )}
-        <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+        <ChevronDown className={`h-3.5 w-3.5 ${className?.includes("text-white") ? "text-white/60" : "text-slate-400"}`} />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-lg border bg-white p-1 shadow-lg">

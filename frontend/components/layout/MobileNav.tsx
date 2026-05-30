@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,6 +17,16 @@ export function MobileNav() {
       {open ? (
         <Card className="absolute right-0 top-12 w-44 rounded-md border bg-background p-2 shadow-lg">
           <nav className="flex flex-col gap-1">
+            <button
+              onClick={() => {
+                setOpen(false);
+                window.dispatchEvent(new CustomEvent("open-search"));
+              }}
+              className="flex items-center gap-2 rounded px-3 py-2 text-sm hover:bg-muted"
+            >
+              <Search className="h-4 w-4" />
+              Search
+            </button>
             <Link href="/" className="rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
               Home
             </Link>
@@ -27,7 +37,7 @@ export function MobileNav() {
               Cities
             </Link>
             <Link href="/search" className="rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
-              Search
+              Search Page
             </Link>
             <Link href="/checkout" className="rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
               Checkout
