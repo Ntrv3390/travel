@@ -229,7 +229,7 @@ export interface SlotInventoryResponse {
 }
 
 export interface ProductsQueryParams {
-  cityCode: string;
+  cityCode?: string;
   collectionId?: string;
   categoryId?: string;
   subCategoryId?: string;

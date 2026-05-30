@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -109,25 +110,15 @@ func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
 	h.proxyGetWithService(c, h.publicService, "/v2/cities/", true)
 }
 
+var productPopularCities = []string{
+	"NEW_YORK", "PARIS", "LONDON", "DUBAI", "TOKYO",
+	"BARCELONA", "ROME", "SINGAPORE", "BANGKOK", "ISTANBUL",
+	"SYDNEY", "AMSTERDAM", "LAS_VEGAS", "SAN_FRANCISCO", "LOS_ANGELES",
+	"ORLANDO", "HONG_KONG", "MUMBAI", "CANCUN", "MIAMI",
+}
+
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 	q := c.Request.URL.Query()
-
-	cityCode := strings.TrimSpace(q.Get("cityCode"))
-	if cityCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cityCode is required"})
-		return
-	}
-
-	offset := 0
-	if v := q.Get("offset"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
-			return
-		}
-		offset = parsed
-	}
-	q.Set("offset", strconv.Itoa(offset))
 
 	limit := 20
 	if v := q.Get("limit"); v != "" {
@@ -142,11 +133,89 @@ func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 			limit = parsed
 		}
 	}
-	q.Set("limit", strconv.Itoa(limit))
 
-	c.Request.URL.RawQuery = q.Encode()
+	offset := 0
+	if v := q.Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
+			return
+		}
+		offset = parsed
+	}
 
-	h.proxyGet(c, "/v2/products", true)
+	cityCode := strings.TrimSpace(q.Get("cityCode"))
+	if cityCode != "" && cityCode != "undefined" && cityCode != "null" {
+		q.Set("offset", strconv.Itoa(offset))
+		q.Set("limit", strconv.Itoa(limit))
+		c.Request.URL.RawQuery = q.Encode()
+		h.proxyGet(c, "/v2/products", true)
+		return
+	}
+
+	h.fetchRandomProductsV2(c, limit, offset)
+}
+
+func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset int) {
+	if len(productPopularCities) == 0 {
+		c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nil})
+		return
+	}
+
+	cityIndex := offset / limit
+	if cityIndex >= len(productPopularCities) {
+		c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nil})
+		return
+	}
+
+	cityName := productPopularCities[cityIndex]
+
+	query := url.Values{}
+	query.Set("cityCode", cityName)
+	query.Set("limit", strconv.Itoa(limit))
+	query.Set("offset", "0")
+
+	upstream, err := h.service.Get(c.Request.Context(), "/v2/products", query, true)
+	if err != nil {
+		logger.Errorf("Failed to fetch products for %s: %v", cityName, err)
+		var nextOffsetVal *int
+		if cityIndex+1 < len(productPopularCities) {
+			val := offset + limit
+			nextOffsetVal = &val
+		}
+		c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nextOffsetVal})
+		return
+	}
+
+	var body struct {
+		Products []json.RawMessage `json:"products"`
+	}
+	if err := json.Unmarshal(upstream.Body, &body); err != nil {
+		logger.Errorf("Failed to parse products for %s: %v", cityName, err)
+		var nextOffsetVal *int
+		if cityIndex+1 < len(productPopularCities) {
+			val := offset + limit
+			nextOffsetVal = &val
+		}
+		c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nextOffsetVal})
+		return
+	}
+
+	allProducts := body.Products
+
+	var nextOffsetVal *int
+	if cityIndex+1 < len(productPopularCities) {
+		val := offset + limit
+		nextOffsetVal = &val
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"products":    allProducts,
+		"total":       len(allProducts),
+		"nextOffset":  nextOffsetVal,
+		"nextUrl":     nil,
+		"prevUrl":     nil,
+	})
 }
 
 func (h *HeadoutHandler) ListCategoriesV2(c *gin.Context) {

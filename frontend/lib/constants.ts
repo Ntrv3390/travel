@@ -1,4 +1,5 @@
 export const PDP_REVALIDATE_SECONDS = 3600;
+export const HOME_REVALIDATE_SECONDS = 86400;
 export const DEFAULT_PAGE_SIZE = 24;
 export const AVAILABILITY_REFRESH_MS = 30_000;
 export const CURRENCIES = ["USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "JPY"] as const;

@@ -1,11 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
-import { MapPin, Search, TrendingUp, Sparkles, Star, Award } from "lucide-react";
-import { useSearchAutocomplete } from "@/hooks/useSearchAutocomplete";
-import { SearchOverlay } from "@/components/search/SearchOverlay";
+import { TrendingUp, Sparkles, Star, Award } from "lucide-react";
 
 function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "")}K+`;
@@ -19,20 +15,6 @@ interface HeroStats {
 }
 
 export function Hero({ stats }: { stats: HeroStats }) {
-  const {
-    query,
-    setQuery,
-    grouped,
-    loading,
-    open,
-    highlightedIndex,
-    openDropdown,
-    closeDropdown,
-    handleKeyDown,
-    inputRef,
-    dropdownRef,
-  } = useSearchAutocomplete();
-
   const statItems = [
     { icon: Star, value: stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "4.8", label: "Average Rating" },
     { icon: Award, value: formatCount(stats.totalDestinations), label: "Destinations" },
@@ -99,169 +81,6 @@ export function Hero({ stats }: { stats: HeroStats }) {
             Curated tours, activities, and experiences crafted by locals. Book unique adventures in{" "}
             <span className="font-semibold text-white">{formatCount(stats.totalDestinations)} destinations</span> worldwide.
           </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.45 }}
-            className="mt-10 w-full max-w-3xl"
-          >
-            <div className="relative rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-xl">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <div className="relative flex-1">
-                  <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                  <input
-                    ref={inputRef as React.Ref<HTMLInputElement>}
-                    type="text"
-                    placeholder="Where do you want to go?"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onFocus={() => {
-                      if (query.length >= 2) openDropdown();
-                    }}
-                    onKeyDown={handleKeyDown}
-                    className="w-full rounded-xl border-0 bg-white/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                    role="combobox"
-                    aria-expanded={open}
-                    aria-label="Search"
-                    autoComplete="off"
-                  />
-                  {/* Overlay needs inverted colors for hero */}
-                  <div ref={dropdownRef as React.Ref<HTMLDivElement>} className="absolute left-0 right-0 top-full z-50 mt-2">
-                    {open && (
-                      <div className="overflow-y-auto rounded-2xl border border-slate-200/80 bg-white shadow-2xl max-h-[70vh]">
-                        {/* Loading */}
-                        {loading && (
-                          <div className="flex items-center gap-3 px-5 py-4 text-sm text-slate-500">
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-sky-500" />
-                            Searching...
-                          </div>
-                        )}
-
-                        {/* Attractions */}
-                        {grouped.attractions.length > 0 && (
-                          <div className="px-3 pb-2 pt-3">
-                            <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Attractions</p>
-                            <div className="space-y-0.5">
-                              {grouped.attractions.map((item) => (
-                                <Link
-                                  key={item.id}
-                                  href={item.url}
-                                  onClick={closeDropdown}
-                                  className="flex items-center gap-3 rounded-xl px-2 py-2 text-slate-900 transition-colors hover:bg-slate-50"
-                                >
-                                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100">
-                                    {item.imageUrl && (
-                                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium">{item.name}</p>
-                                    <p className="truncate text-xs text-slate-500">
-                                      {item.city}{item.category ? ` \u00B7 ${item.category}` : ""}
-                                    </p>
-                                  </div>
-                                  {item.price > 0 && (
-                                    <span className="shrink-0 text-sm font-semibold">
-                                      {new Intl.NumberFormat("en-US", { style: "currency", currency: item.currency, minimumFractionDigits: 0 }).format(item.price)}
-                                    </span>
-                                  )}
-                                </Link>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Cities */}
-                        {grouped.cities.length > 0 && (
-                          <div className="px-3 pb-2 pt-1">
-                            <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Cities</p>
-                            <div className="space-y-0.5">
-                              {grouped.cities.map((item) => (
-                                <Link
-                                  key={item.code}
-                                  href={item.url}
-                                  onClick={closeDropdown}
-                                  className="flex items-center gap-3 rounded-xl px-2 py-2 text-slate-900 transition-colors hover:bg-slate-50"
-                                >
-                                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100" />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium">{item.name}</p>
-                                    {item.country && <p className="text-xs text-slate-500">{item.country}</p>}
-                                  </div>
-                                </Link>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Categories */}
-                        {grouped.categories.length > 0 && (
-                          <div className="px-3 pb-2 pt-1">
-                            <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Categories</p>
-                            <div className="space-y-0.5">
-                              {grouped.categories.map((item) => (
-                                <Link
-                                  key={item.id}
-                                  href={item.url}
-                                  onClick={closeDropdown}
-                                  className="flex items-center gap-3 rounded-xl px-2 py-2 text-slate-900 transition-colors hover:bg-slate-50"
-                                >
-                                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                                    <Search className="h-5 w-5" />
-                                  </div>
-                                  <p className="text-sm font-medium">{item.name}</p>
-                                </Link>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Empty */}
-                        {query.length >= 2 && !loading && !grouped.attractions.length && !grouped.cities.length && !grouped.categories.length && (
-                          <div className="flex flex-col items-center gap-2 px-5 py-12 text-center">
-                            <Search className="h-8 w-8 text-slate-300" />
-                            <p className="text-sm font-medium text-slate-600">No results found</p>
-                            <p className="text-xs text-slate-400">Try searching for a city, attraction, or category</p>
-                          </div>
-                        )}
-
-                        {/* Initial - Popular Destinations from API */}
-                        {query.length < 2 && grouped.cities.length > 0 && (
-                          <div className="space-y-4 px-5 py-5">
-                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                              <TrendingUp className="h-3 w-3" />
-                              Popular Destinations
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {grouped.cities.map((city) => (
-                                <Link
-                                  key={city.code}
-                                  href={city.url}
-                                  onClick={closeDropdown}
-                                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-                                >
-                                  {city.name}
-                                </Link>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Link
-                  href={query.trim() ? `/search?q=${encodeURIComponent(query.trim())}` : "/search"}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/25 transition-all hover:from-sky-400 hover:to-cyan-400 hover:shadow-xl hover:shadow-sky-500/30"
-                >
-                  <Search className="h-4 w-4" />
-                  <span className="hidden sm:inline">Search</span>
-                </Link>
-              </div>
-            </div>
-          </motion.div>
 
           <motion.div
             initial={{ opacity: 0 }}

@@ -1,5 +1,5 @@
 import { env } from "@/lib/env";
-import { PDP_REVALIDATE_SECONDS } from "@/lib/constants";
+import { HOME_REVALIDATE_SECONDS, PDP_REVALIDATE_SECONDS } from "@/lib/constants";
 import { toSlug } from "@/lib/utils";
 import type { SearchParams } from "@/types/api";
 import type { BookingRequest, BookingResponse } from "@/types/booking";
@@ -7,6 +7,23 @@ import type { Experience, ExperienceOption } from "@/types/experience";
 import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse } from "@/types/product";
 
 const API_BASE = env.API_URL;
+
+// ── In-memory cache (shared across all requests, server-side only) ──
+const CACHE_TTL = HOME_REVALIDATE_SECONDS * 1000;
+interface CacheEntry { data: unknown; timestamp: number }
+const serverCache = new Map<string, CacheEntry>();
+
+async function withCache<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const entry = serverCache.get(key);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL) return entry.data as T;
+  const data = await fetcher();
+  serverCache.set(key, { data, timestamp: Date.now() });
+  return data;
+}
+
+function cacheKey(...parts: string[]): string {
+  return parts.join("::");
+}
 
 export interface ApiResult<T> {
   data: T | null;
@@ -109,29 +126,31 @@ async function readJson<T>(res: Response): Promise<ApiResult<T>> {
 }
 
 async function requestExperiences(url: string): Promise<ApiResult<{ experiences: Experience[]; count: number; page: number; limit: number; totalPages: number }>> {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    const payload = await readJson<BackendListResponse>(res);
+  return withCache(cacheKey("experiences", url), async () => {
+    try {
+      const res = await fetch(url, { next: { revalidate: HOME_REVALIDATE_SECONDS } });
+      const payload = await readJson<BackendListResponse>(res);
 
-    if (payload.error) {
-      return { data: null, error: payload.error };
+      if (payload.error) {
+        return { data: null, error: payload.error };
+      }
+
+      const backendExperiences = payload.data?.data ?? [];
+      const experiences = backendExperiences.map(normalizeExperience);
+      return {
+        data: {
+          experiences,
+          count: payload.data?.count ?? experiences.length,
+          page: payload.data?.page ?? 1,
+          limit: payload.data?.limit ?? experiences.length,
+          totalPages: payload.data?.total_pages ?? 1,
+        },
+        error: null,
+      };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
     }
-
-    const backendExperiences = payload.data?.data ?? [];
-    const experiences = backendExperiences.map(normalizeExperience);
-    return {
-      data: {
-        experiences,
-        count: payload.data?.count ?? experiences.length,
-        page: payload.data?.page ?? 1,
-        limit: payload.data?.limit ?? experiences.length,
-        totalPages: payload.data?.total_pages ?? 1,
-      },
-      error: null,
-    };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
-  }
+  });
 }
 
 export async function getTopExperiences(limit = 24, page = 1, currency = "USD") {
@@ -195,25 +214,26 @@ export async function getSupportedCurrencies() {
 }
 
 export async function getCities(offset = 0, limit = 20) {
-  try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/cities`);
-    url.searchParams.set("offset", String(offset));
-    url.searchParams.set("limit", String(limit));
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 86400 },
-    });
-    if (!res.ok) return { data: null, error: null };
-    const json = await res.json();
-    return { data: json.data ?? json, error: null };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Network error" };
-  }
+  const url = new URL(`${API_BASE}/api/v1/headout/v2/cities`);
+  url.searchParams.set("offset", String(offset));
+  url.searchParams.set("limit", String(limit));
+  const urlStr = url.toString();
+  return withCache(cacheKey("cities", urlStr), async () => {
+    try {
+      const res = await fetch(urlStr, { next: { revalidate: HOME_REVALIDATE_SECONDS } });
+      if (!res.ok) return { data: null, error: null };
+      const json = await res.json();
+      return { data: json.data ?? json, error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error.message : "Network error" };
+    }
+  });
 }
 
 export async function getProducts(params: ProductsQueryParams): Promise<ApiResult<ProductsResponse>> {
   try {
     const url = new URL(`${API_BASE}/api/v1/headout/v2/products`);
-    url.searchParams.set("cityCode", params.cityCode);
+    if (params.cityCode) url.searchParams.set("cityCode", params.cityCode);
     if (params.collectionId) url.searchParams.set("collectionId", params.collectionId);
     if (params.categoryId) url.searchParams.set("categoryId", params.categoryId);
     if (params.subCategoryId) url.searchParams.set("subCategoryId", params.subCategoryId);

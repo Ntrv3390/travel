@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { getTopExperiences, getCities } from "@/lib/api";
+import { getTopExperiencesCached, getCities } from "@/lib/cached-api";
 import { Hero } from "@/components/home/hero";
 import { TrustSection } from "@/components/home/trust-section";
 import { TrendingExperiences } from "@/components/home/trending-experiences";
@@ -11,14 +10,11 @@ import { Newsletter } from "@/components/home/newsletter";
 import type { Experience } from "@/types/experience";
 import type { City } from "@/types/api";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 86400;
 
 export default async function HomePage() {
-  const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
-
   const [experiencesResult, citiesResult] = await Promise.all([
-    getTopExperiences(50, 1, currency),
+    getTopExperiencesCached(50, 1, "INR"),
     getCities(0, 50),
   ]);
 
@@ -26,7 +22,7 @@ export default async function HomePage() {
   const citiesResponse = citiesResult.data as { cities: City[]; total: number } | null;
   const cities: City[] = citiesResponse?.cities ?? [];
 
-  const totalExperiences = experiencesResult.data?.count ?? 0;
+  const totalExperiences = 0;
   const totalDestinations = citiesResponse?.total ?? cities.length;
   const avgRating =
     experiences.length > 0

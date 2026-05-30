@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/products/ProductCard";
 import { getProducts } from "@/lib/api";
@@ -15,6 +15,7 @@ interface State {
   loading: boolean;
   error: string | null;
   initialLoading: boolean;
+  done: boolean;
 }
 
 type Action =
@@ -27,19 +28,22 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "FETCH_START":
       return { ...state, loading: true, error: null };
-    case "FETCH_SUCCESS":
+    case "FETCH_SUCCESS": {
+      const updatedProducts = action.append ? [...state.products, ...action.products] : action.products;
       return {
-        products: action.append ? [...state.products, ...action.products] : action.products,
+        products: updatedProducts,
         nextOffset: action.nextOffset,
-        total: action.total,
+        total: updatedProducts.length,
         loading: false,
         error: null,
         initialLoading: false,
+        done: action.nextOffset === null,
       };
+    }
     case "FETCH_ERROR":
       return { ...state, loading: false, error: action.error, initialLoading: false };
     case "RESET":
-      return { products: [], nextOffset: 0, total: 0, loading: false, error: null, initialLoading: true };
+      return { products: [], nextOffset: 0, total: 0, loading: false, error: null, initialLoading: true, done: false };
     default:
       return state;
   }
@@ -52,6 +56,7 @@ const initialState: State = {
   loading: false,
   error: null,
   initialLoading: true,
+  done: false,
 };
 
 interface ProductsGridProps {
@@ -62,29 +67,44 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { currency } = useCurrency();
   const fetchTick = useRef(0);
-  const offsetRef = useRef(0);
+  const offsetRef = useRef<number>(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const isFetching = useRef(false);
 
   const fetchProducts = useCallback(
-    async (append: boolean) => {
+    async (append: boolean, overrideOffset?: number) => {
+      if (isFetching.current) return;
+      isFetching.current = true;
       const tick = ++fetchTick.current;
       dispatch({ type: "FETCH_START" });
-      const offset = append ? offsetRef.current : 0;
+      const offset = overrideOffset !== undefined ? overrideOffset : append ? offsetRef.current : 0;
       const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: 20 });
-      if (tick !== fetchTick.current) return;
+      if (tick !== fetchTick.current) {
+        isFetching.current = false;
+        return;
+      }
       if (result.error) {
         dispatch({ type: "FETCH_ERROR", error: result.error });
       } else if (result.data) {
-        if (append) offsetRef.current = result.data.nextOffset ?? 0;
+        const nextOffset = result.data.nextOffset ?? null;
+        if (append) offsetRef.current = nextOffset ?? 0;
         dispatch({
           type: "FETCH_SUCCESS",
           products: result.data.products,
-          nextOffset: result.data.nextOffset,
+          nextOffset,
           total: result.data.total,
           append,
         });
+        // Auto-skip cities that returned empty (upstream 503) but still have more cities
+        if (result.data.products.length === 0 && nextOffset !== null) {
+          isFetching.current = false;
+          fetchProducts(true, nextOffset);
+          return;
+        }
       } else {
         dispatch({ type: "FETCH_ERROR", error: "No data returned" });
       }
+      isFetching.current = false;
     },
     [queryParams, currency],
   );
@@ -92,14 +112,34 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   useEffect(() => {
     offsetRef.current = 0;
     fetchTick.current = 0;
+    isFetching.current = false;
     dispatch({ type: "RESET" });
     fetchProducts(false);
   }, [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId, currency]);
 
+  useEffect(() => {
+    if (state.initialLoading || state.loading || state.nextOffset === null || state.done || state.error) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && state.nextOffset !== null && !isFetching.current) {
+          fetchProducts(true);
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [state.initialLoading, state.loading, state.nextOffset, state.done, state.error, fetchProducts]);
+
   if (state.initialLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-24">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-10 w-10 animate-spin" />
+          <p className="text-sm">Loading amazing experiences…</p>
+        </div>
       </div>
     );
   }
@@ -115,22 +155,20 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
     );
   }
 
-  if (state.products.length === 0) {
+  if (state.products.length === 0 && state.done) {
     return (
-      <div className="flex flex-col items-center gap-2 py-20 text-muted-foreground">
+      <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
+        <PackageSearch className="h-12 w-12 opacity-40" />
         <p className="text-lg font-medium">No products found</p>
-        <p className="text-sm">Try adjusting your filters or selecting a different city.</p>
+        <p className="text-sm">Check back soon for new experiences.</p>
       </div>
     );
   }
 
-  const hasMore = state.nextOffset !== null;
+  const hasMore = state.nextOffset !== null && !state.done;
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">
-        {state.total} product{state.total !== 1 ? "s" : ""} found
-      </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {state.products.map((product) => (
@@ -138,19 +176,21 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
         ))}
       </div>
 
-      {hasMore && (
-        <div className="mt-8 flex justify-center">
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => fetchProducts(true)}
-            disabled={state.loading}
-            className="min-w-40"
-          >
-            {state.loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {state.loading ? "Loading..." : "Load More"}
-          </Button>
+      {state.loading && (
+        <div className="mt-10 flex justify-center">
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-7 w-7 animate-spin" />
+            <p className="text-xs">Loading more…</p>
+          </div>
         </div>
+      )}
+
+      {hasMore && <div ref={sentinelRef} className="h-4" />}
+
+      {state.done && state.products.length > 0 && (
+        <p className="mt-10 text-center text-sm text-muted-foreground">
+          You&apos;ve seen all {state.total} products 🎉
+        </p>
       )}
     </div>
   );
