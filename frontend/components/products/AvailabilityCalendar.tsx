@@ -11,7 +11,7 @@ import type { VariantAvailability, SlotItem } from "@/types/product"
 import { cn } from "@/lib/utils"
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
@@ -70,15 +70,6 @@ export function AvailabilityCalendar() {
     fetchAvailabilities()
   }, [fetchAvailabilities])
 
-  useEffect(() => {
-    if (initialDate && availabilities.length > 0 && !slots.length && !slotsLoading) {
-      const match = availabilities.find((a) => a.date === initialDate)
-      if (match && match.availability !== "CLOSED") {
-        fetchSlots(initialDate)
-      }
-    }
-  }, [initialDate, availabilities, fetchSlots, slots.length, slotsLoading])
-
   const fetchSlots = useCallback(async (date: string) => {
     setSlotsLoading(true)
     setSlotsError(null)
@@ -98,6 +89,15 @@ export function AvailabilityCalendar() {
     }
     setSlotsLoading(false)
   }, [variantId, currency])
+
+  useEffect(() => {
+    if (initialDate && availabilities.length > 0 && !slots.length && !slotsLoading) {
+      const match = availabilities.find((a) => a.date === initialDate)
+      if (match && match.availability !== "CLOSED") {
+        fetchSlots(initialDate)
+      }
+    }
+  }, [initialDate, availabilities, fetchSlots, slots.length, slotsLoading])
 
   const handleDateClick = (dateStr: string, info: VariantAvailability | undefined) => {
     if (dateStr < todayStr()) return
