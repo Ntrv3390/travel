@@ -61,7 +61,7 @@ export default function CartPage() {
   const { toast } = useToast();
   const [bookingId, setBookingId] = useState<string | null>(null);
 
-  const items = cart?.items ?? [];
+  const items = useMemo(() => cart?.items ?? [], [cart?.items]);
   const groups = useMemo(() => groupItems(items), [items]);
   const cartTotal = groups.reduce((sum, g) => sum + g.activityTotal, 0);
 
@@ -183,6 +183,7 @@ export default function CartPage() {
                   <div className="flex items-center gap-3">
                     {group.imageUrl && (
                       <div className="relative h-12 w-12 flex-none overflow-hidden rounded-lg">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={group.imageUrl} alt={group.title} className="object-cover w-full h-full" />
                       </div>
                     )}

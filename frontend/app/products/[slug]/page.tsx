@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -19,7 +19,7 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProduct = async () => {
+  const fetchProduct = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
@@ -32,11 +32,11 @@ export default function ProductDetailPage() {
       setError("Product not found");
     }
     setLoading(false);
-  };
+  }, [id, currency]);
 
   useEffect(() => {
     fetchProduct();
-  }, [id, currency]);
+  }, [fetchProduct]);
 
   if (loading) {
     return (

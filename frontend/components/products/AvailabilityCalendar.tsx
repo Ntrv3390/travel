@@ -77,7 +77,7 @@ export function AvailabilityCalendar() {
         fetchSlots(initialDate)
       }
     }
-  }, [initialDate, availabilities])
+  }, [initialDate, availabilities, fetchSlots, slots.length, slotsLoading])
 
   const fetchSlots = useCallback(async (date: string) => {
     setSlotsLoading(true)

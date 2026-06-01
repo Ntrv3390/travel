@@ -16,12 +16,13 @@ export function GlobalSearchModal() {
     return () => window.removeEventListener("open-search", handler);
   }, []);
 
+  const { setQuery, closeDropdown } = search;
   useEffect(() => {
     if (!open) {
-      search.setQuery("");
-      search.closeDropdown();
+      setQuery("");
+      closeDropdown();
     }
-  }, [open]);
+  }, [open, setQuery, closeDropdown]);
 
   if (!open) return null;
 

@@ -30,7 +30,7 @@ export default async function ExperienceByIDPage({ params }: { params: { id: str
 
   return (
     <>
-      <PdpCurrencyReloader experienceId={result.data.headoutId} />
+      <PdpCurrencyReloader />
       {jsonLD.data ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLD.data }} /> : null}
       <ProductProvider experience={result.data} error={result.error}>
         <PdpContent />

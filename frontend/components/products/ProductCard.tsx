@@ -53,6 +53,7 @@ export function ProductCard({ product }: { product: Product }) {
       <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
         <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
           {imageUrl ? (
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl.startsWith("//") ? `https:${imageUrl}` : imageUrl}
               alt={name}

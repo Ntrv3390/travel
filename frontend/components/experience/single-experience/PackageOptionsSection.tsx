@@ -187,14 +187,14 @@ export function PackageOptionsSection() {
     () => availableDays.find((day) => day.date === selectedDate) ?? null,
     [availableDays, selectedDate],
   );
-  const visibleSlots = selectedDay?.slots ?? [];
+  const visibleSlots = useMemo(() => selectedDay?.slots ?? [], [selectedDay?.slots]);
 
   useEffect(() => {
     if (availableDays.length === 0 && selectedDate) {
       setSelectedDate("");
       setSelectedSlot("");
     }
-  }, [availableDays.length]);
+  }, [availableDays.length, selectedDate]);
   const today = useMemo(() => (clientNow ? startOfToday(clientNow) : null), [clientNow]);
 
   useEffect(() => {
