@@ -1,6 +1,14 @@
-"use client"
+﻿"use client"
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react"
 import { useRouter } from "next/navigation"
 
 interface CurrencyInfo {
@@ -12,6 +20,7 @@ interface CurrencyInfo {
 interface CurrencyContextValue {
   currency: string
   setCurrency: (code: string) => void
+  isChanging: boolean
   supportedCurrencies: CurrencyInfo[]
   formatPrice: (amount: number, currencyOverride?: string) => string
 }
@@ -19,23 +28,34 @@ interface CurrencyContextValue {
 const CurrencyContext = createContext<CurrencyContextValue>({
   currency: "USD",
   setCurrency: () => {},
+  isChanging: false,
   supportedCurrencies: [],
   formatPrice: () => "",
 })
 
 const STORAGE_KEY = "traviia_currency"
 
-export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrencyState] = useState("USD")
+export function CurrencyProvider({
+  children,
+  initialCurrency = "USD",
+}: {
+  children: ReactNode
+  initialCurrency?: string
+}) {
+  const [currency, setCurrencyState] = useState(initialCurrency)
+  const [isChanging, setIsChanging] = useState(false)
   const [supportedCurrencies, setSupportedCurrencies] = useState<CurrencyInfo[]>([])
   const router = useRouter()
+  const changingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Sync from localStorage on mount (handles case where cookie & localStorage differ)
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
+    if (saved && saved !== currency) {
       setCurrencyState(saved)
       document.cookie = `${STORAGE_KEY}=${saved};path=/;max-age=31536000;SameSite=Lax`
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -48,12 +68,35 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {})
   }, [])
 
-  const setCurrency = useCallback((code: string) => {
-    setCurrencyState(code)
-    localStorage.setItem(STORAGE_KEY, code)
-    document.cookie = `${STORAGE_KEY}=${code};path=/;max-age=31536000;SameSite=Lax`
-    router.refresh()
-  }, [router])
+  const setCurrency = useCallback(
+    (code: string) => {
+      if (code === currency) return
+
+      // Persist to storage and cookie immediately
+      setCurrencyState(code)
+      localStorage.setItem(STORAGE_KEY, code)
+      document.cookie = `${STORAGE_KEY}=${code};path=/;max-age=31536000;SameSite=Lax`
+
+      // Show loading state
+      setIsChanging(true)
+      if (changingTimerRef.current) clearTimeout(changingTimerRef.current)
+
+      // Refresh server components so they re-run with the new cookie
+      router.refresh()
+
+      // Reset loading after grace period for client components to re-fetch
+      changingTimerRef.current = setTimeout(() => {
+        setIsChanging(false)
+      }, 1800)
+    },
+    [currency, router],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (changingTimerRef.current) clearTimeout(changingTimerRef.current)
+    }
+  }, [])
 
   const formatPrice = useCallback(
     (amount: number, currencyOverride?: string) => {
@@ -73,7 +116,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, supportedCurrencies, formatPrice }}>
+    <CurrencyContext.Provider
+      value={{ currency, setCurrency, isChanging, supportedCurrencies, formatPrice }}
+    >
       {children}
     </CurrencyContext.Provider>
   )

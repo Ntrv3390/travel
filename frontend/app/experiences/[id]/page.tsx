@@ -3,10 +3,10 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductProvider } from "@/context/ProductContext";
 import { PdpContent } from "@/components/experience/PdpContent";
+import { PdpCurrencyReloader } from "@/components/experience/PdpCurrencyReloader";
 import { getExperienceById, getJSONLD } from "@/lib/api";
-import { PDP_REVALIDATE_SECONDS } from "@/lib/constants";
 
-export const revalidate = PDP_REVALIDATE_SECONDS;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const cookieStore = await cookies();
@@ -30,6 +30,7 @@ export default async function ExperienceByIDPage({ params }: { params: { id: str
 
   return (
     <>
+      <PdpCurrencyReloader experienceId={result.data.headoutId} />
       {jsonLD.data ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLD.data }} /> : null}
       <ProductProvider experience={result.data} error={result.error}>
         <PdpContent />

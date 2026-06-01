@@ -1,7 +1,8 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react"
 import useSWR, { mutate } from "swr"
+import { useCurrency } from "@/hooks/useCurrency"
 import type { Cart, CartItem } from "@/types/booking"
 
 interface CartContextValue {
@@ -13,6 +14,7 @@ interface CartContextValue {
   clearCart: () => Promise<void>
   updateCartItem: (itemId: string, updates: Record<string, unknown>) => Promise<void>
   itemCount: number
+  staleCurrency: boolean
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined)
@@ -69,6 +71,7 @@ async function fetcher(url: string, sessionId: string) {
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [sessionId, setSessionId] = useState("")
+  const { currency } = useCurrency()
 
   useEffect(() => {
     setSessionId(getSessionId())
@@ -139,8 +142,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const itemCount = cart?.totalItems ?? 0
 
+  const staleCurrency = useMemo(() => {
+    if (!cart || cart.items.length === 0) return false
+    return cart.items.some(item => item.currency !== currency)
+  }, [cart, currency])
+
   return (
-    <CartContext.Provider value={{ cart, isLoading, error, addItem, removeItem, clearCart, updateCartItem, itemCount }}>
+    <CartContext.Provider value={{ cart, isLoading, error, addItem, removeItem, clearCart, updateCartItem, itemCount, staleCurrency }}>
       {children}
     </CartContext.Provider>
   )

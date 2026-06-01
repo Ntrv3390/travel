@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Navbar } from "@/components/layout/Navbar";
@@ -18,11 +19,14 @@ export const metadata: Metadata = {
   icons: { icon: "/favicon.svg" },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const initialCurrency = cookieStore.get("traviia_currency")?.value ?? "USD";
+
   return (
     <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className={cn(GeistSans.className, "bg-background")}> 
-        <CurrencyProvider>
+      <body className={cn(GeistSans.className, "bg-background")}>
+        <CurrencyProvider initialCurrency={initialCurrency}>
           <CartProvider>
             <Toaster>
               <div className="flex min-h-screen flex-col">

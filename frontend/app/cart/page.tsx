@@ -9,7 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { CartItemCard } from "@/components/booking/CartItemCard";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCart } from "@/hooks/useCart";
+import { useCurrency } from "@/hooks/useCurrency";
 import { useToast } from "@/components/ui/toaster";
 import type { CartItem } from "@/types/booking";
 
@@ -54,7 +56,8 @@ function groupItems(items: CartItem[]): ActivityGroup[] {
 
 export default function CartPage() {
   const router = useRouter();
-  const { cart, isLoading, clearCart, updateCartItem, removeItem, itemCount } = useCart();
+  const { cart, isLoading, clearCart, updateCartItem, removeItem, itemCount, staleCurrency } = useCart();
+  const { currency, isChanging } = useCurrency();
   const { toast } = useToast();
   const [bookingId, setBookingId] = useState<string | null>(null);
 
@@ -108,13 +111,12 @@ export default function CartPage() {
       startDateTime: item.startDateTime || "",
       endDateTime: item.endDateTime || "",
       title: item.title,
-      price: String(item.priceAmount),
+      // Pass the currency of the cart item specifically, but do NOT pass price (server decides price)
       currency: item.currency,
       guestCounts: JSON.stringify(guestCounts),
       cartItemId: item.id,
       productName: item.title,
       variantName: item.title,
-      bookingPrice: String(item.priceAmount),
       imageUrl: item.imageUrl ?? "",
     });
     router.push(`/checkout?${params.toString()}`);
@@ -143,6 +145,14 @@ export default function CartPage() {
             </Button>
           )}
         </div>
+
+        {staleCurrency && !isChanging && (
+          <Alert className="mb-6 bg-amber-50 border-amber-200 text-amber-800">
+            <AlertDescription>
+              Your cart items were priced in a different currency. Prices may have changed.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {isLoading ? (
           <div className="space-y-4">
@@ -216,7 +226,7 @@ export default function CartPage() {
               <Card className="sticky bottom-4">
                 <CardContent className="flex items-center justify-between p-4">
                   <span className="font-semibold">
-                    Cart Total: <PriceDisplay amount={cartTotal} currency={items[0]?.currency || "USD"} />
+                    Cart Total: <PriceDisplay amount={cartTotal} currency={currency} showSkeleton={isChanging} />
                   </span>
                   <Button onClick={handleCheckoutAll} disabled={bookingId !== null}>
                     Checkout All

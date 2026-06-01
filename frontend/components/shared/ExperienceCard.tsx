@@ -1,22 +1,13 @@
+﻿"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Star, MapPin, Clock, XCircle, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { PriceDisplay } from "@/components/common/PriceDisplay";
+import { useCurrency } from "@/hooks/useCurrency";
 import type { Experience } from "@/types/experience";
-
-function formatPrice(price: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  } catch {
-    return `${currency} ${price.toLocaleString()}`;
-  }
-}
 
 function formatDuration(minSec: number, maxSec: number): string {
   const secs = minSec || maxSec;
@@ -28,15 +19,30 @@ function formatDuration(minSec: number, maxSec: number): string {
 }
 
 const categoryColors: Record<string, string> = {
-  "Tours": "bg-blue-100 text-blue-700 border-blue-200",
-  "Activities": "bg-green-100 text-green-700 border-green-200",
-  "Attractions": "bg-purple-100 text-purple-700 border-purple-200",
-  "Shows": "bg-amber-100 text-amber-700 border-amber-200",
-  "Food": "bg-orange-100 text-orange-700 border-orange-200",
+  Tours: "bg-blue-100 text-blue-700 border-blue-200",
+  Activities: "bg-green-100 text-green-700 border-green-200",
+  Attractions: "bg-purple-100 text-purple-700 border-purple-200",
+  Shows: "bg-amber-100 text-amber-700 border-amber-200",
+  Food: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
 export function ExperienceCard({ experience }: { experience: Experience }) {
-  const { id, headoutId, title, city, rating, reviewCount, images, options, categories, durationMinSeconds, durationMaxSeconds, cancellationPolicy, slug } = experience;
+  const { isChanging } = useCurrency();
+  const {
+    id,
+    headoutId,
+    title,
+    city,
+    rating,
+    reviewCount,
+    images,
+    options,
+    categories,
+    durationMinSeconds,
+    durationMaxSeconds,
+    cancellationPolicy,
+    slug,
+  } = experience;
 
   const imageUrl = images[0]?.url ?? "/images/fallback-experience.svg";
   const option = options[0];
@@ -61,15 +67,11 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
-
-          {/* Category badge top-left */}
           {category && (
             <Badge className={`absolute left-2 top-2 border text-xs font-medium shadow-sm ${categoryColor}`}>
               {category}
             </Badge>
           )}
-
-          {/* Duration top-right */}
           {duration && (
             <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur-sm shadow-sm">
               <Clock className="h-3 w-3" />
@@ -80,16 +82,11 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
 
         {/* Content */}
         <div className="space-y-2 p-3">
-          {/* City */}
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3" />
             <span>{city || "Unknown"}</span>
           </div>
-
-          {/* Title */}
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{title}</h3>
-
-          {/* Rating */}
           {rating > 0 && (
             <div className="flex items-center gap-1">
               <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
@@ -99,15 +96,16 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
               )}
             </div>
           )}
-
-          {/* Price */}
           {price > 0 && (
             <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-bold">{formatPrice(price, currency)}</span>
+              <PriceDisplay
+                amount={price}
+                currency={currency}
+                className="text-lg font-bold"
+                showSkeleton={isChanging}
+              />
             </div>
           )}
-
-          {/* Badges */}
           <div className="flex flex-wrap gap-1.5">
             {hasFreeCancel && (
               <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">

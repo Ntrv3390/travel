@@ -1,16 +1,47 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRef as useRefAlias } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ExperienceCard } from "@/components/shared/ExperienceCard";
+import { ExperienceCardSkeleton } from "@/components/experience/ExperienceCardSkeleton";
+import { getTopExperiences } from "@/lib/api";
+import { useCurrency } from "@/hooks/useCurrency";
 import type { Experience } from "@/types/experience";
 
-export function TrendingExperiences({ experiences }: { experiences: Experience[] }) {
+export function TrendingExperiences({ initialExperiences = [] }: { initialExperiences?: Experience[] }) {
+  const { currency, isChanging } = useCurrency();
+  const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
+  const [loading, setLoading] = useState(initialExperiences.length === 0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    // Cancel any previous in-flight request
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
+    setLoading(true);
+    getTopExperiences(50, 1, currency, { signal: abortRef.current.signal })
+      .then((result) => {
+        if (!mountedRef.current) return;
+        setExperiences(result.data?.experiences ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
+  }, [currency]);
 
   const scroll = (dir: "left" | "right") => {
     if (!scrollRef.current) return;
@@ -24,11 +55,10 @@ export function TrendingExperiences({ experiences }: { experiences: Experience[]
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
   };
 
-  if (!experiences.length) return null;
+  const showSkeletons = loading || isChanging;
 
   return (
     <section className="container py-section">
-      {/* Header */}
       <div className="mb-8 flex items-end justify-between">
         <div>
           <span className="text-xs font-semibold uppercase tracking-widest text-sky-500">Trending Now</span>
@@ -61,24 +91,29 @@ export function TrendingExperiences({ experiences }: { experiences: Experience[]
         </div>
       </div>
 
-      {/* Scrollable row */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
         className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-4 scrollbar-hide snap-x snap-mandatory"
       >
-        {experiences.map((exp, i) => (
-          <motion.div
-            key={exp.id}
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.35, delay: i * 0.04 }}
-            className="snap-start flex-shrink-0 w-64 sm:w-72"
-          >
-            <ExperienceCard experience={exp} />
-          </motion.div>
-        ))}
+        {showSkeletons
+          ? Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="snap-start flex-shrink-0 w-64 sm:w-72">
+                <ExperienceCardSkeleton />
+              </div>
+            ))
+          : experiences.map((exp, i) => (
+              <motion.div
+                key={exp.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.35, delay: i * 0.04 }}
+                className="snap-start flex-shrink-0 w-64 sm:w-72"
+              >
+                <ExperienceCard experience={exp} />
+              </motion.div>
+            ))}
       </div>
     </section>
   );

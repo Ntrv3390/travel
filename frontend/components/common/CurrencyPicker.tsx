@@ -2,7 +2,7 @@
 
 import { useCurrency } from "@/hooks/useCurrency"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Check, ChevronDown, Globe2, Search, X } from "lucide-react"
+import { Check, ChevronDown, Globe2, Search, X, Loader2 } from "lucide-react"
 
 interface CurrencyInfo {
   code: string
@@ -181,7 +181,7 @@ function CurrencyMenuContent({
 }
 
 export function CurrencyPicker({ className }: { className?: string }) {
-  const { currency, setCurrency, supportedCurrencies } = useCurrency()
+  const { currency, setCurrency, supportedCurrencies, isChanging } = useCurrency()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const ref = useRef<HTMLDivElement>(null)
@@ -264,9 +264,10 @@ export function CurrencyPicker({ className }: { className?: string }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((value) => !value)}
+        disabled={isChanging}
         className={`flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-medium transition-colors ${
           className || "text-slate-700 hover:bg-slate-100"
-        }`}
+        } ${isChanging ? "opacity-50 cursor-not-allowed" : ""}`}
         aria-expanded={open}
         aria-label="Choose currency"
       >
@@ -281,7 +282,11 @@ export function CurrencyPicker({ className }: { className?: string }) {
             <span>{currency}</span>
           </>
         )}
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""} ${iconTone}`} />
+        {isChanging ? (
+          <Loader2 className={`h-3.5 w-3.5 animate-spin ${iconTone}`} />
+        ) : (
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""} ${iconTone}`} />
+        )}
       </button>
 
       {open ? (

@@ -14,10 +14,12 @@ import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { useAvailability } from "@/hooks/useAvailability";
 import { useBookingWidget } from "@/hooks/useBookingWidget";
 import { useProduct } from "@/context/ProductContext";
+import { useCurrency } from "@/hooks/useCurrency";
 
 export function PricingBox() {
   const { state } = useProduct();
   const experience = state.experience!;
+  const { isChanging } = useCurrency();
 
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
   const [inventoryId, setInventoryId] = useState("");
@@ -50,13 +52,13 @@ export function PricingBox() {
     }
   }, [widget.date, variantId, inventoryId, availability]);
 
-  const canBook = Boolean(widget.date && variantId && (!slots.length || inventoryId) && availability && !isError);
+  const canBook = Boolean(widget.date && variantId && (!slots.length || inventoryId) && availability && !isError) && !isChanging;
 
   return (
     <Card className="sticky top-24 border-0 shadow-pricing-box">
       <CardHeader className="space-y-2">
         <p className="text-sm text-muted-foreground">From</p>
-        <PriceDisplay amount={selectedVariant?.price ?? 0} currency={selectedVariant?.currency ?? "USD"} className="text-display-xs font-bold" />
+        <PriceDisplay amount={selectedVariant?.price ?? 0} currency={selectedVariant?.currency ?? "USD"} className="text-display-xs font-bold" showSkeleton={isChanging} />
       </CardHeader>
       <CardContent className="space-y-4">
         <Separator />
@@ -70,7 +72,7 @@ export function PricingBox() {
 
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>
-          <PriceDisplay amount={widget.total} currency={selectedVariant?.currency ?? "USD"} className="font-semibold" />
+          <PriceDisplay amount={widget.total} currency={selectedVariant?.currency ?? "USD"} className="font-semibold" showSkeleton={isChanging} />
         </div>
 
         {isError ? (

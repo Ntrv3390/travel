@@ -71,21 +71,40 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   const offsetRef = useRef<number>(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const isFetching = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchProducts = useCallback(
     async (append: boolean, overrideOffset?: number) => {
+      // If we're starting a new fresh fetch (e.g. currency changed), cancel any in-flight
+      if (!append) {
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        isFetching.current = false;
+      }
+
       if (isFetching.current) return;
       isFetching.current = true;
       const tick = ++fetchTick.current;
       dispatch({ type: "FETCH_START" });
       const offset = overrideOffset !== undefined ? overrideOffset : append ? offsetRef.current : 0;
-      const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: 20 });
+      
+      const signal = abortRef.current?.signal;
+      const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: 20 }, { signal });
+      
+      // If aborted, do nothing
+      if (signal?.aborted) {
+        isFetching.current = false;
+        return;
+      }
+      
       if (tick !== fetchTick.current) {
         isFetching.current = false;
         return;
       }
+      
       if (result.error) {
-        dispatch({ type: "FETCH_ERROR", error: result.error });
+        // AbortError from fetch inside getProducts isn't handled as error
+        if (result.error !== "AbortError") dispatch({ type: "FETCH_ERROR", error: result.error });
       } else if (result.data) {
         const nextOffset = result.data.nextOffset ?? null;
         if (append) offsetRef.current = nextOffset ?? 0;
@@ -113,10 +132,12 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   useEffect(() => {
     offsetRef.current = 0;
     fetchTick.current = 0;
-    isFetching.current = false;
     dispatch({ type: "RESET" });
     fetchProducts(false);
-  }, [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId, currency]);
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId, currency, fetchProducts]);
 
   useEffect(() => {
     if (state.initialLoading || state.loading || state.nextOffset === null || state.done || state.error) return;
@@ -169,7 +190,6 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
 
   return (
     <div>
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {state.products.map((product) => (
           <ProductCard key={product.id} product={product} />

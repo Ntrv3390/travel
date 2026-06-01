@@ -10,13 +10,13 @@ import type { SearchAllResponse } from "@/types/search";
 const API_BASE = env.API_URL;
 
 // ── In-memory cache (shared across all requests, server-side only) ──
-const CACHE_TTL = HOME_REVALIDATE_SECONDS * 1000;
+const DEFAULT_CACHE_TTL = HOME_REVALIDATE_SECONDS * 1000;
 interface CacheEntry { data: unknown; timestamp: number }
 const serverCache = new Map<string, CacheEntry>();
 
-async function withCache<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+async function withCache<T>(key: string, fetcher: () => Promise<T>, ttl = DEFAULT_CACHE_TTL): Promise<T> {
   const entry = serverCache.get(key);
-  if (entry && Date.now() - entry.timestamp < CACHE_TTL) return entry.data as T;
+  if (entry && Date.now() - entry.timestamp < ttl) return entry.data as T;
   const data = await fetcher();
   serverCache.set(key, { data, timestamp: Date.now() });
   return data;
@@ -126,10 +126,10 @@ async function readJson<T>(res: Response): Promise<ApiResult<T>> {
   }
 }
 
-async function requestExperiences(url: string): Promise<ApiResult<{ experiences: Experience[]; count: number; page: number; limit: number; totalPages: number }>> {
+async function requestExperiences(url: string, options?: { signal?: AbortSignal }): Promise<ApiResult<{ experiences: Experience[]; count: number; page: number; limit: number; totalPages: number }>> {
   return withCache(cacheKey("experiences", url), async () => {
     try {
-      const res = await fetch(url, { next: { revalidate: HOME_REVALIDATE_SECONDS } });
+      const res = await fetch(url, { next: { revalidate: 300 }, signal: options?.signal });
       const payload = await readJson<BackendListResponse>(res);
 
       if (payload.error) {
@@ -151,15 +151,15 @@ async function requestExperiences(url: string): Promise<ApiResult<{ experiences:
     } catch (error) {
       return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
     }
-  });
+  }, 300000);
 }
 
-export async function getTopExperiences(limit = 24, page = 1, currency = "USD") {
+export async function getTopExperiences(limit = 24, page = 1, currency = "USD", options?: { signal?: AbortSignal }) {
   const url = new URL(`${API_BASE}/api/v1/experiences`);
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("page", String(page));
   url.searchParams.set("currencyCode", currency);
-  return requestExperiences(url.toString());
+  return requestExperiences(url.toString(), options);
 }
 
 // ── New: Popular Experiences ──
@@ -231,7 +231,7 @@ export async function getCities(offset = 0, limit = 20) {
   });
 }
 
-export async function getProducts(params: ProductsQueryParams): Promise<ApiResult<ProductsResponse>> {
+export async function getProducts(params: ProductsQueryParams, options?: { signal?: AbortSignal }): Promise<ApiResult<ProductsResponse>> {
   try {
     const url = new URL(`${API_BASE}/api/v1/headout/v2/products`);
     if (params.cityCode) url.searchParams.set("cityCode", params.cityCode);
@@ -243,7 +243,7 @@ export async function getProducts(params: ProductsQueryParams): Promise<ApiResul
     if (params.campaignName) url.searchParams.set("campaignName", params.campaignName);
     if (params.offset !== undefined) url.searchParams.set("offset", String(params.offset));
     if (params.limit !== undefined) url.searchParams.set("limit", String(params.limit));
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    const res = await fetch(url.toString(), { cache: "no-store", signal: options?.signal });
     return readJson<ProductsResponse>(res);
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : "Network request failed" };

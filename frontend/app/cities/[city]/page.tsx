@@ -38,7 +38,7 @@ export default async function CityPage({
 }) {
   if (!isValidCity(params.city)) notFound();
   const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
 
   const result = await getCityExperiences(params.city, { ...searchParams, currency });
 

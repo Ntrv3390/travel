@@ -48,9 +48,9 @@ export function TrustSection({ stats }: {
   stats: { totalExperiences: number; totalDestinations: number; avgRating: number; totalReviews: number };
 }) {
   const items = [
-    { icon: Globe2, value: stats.totalExperiences || 680, suffix: "+", label: "Experiences", color: "from-sky-500 to-cyan-500" },
-    { icon: MapPin, value: stats.totalDestinations || 500, suffix: "+", label: "Destinations", color: "from-violet-500 to-purple-500" },
-    { icon: Users, value: stats.totalReviews || 50000, suffix: "+", label: "Happy Travelers", color: "from-emerald-500 to-teal-500" },
+    { icon: Globe2, value: stats.totalExperiences || 6209, suffix: "+", label: "Experiences", color: "from-sky-500 to-cyan-500" },
+    { icon: MapPin, value: stats.totalDestinations || 211, suffix: "+", label: "Destinations", color: "from-violet-500 to-purple-500" },
+    { icon: Users, value: stats.totalReviews || 51000, suffix: "+", label: "Happy Travelers", color: "from-emerald-500 to-teal-500" },
     { icon: Star, value: Math.round((stats.avgRating || 4.8) * 10), decimal: true, badge: "/5", label: "Rating", color: "from-amber-500 to-orange-500" },
   ];
 
