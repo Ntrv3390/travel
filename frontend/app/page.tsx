@@ -1,4 +1,4 @@
-import { getTopExperiencesCached, getCities } from "@/lib/cached-api";
+import { getTopExperiences, getCities } from "@/lib/api";
 import { Hero } from "@/components/home/hero";
 import { TrustSection } from "@/components/home/trust-section";
 import { TrendingExperiences } from "@/components/home/trending-experiences";
@@ -14,7 +14,7 @@ export const revalidate = 86400;
 
 export default async function HomePage() {
   const [experiencesResult, citiesResult] = await Promise.all([
-    getTopExperiencesCached(50, 1, "INR"),
+    getTopExperiences(50, 1, "INR"),
     getCities(0, 50),
   ]);
 

@@ -22,23 +22,6 @@ services:
     networks:
       - travel-network
 
-  # Redis Cache Layer
-  cache-layer:
-    image: redis:7-alpine
-    container_name: travel-cache-layer
-    command: redis-server --appendonly yes
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - travel-network
-
   # Go Backend API
   api-gateway:
     build:
@@ -53,8 +36,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-travel_db}
       DB_SSLMODE: disable
-      REDIS_HOST: cache-layer
-      REDIS_PORT: 6379
       HEADOUT_API_KEY: ${HEADOUT_API_KEY:-}
       HEADOUT_ENV: ${HEADOUT_ENV:-sandbox}
       HEADOUT_URL: ${HEADOUT_URL:-}
@@ -82,8 +63,6 @@ services:
     depends_on:
       db-master:
         condition: service_healthy
-      cache-layer:
-        condition: service_healthy
     secrets:
       - gttd_dev_ssh_key
       - gttd_prod_ssh_key
@@ -97,7 +76,6 @@ networks:
 
 volumes:
   postgres_data:
-  redis_data:
 
 secrets:
   gttd_dev_ssh_key:

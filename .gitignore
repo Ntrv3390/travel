@@ -14,7 +14,6 @@ dist/
 build/
 bin/
 postgres_data/
-redis_data/
 
 prompt.md
 

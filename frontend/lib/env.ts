@@ -8,8 +8,6 @@ const envSchema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   NEXT_PUBLIC_API_URL: z.string().url().default(defaultApiUrl),
   HEADOUT_PUBLIC_API_URL: z.string().url().default(defaultHeadoutPublicApiUrl),
-  REDIS_URL: z.string().default("redis://localhost:6379"),
-  REDIS_CACHE_TTL: z.coerce.number().int().positive().default(86400),
 });
 
 const parsed = envSchema.safeParse({
@@ -17,8 +15,6 @@ const parsed = envSchema.safeParse({
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? defaultApiUrl,
   HEADOUT_PUBLIC_API_URL: process.env.HEADOUT_PUBLIC_API_URL ?? defaultHeadoutPublicApiUrl,
-  REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379",
-  REDIS_CACHE_TTL: process.env.REDIS_CACHE_TTL ?? 86400,
 });
 
 if (!parsed.success) {

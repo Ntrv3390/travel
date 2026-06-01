@@ -16,11 +16,6 @@ type Config struct {
 	DBPassword string
 	DBName     string
 	DBSSLMode  string
-
-	// Redis
-	RedisHost string
-	RedisPort string
-
 	// Headout API
 	HeadoutAPIKey         string
 	HeadoutURL            string
@@ -42,8 +37,6 @@ func Load() *Config {
 		DBPassword:     getEnv("DB_PASSWORD", "postgres"),
 		DBName:         getEnv("DB_NAME", "travel_db"),
 		DBSSLMode:      getEnv("DB_SSLMODE", "disable"),
-		RedisHost:      getEnv("REDIS_HOST", "cache-layer"),
-		RedisPort:      getEnv("REDIS_PORT", "6379"),
 		HeadoutAPIKey:         getEnv("HEADOUT_API_KEY", ""),
 		HeadoutURL:            getEnv("HEADOUT_URL", ""),
 		HeadoutEnvironment:    getEnv("HEADOUT_ENV", ""),
