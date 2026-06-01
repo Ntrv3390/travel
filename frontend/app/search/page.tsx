@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchFilters } from "@/components/search/SearchFilters";
 import { SearchResults } from "@/components/search/SearchResults";
@@ -51,6 +52,8 @@ export const dynamic = "force-dynamic";
 
 export default async function SearchPage({ searchParams }: { searchParams: SearchParams }) {
   const query = searchParams.q ?? "";
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
   let products: SearchProduct[] = [];
   let error: string | null = null;
 
@@ -58,6 +61,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
     try {
       const url = new URL(`${env.API_URL}/api/v1/search`);
       url.searchParams.set("q", query);
+      url.searchParams.set("currencyCode", currency);
       const res = await fetch(url.toString());
       if (res.ok) {
         const data: SearchAllResponse = await res.json();

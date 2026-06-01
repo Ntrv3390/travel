@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { SearchBar } from "@/components/search/SearchBar";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -59,6 +60,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 
 export default async function CategoryPage({ params }: { params: { slug: string } }) {
   const categoryName = params.slug.replace(/-/g, " ");
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
 
   let products: SearchProduct[] = [];
   let error: string | null = null;
@@ -66,6 +69,7 @@ export default async function CategoryPage({ params }: { params: { slug: string 
   try {
     const url = new URL(`${env.API_URL}/api/v1/search`);
     url.searchParams.set("q", categoryName);
+    url.searchParams.set("currencyCode", currency);
     const res = await fetch(url.toString());
     if (res.ok) {
       const data: SearchAllResponse = await res.json();

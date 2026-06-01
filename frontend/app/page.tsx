@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { getTopExperiences, getCities } from "@/lib/api";
 import { Hero } from "@/components/home/hero";
 import { TrustSection } from "@/components/home/trust-section";
@@ -10,11 +11,13 @@ import { Testimonials } from "@/components/home/testimonials";
 import type { Experience } from "@/types/experience";
 import type { City } from "@/types/api";
 
-export const revalidate = 86400;
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
   const [experiencesResult, citiesResult] = await Promise.all([
-    getTopExperiences(50, 1, "INR"),
+    getTopExperiences(50, 1, currency),
     getCities(0, 50),
   ]);
 

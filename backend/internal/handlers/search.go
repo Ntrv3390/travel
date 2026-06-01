@@ -77,6 +77,7 @@ type SearchResponse struct {
 
 func (h *SearchHandler) Search(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
+	currencyCode := strings.TrimSpace(c.Query("currencyCode"))
 	if q == "" {
 		popularCities := h.fetchAllCities(c)
 		if len(popularCities) > 8 {
@@ -100,18 +101,18 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		return
 	}
 
-	results := h.performSearch(c, q)
+	results := h.performSearch(c, q, currencyCode)
 
 	c.JSON(http.StatusOK, results)
 }
 
-func (h *SearchHandler) performSearch(c *gin.Context, q string) *SearchResponse {
+func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode string) *SearchResponse {
 	lower := strings.ToLower(q)
 	allCities := h.fetchAllCities(c)
 
 	matchedCities := searchFilterAndRankCities(allCities, lower)
 
-	allProducts := h.fetchProductsLive(c.Request.Context(), allCities)
+	allProducts := h.fetchProductsLive(c.Request.Context(), allCities, currencyCode)
 
 	matchedProducts := searchFilterAndRankProducts(allProducts, lower)
 	matchedCategories := searchExtractAndRankCategories(matchedProducts, lower)
@@ -194,7 +195,7 @@ func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
 	return cities
 }
 
-func (h *SearchHandler) fetchProductsLive(ctx context.Context, cities []SearchCity) []SearchProduct {
+func (h *SearchHandler) fetchProductsLive(ctx context.Context, cities []SearchCity, currencyCode string) []SearchProduct {
 	if len(cities) == 0 {
 		return nil
 	}
@@ -217,7 +218,7 @@ func (h *SearchHandler) fetchProductsLive(ctx context.Context, cities []SearchCi
 		go func(code string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			products := h.fetchProductsForCity(fetchCtx, code)
+			products := h.fetchProductsForCity(fetchCtx, code, currencyCode)
 			mu.Lock()
 			results = append(results, cityProducts{cityCode: code, products: products})
 			mu.Unlock()
@@ -238,10 +239,14 @@ func (h *SearchHandler) fetchProductsLive(ctx context.Context, cities []SearchCi
 	return allProducts
 }
 
-func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode string) []SearchProduct {
+func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode string, currencyCode string) []SearchProduct {
 	query := url.Values{}
 	query.Set("cityCode", cityCode)
-	query.Set("currencyCode", "USD")
+	if currencyCode != "" {
+		query.Set("currencyCode", strings.ToUpper(currencyCode))
+	} else {
+		query.Set("currencyCode", "USD")
+	}
 	query.Set("language", "en")
 	query.Set("limit", "50")
 	query.Set("offset", "0")

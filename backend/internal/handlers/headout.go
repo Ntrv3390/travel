@@ -144,6 +144,8 @@ func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 		offset = parsed
 	}
 
+	currencyCode := strings.TrimSpace(q.Get("currencyCode"))
+
 	cityCode := strings.TrimSpace(q.Get("cityCode"))
 	if cityCode != "" && cityCode != "undefined" && cityCode != "null" {
 		q.Set("offset", strconv.Itoa(offset))
@@ -153,10 +155,10 @@ func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 		return
 	}
 
-	h.fetchRandomProductsV2(c, limit, offset)
+	h.fetchRandomProductsV2(c, limit, offset, currencyCode)
 }
 
-func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset int) {
+func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset int, currencyCode string) {
 	if len(productPopularCities) == 0 {
 		c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nil})
 		return
@@ -172,6 +174,9 @@ func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset
 
 	query := url.Values{}
 	query.Set("cityCode", cityName)
+	if currencyCode != "" {
+		query.Set("currencyCode", strings.ToUpper(currencyCode))
+	}
 	query.Set("limit", strconv.Itoa(limit))
 	query.Set("offset", "0")
 
