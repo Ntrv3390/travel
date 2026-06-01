@@ -6,12 +6,16 @@ import { Card } from "@/components/ui/card";
 import type { Experience } from "@/types/experience";
 
 function formatPrice(price: number, currency: string): string {
-  const symbols: Record<string, string> = {
-    USD: "$", EUR: "€", GBP: "£", INR: "₹", AED: "د.إ", JPY: "¥",
-    SGD: "S$", AUD: "A$", CAD: "C$", HKD: "HK$",
-  };
-  const sym = symbols[currency] ?? currency + " ";
-  return `${sym}${price.toLocaleString()}`;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(price);
+  } catch {
+    return `${currency} ${price.toLocaleString()}`;
+  }
 }
 
 function formatDuration(minSec: number, maxSec: number): string {

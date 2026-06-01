@@ -40,6 +40,7 @@ export function ProductCard({ product }: { product: Product }) {
   const hasDiscount = discount > 0;
   const originalPrice = listingPrice?.minimumPrice?.originalPrice;
   const finalPrice = listingPrice?.minimumPrice?.finalPrice ?? pricing.headoutSellingPrice;
+  const priceCurrency = listingPrice?.currencyCode ?? currency?.code ?? selectedCurrency;
   const rating = reviewsSummary?.averageRating ?? 0;
   const reviewCount = reviewsSummary?.ratingsCount ?? 0;
   const typeColor = productTypeColors[productType] ?? "bg-gray-100 text-gray-700 border-gray-200";
@@ -93,9 +94,9 @@ export function ProductCard({ product }: { product: Product }) {
           )}
 
           <div className="flex items-baseline gap-1.5">
-            <span className="text-lg font-bold">{formatPrice(finalPrice, selectedCurrency)}</span>
+            <span className="text-lg font-bold">{formatPrice(finalPrice, priceCurrency)}</span>
             {hasDiscount && originalPrice && (
-              <span className="text-sm text-muted-foreground line-through">{formatPrice(originalPrice, selectedCurrency)}</span>
+              <span className="text-sm text-muted-foreground line-through">{formatPrice(originalPrice, priceCurrency)}</span>
             )}
           </div>
 

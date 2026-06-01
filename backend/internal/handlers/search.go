@@ -359,15 +359,7 @@ func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode strin
 
 		productType := getString(item, "productType")
 
-		currency := "USD"
-		price := 0.0
-		if pricing, ok := item["pricing"].(map[string]interface{}); ok {
-			currency = getString(pricing, "currency")
-			price = getFloat(pricing, "headoutSellingPrice")
-			if price == 0 {
-				price = getFloat(pricing, "netPrice")
-			}
-		}
+		currency, price := searchExtractPriceInfo(item, currencyCode)
 
 		rating := float32(getFloat(item, "rating", "average_rating"))
 		reviewCount := int(getFloat(item, "review_count", "ratings_count"))
@@ -388,6 +380,61 @@ func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode strin
 		})
 	}
 	return products
+}
+
+func searchExtractPriceInfo(item map[string]interface{}, requestedCurrency string) (string, float64) {
+	currency := strings.ToUpper(strings.TrimSpace(requestedCurrency))
+	if currency == "" {
+		currency = "USD"
+	}
+
+	price := 0.0
+	if pricing, ok := item["pricing"].(map[string]interface{}); ok {
+		if value := getString(pricing, "currency", "currencyCode"); value != "" {
+			currency = value
+		}
+		price = getFloat(pricing, "headoutSellingPrice", "netPrice", "price", "amount")
+	}
+
+	if listingPrice, ok := item["listingPrice"].(map[string]interface{}); ok {
+		if value := getString(listingPrice, "currencyCode", "currency"); value != "" {
+			currency = value
+		}
+		if minPrice, ok := listingPrice["minimumPrice"].(map[string]interface{}); ok {
+			if final := getFloat(minPrice, "finalPrice", "price", "amount"); final > 0 {
+				price = final
+			} else if original := getFloat(minPrice, "originalPrice"); original > 0 && price == 0 {
+				price = original
+			}
+		}
+	}
+
+	if listingPrice, ok := item["listing_price"].(map[string]interface{}); ok {
+		if value := getString(listingPrice, "currencyCode", "currency", "currency_code"); value != "" {
+			currency = value
+		}
+		if minPrice, ok := listingPrice["minimumPrice"].(map[string]interface{}); ok {
+			if final := getFloat(minPrice, "finalPrice", "price", "amount"); final > 0 {
+				price = final
+			}
+		}
+		if minPrice, ok := listingPrice["minimum_price"].(map[string]interface{}); ok {
+			if final := getFloat(minPrice, "finalPrice", "price", "amount", "final_price"); final > 0 {
+				price = final
+			}
+		}
+	}
+
+	if amount := getFloat(item, "price", "amount", "fromPrice", "from_price"); amount > 0 && price == 0 {
+		price = amount
+	}
+
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "" {
+		currency = "USD"
+	}
+
+	return currency, price
 }
 
 func searchFilterAndRankProducts(products []SearchProduct, query string) []SearchProduct {
