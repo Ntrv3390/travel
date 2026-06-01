@@ -34,6 +34,7 @@ export function SearchModal({
   onKeyDown,
 }: SearchModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = "mobile-search-results";
   const { attractions, cities, categories, popular } = grouped;
   const hasResults = attractions.length > 0 || cities.length > 0 || categories.length > 0;
   const isEmpty = query.length >= 2 && !loading && !hasResults;
@@ -87,7 +88,9 @@ export function SearchModal({
             onKeyDown={onKeyDown}
             className="h-10 w-full rounded-xl border-0 bg-slate-100 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
             role="combobox"
-            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-expanded={true}
+            aria-autocomplete="list"
             aria-label="Search"
           />
         </div>
@@ -100,7 +103,7 @@ export function SearchModal({
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto">
+      <div id={listboxId} className="flex-1 overflow-y-auto" role="listbox" aria-label="Search results">
         {loading && (
           <div className="flex items-center gap-3 px-5 py-4 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />

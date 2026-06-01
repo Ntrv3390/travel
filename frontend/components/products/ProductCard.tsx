@@ -33,6 +33,7 @@ export function ProductCard({ product }: { product: Product }) {
     hasMobileTicket,
     cancellationPolicy,
     reschedulePolicy,
+    currency,
   } = product;
 
   const imageUrl = media.find((m) => m.type === "IMAGE")?.url;
