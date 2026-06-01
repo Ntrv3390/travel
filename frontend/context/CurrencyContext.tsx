@@ -28,7 +28,6 @@ const STORAGE_KEY = "traviia_currency"
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState("USD")
   const [supportedCurrencies, setSupportedCurrencies] = useState<CurrencyInfo[]>([])
-  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       setCurrencyState(saved)
       document.cookie = `${STORAGE_KEY}=${saved};path=/;max-age=31536000;SameSite=Lax`
     }
-    setMounted(true)
   }, [])
 
   useEffect(() => {
@@ -73,10 +71,6 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     },
     [currency],
   )
-
-  if (!mounted) {
-    return <>{children}</>
-  }
 
   return (
     <CurrencyContext.Provider value={{ currency, setCurrency, supportedCurrencies, formatPrice }}>

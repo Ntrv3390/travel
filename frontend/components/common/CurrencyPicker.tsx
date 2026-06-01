@@ -101,6 +101,85 @@ function CurrencySection({
   )
 }
 
+function CurrencyMenuContent({
+  currency,
+  groupedCurrencies,
+  filteredCount,
+  onSelect,
+  onClose,
+  query,
+  setQuery,
+}: {
+  currency: string
+  groupedCurrencies: {
+    popular: CurrencyInfo[]
+    regions: Array<{ region: string; items: CurrencyInfo[] }>
+  }
+  filteredCount: number
+  onSelect: (code: string) => void
+  onClose: () => void
+  query: string
+  setQuery: (value: string) => void
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 md:px-5">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">Choose your currency</div>
+          <div className="text-xs text-slate-500">Prices update across listings, search, and product pages.</div>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 transition-colors hover:text-slate-700 md:bg-slate-50"
+          aria-label="Close currency menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="border-b border-slate-200 px-4 py-3 md:px-5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search currency or code"
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+          />
+        </div>
+      </div>
+
+      <div className="max-h-[72vh] overflow-y-auto px-4 py-4 md:max-h-[32rem] md:px-5">
+        <div className="space-y-5">
+          <CurrencySection
+            title="Popular"
+            items={groupedCurrencies.popular}
+            selectedCurrency={currency}
+            onSelect={onSelect}
+          />
+
+          {groupedCurrencies.regions.map((section) => (
+            <CurrencySection
+              key={section.region}
+              title={section.region}
+              items={section.items}
+              selectedCurrency={currency}
+              onSelect={onSelect}
+            />
+          ))}
+
+          {filteredCount === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+              <div className="text-sm font-medium text-slate-700">No currencies found</div>
+              <div className="mt-1 text-xs text-slate-500">Try a code like `EUR` or `AED`.</div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </>
+  )
+}
+
 export function CurrencyPicker({ className }: { className?: string }) {
   const { currency, setCurrency, supportedCurrencies } = useCurrency()
   const [open, setOpen] = useState(false)
@@ -209,60 +288,28 @@ export function CurrencyPicker({ className }: { className?: string }) {
         <>
           <div className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[2px] md:hidden" />
 
-          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[2rem] border border-slate-200 bg-slate-50 shadow-2xl md:absolute md:right-0 md:top-full md:mt-2 md:w-[min(42rem,92vw)] md:rounded-[1.5rem] md:border md:bg-white">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 md:px-5">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">Choose your currency</div>
-                <div className="text-xs text-slate-500">Prices update across listings, search, and product pages.</div>
-              </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 transition-colors hover:text-slate-700 md:bg-slate-50"
-                aria-label="Close currency menu"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[2rem] border border-slate-200 bg-slate-50 shadow-2xl md:hidden">
+            <CurrencyMenuContent
+              currency={currency}
+              groupedCurrencies={groupedCurrencies}
+              filteredCount={filteredCurrencies.length}
+              onSelect={handleSelect}
+              onClose={() => setOpen(false)}
+              query={query}
+              setQuery={setQuery}
+            />
+          </div>
 
-            <div className="border-b border-slate-200 px-4 py-3 md:px-5">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search currency or code"
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
-                />
-              </div>
-            </div>
-
-            <div className="max-h-[72vh] overflow-y-auto px-4 py-4 md:max-h-[32rem] md:px-5">
-              <div className="space-y-5">
-                <CurrencySection
-                  title="Popular"
-                  items={groupedCurrencies.popular}
-                  selectedCurrency={currency}
-                  onSelect={handleSelect}
-                />
-
-                {groupedCurrencies.regions.map((section) => (
-                  <CurrencySection
-                    key={section.region}
-                    title={section.region}
-                    items={section.items}
-                    selectedCurrency={currency}
-                    onSelect={handleSelect}
-                  />
-                ))}
-
-                {filteredCurrencies.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
-                    <div className="text-sm font-medium text-slate-700">No currencies found</div>
-                    <div className="mt-1 text-xs text-slate-500">Try a code like `EUR` or `AED`.</div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+          <div className="absolute right-0 top-full z-50 mt-2 hidden w-[min(42rem,92vw)] rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl md:block">
+            <CurrencyMenuContent
+              currency={currency}
+              groupedCurrencies={groupedCurrencies}
+              filteredCount={filteredCurrencies.length}
+              onSelect={handleSelect}
+              onClose={() => setOpen(false)}
+              query={query}
+              setQuery={setQuery}
+            />
           </div>
         </>
       ) : null}
