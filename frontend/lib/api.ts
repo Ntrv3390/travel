@@ -127,31 +127,29 @@ async function readJson<T>(res: Response): Promise<ApiResult<T>> {
 }
 
 async function requestExperiences(url: string, options?: { signal?: AbortSignal }): Promise<ApiResult<{ experiences: Experience[]; count: number; page: number; limit: number; totalPages: number }>> {
-  return withCache(cacheKey("experiences", url), async () => {
-    try {
-      const res = await fetch(url, { next: { revalidate: 300 }, signal: options?.signal });
-      const payload = await readJson<BackendListResponse>(res);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: options?.signal });
+    const payload = await readJson<BackendListResponse>(res);
 
-      if (payload.error) {
-        return { data: null, error: payload.error };
-      }
-
-      const backendExperiences = payload.data?.data ?? [];
-      const experiences = backendExperiences.map(normalizeExperience);
-      return {
-        data: {
-          experiences,
-          count: payload.data?.count ?? experiences.length,
-          page: payload.data?.page ?? 1,
-          limit: payload.data?.limit ?? experiences.length,
-          totalPages: payload.data?.total_pages ?? 1,
-        },
-        error: null,
-      };
-    } catch (error) {
-      return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+    if (payload.error) {
+      return { data: null, error: payload.error };
     }
-  }, 300000);
+
+    const backendExperiences = payload.data?.data ?? [];
+    const experiences = backendExperiences.map(normalizeExperience);
+    return {
+      data: {
+        experiences,
+        count: payload.data?.count ?? experiences.length,
+        page: payload.data?.page ?? 1,
+        limit: payload.data?.limit ?? experiences.length,
+        totalPages: payload.data?.total_pages ?? 1,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
 }
 
 export async function getTopExperiences(limit = 24, page = 1, currency = "USD", options?: { signal?: AbortSignal }) {
@@ -374,7 +372,7 @@ export async function getExperience(city: string, slug: string, currencyCode?: s
     const url = new URL(`${API_BASE}/api/v1/experiences/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`);
     if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
     const res = await fetch(url.toString(), {
-      next: { revalidate: PDP_REVALIDATE_SECONDS },
+      cache: "no-store",
     });
     const payload = await readJson<BackendSingleResponse>(res);
     if (payload.error) {
@@ -391,7 +389,7 @@ export async function getExperienceById(id: string, currencyCode?: string): Prom
     const url = new URL(`${API_BASE}/api/v1/experiences/id/${encodeURIComponent(id)}`);
     if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
     const res = await fetch(url.toString(), {
-      next: { revalidate: PDP_REVALIDATE_SECONDS },
+      cache: "no-store",
     });
     const payload = await readJson<BackendSingleResponse>(res);
     if (payload.error) {
