@@ -97,7 +97,7 @@ function normalizeExperience(raw: BackendExperience): Experience {
     rating: raw.rating ?? 0,
     reviewCount: raw.review_count ?? 0,
     images: [{ url: imageUrl, caption: raw.title }],
-    operatorName: "Traviia",
+    operatorName: "Triipzy",
     categories: raw.category ? [raw.category] : [],
     languages: [],
     durationMinSeconds: 0,
@@ -364,9 +364,11 @@ export async function searchExperiences(params: SearchParams) {
   return requestExperiences(url.toString());
 }
 
-export async function getExperience(city: string, slug: string): Promise<ApiResult<Experience>> {
+export async function getExperience(city: string, slug: string, currencyCode?: string): Promise<ApiResult<Experience>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/experiences/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`, {
+    const url = new URL(`${API_BASE}/api/v1/experiences/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`);
+    if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
+    const res = await fetch(url.toString(), {
       next: { revalidate: PDP_REVALIDATE_SECONDS },
     });
     const payload = await readJson<BackendSingleResponse>(res);
@@ -379,9 +381,11 @@ export async function getExperience(city: string, slug: string): Promise<ApiResu
   }
 }
 
-export async function getExperienceById(id: string): Promise<ApiResult<Experience>> {
+export async function getExperienceById(id: string, currencyCode?: string): Promise<ApiResult<Experience>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/experiences/by-id/${encodeURIComponent(id)}`, {
+    const url = new URL(`${API_BASE}/api/v1/experiences/id/${encodeURIComponent(id)}`);
+    if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
+    const res = await fetch(url.toString(), {
       next: { revalidate: PDP_REVALIDATE_SECONDS },
     });
     const payload = await readJson<BackendSingleResponse>(res);

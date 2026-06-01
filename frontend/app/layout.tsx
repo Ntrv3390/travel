@@ -12,7 +12,7 @@ import { env } from "@/lib/env";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Traviia - Experiences Worth Having", template: "%s | Traviia" },
+  title: { default: "Triipzy - Experiences Worth Having", template: "%s | Triipzy" },
   description: "Book tours, activities and experiences worldwide.",
   metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL),
   icons: { icon: "/favicon.svg" },

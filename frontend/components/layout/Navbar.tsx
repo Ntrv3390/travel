@@ -66,7 +66,7 @@ export function Navbar() {
               isSolid ? "text-brand-700" : "text-white"
             }`}
           >
-            Travel
+            Triipzy
           </Button>
           <div className="hidden flex-1 md:block">
             <SearchBar compact />

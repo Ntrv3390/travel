@@ -1,7 +1,7 @@
 {
-  "name": "travel-web",
+  "name": "triipzy-web",
   "version": "1.0.0",
-  "description": "Travel marketplace web application",
+  "description": "Triipzy - Experiences marketplace",
   "private": true,
   "scripts": {
     "dev": "next dev",

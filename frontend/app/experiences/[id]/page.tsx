@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductProvider } from "@/context/ProductContext";
 import { PdpContent } from "@/components/experience/PdpContent";
@@ -8,7 +9,9 @@ import { PDP_REVALIDATE_SECONDS } from "@/lib/constants";
 export const revalidate = PDP_REVALIDATE_SECONDS;
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const result = await getExperienceById(params.id);
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const result = await getExperienceById(params.id, currency);
   if (!result.data) return {};
 
   return {
@@ -18,7 +21,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 }
 
 export default async function ExperienceByIDPage({ params }: { params: { id: string } }) {
-  const result = await getExperienceById(params.id);
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const result = await getExperienceById(params.id, currency);
   if (!result.data) notFound();
 
   const jsonLD = await getJSONLD(result.data.headoutId);

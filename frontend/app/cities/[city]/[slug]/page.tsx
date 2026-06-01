@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductProvider } from "@/context/ProductContext";
 import { PdpContent } from "@/components/experience/PdpContent";
@@ -13,7 +14,9 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: { params: { city: string; slug: string } }): Promise<Metadata> {
-  const result = await getExperience(params.city, params.slug);
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const result = await getExperience(params.city, params.slug, currency);
   if (!result.data) return {};
 
   return {
@@ -32,7 +35,9 @@ export async function generateMetadata({ params }: { params: { city: string; slu
 }
 
 export default async function PDPPage({ params }: { params: { city: string; slug: string } }) {
-  const result = await getExperience(params.city, params.slug);
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const result = await getExperience(params.city, params.slug, currency);
   if (!result.data) notFound();
 
   const jsonLD = await getJSONLD(result.data.headoutId);

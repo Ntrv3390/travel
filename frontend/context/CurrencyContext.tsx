@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react"
+import { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 
 interface CurrencyInfo {
@@ -17,7 +17,7 @@ interface CurrencyContextValue {
 }
 
 const CurrencyContext = createContext<CurrencyContextValue>({
-  currency: "INR",
+  currency: "USD",
   setCurrency: () => {},
   supportedCurrencies: [],
   formatPrice: () => "",
@@ -26,11 +26,10 @@ const CurrencyContext = createContext<CurrencyContextValue>({
 const STORAGE_KEY = "traviia_currency"
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrencyState] = useState("INR")
+  const [currency, setCurrencyState] = useState("USD")
   const [supportedCurrencies, setSupportedCurrencies] = useState<CurrencyInfo[]>([])
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -55,10 +54,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     setCurrencyState(code)
     localStorage.setItem(STORAGE_KEY, code)
     document.cookie = `${STORAGE_KEY}=${code};path=/;max-age=31536000;SameSite=Lax`
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      router.refresh()
-    }, 500)
+    router.refresh()
   }, [router])
 
   const formatPrice = useCallback(
