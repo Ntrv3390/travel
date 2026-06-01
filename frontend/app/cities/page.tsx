@@ -4,6 +4,8 @@ import type { CitiesResponse } from "@/types/api";
 
 const PAGE_SIZE = 20;
 
+export const dynamic = "force-dynamic";
+
 export default async function CitiesPage() {
   const result = await getCities(0, PAGE_SIZE);
   const data = result.data as CitiesResponse | null;

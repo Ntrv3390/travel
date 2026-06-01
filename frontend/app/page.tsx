@@ -6,7 +6,7 @@ import { Destinations } from "@/components/home/destinations";
 import { Categories } from "@/components/home/categories";
 import { WhyTriipzy } from "@/components/home/why-triipzy";
 import { Testimonials } from "@/components/home/testimonials";
-import { Newsletter } from "@/components/home/newsletter";
+// import { Newsletter } from "@/components/home/newsletter";
 import type { Experience } from "@/types/experience";
 import type { City } from "@/types/api";
 
@@ -39,7 +39,7 @@ export default async function HomePage() {
       <Categories />
       <WhyTriipzy />
       <Testimonials />
-      <Newsletter />
+      {/* <Newsletter /> */}
     </>
   );
 }
