@@ -5,6 +5,7 @@ import type { SearchParams } from "@/types/api";
 import type { BookingRequest, BookingResponse } from "@/types/booking";
 import type { Experience, ExperienceOption } from "@/types/experience";
 import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse } from "@/types/product";
+import type { SearchAllResponse } from "@/types/search";
 
 const API_BASE = env.API_URL;
 
@@ -309,14 +310,18 @@ export async function getProductById(
   }
 }
 
-import type { SearchAllResponse } from "@/types/search";
-
-export async function searchAll(q: string, signal?: AbortSignal): Promise<SearchAllResponse | null> {
+export async function searchAll(
+  q: string,
+  options?: { signal?: AbortSignal; currencyCode?: string },
+): Promise<SearchAllResponse | null> {
   try {
     const url = new URL(`${API_BASE}/api/v1/search`);
     url.searchParams.set("q", q);
+    if (options?.currencyCode) {
+      url.searchParams.set("currencyCode", options.currencyCode);
+    }
     const res = await fetch(url.toString(), {
-      signal,
+      signal: options?.signal,
     });
     if (!res.ok) return null;
     return res.json();

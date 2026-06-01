@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useMemo, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import type { Experience } from "@/types/experience"
 import type { SingleExperienceContent } from "@/components/experience/single-experience/types"
 
@@ -41,6 +41,16 @@ export function ProductProvider({
     isLoading,
     error,
   })
+
+  useEffect(() => {
+    setState({
+      experience,
+      relatedExperiences,
+      singleExperienceContent,
+      isLoading,
+      error,
+    })
+  }, [experience, relatedExperiences, singleExperienceContent, isLoading, error])
 
   const updateProduct = (partial: Partial<ProductState>) => {
     setState((prev) => ({ ...prev, ...partial }))

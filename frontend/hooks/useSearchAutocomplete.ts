@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useCurrency } from "@/hooks/useCurrency";
 import { searchAll } from "@/lib/api";
 import type { SearchAllResponse, SearchProduct, SearchCity, SearchCategory, SearchSuggestion } from "@/types/search";
 
@@ -41,6 +42,7 @@ function normalizeQuery(q: string): string {
 }
 
 export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteReturn {
+  const { currency } = useCurrency();
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
     results: null,
@@ -87,12 +89,12 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
     if (state.query !== "") return;
     let cancelled = false;
     (async () => {
-      const data = await searchAll("");
+      const data = await searchAll("", { currencyCode: currency });
       if (cancelled) return;
       setState((prev) => ({ ...prev, results: data, loading: false }));
     })();
     return () => { cancelled = true; };
-  }, [state.query]);
+  }, [state.query, currency]);
 
   useEffect(() => {
     const normalized = normalizeQuery(state.query);
@@ -109,7 +111,10 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
 
       setState((prev) => ({ ...prev, loading: true }));
 
-      const data = await searchAll(state.query, controller.signal);
+      const data = await searchAll(state.query, {
+        signal: controller.signal,
+        currencyCode: currency,
+      });
       if (controller.signal.aborted) return;
 
       setState((prev) => ({
@@ -124,7 +129,7 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [state.query]);
+  }, [state.query, currency]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

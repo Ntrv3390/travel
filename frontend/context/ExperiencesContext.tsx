@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useMemo, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import type { Experience } from "@/types/experience"
 
 interface ExperiencesState {
@@ -45,6 +45,17 @@ export function ExperiencesProvider({
     isLoading,
     error,
   })
+
+  useEffect(() => {
+    setState({
+      experiences: initialExperiences,
+      totalCount,
+      page,
+      totalPages,
+      isLoading,
+      error,
+    })
+  }, [initialExperiences, totalCount, page, totalPages, isLoading, error])
 
   const updateExperiences = (partial: Partial<ExperiencesState>) => {
     setState((prev) => ({ ...prev, ...partial }))
