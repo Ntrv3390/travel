@@ -23,7 +23,7 @@ interface SlotPanelProps {
 export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: SlotPanelProps) {
   const { formatPrice, currency } = useCurrency()
   const { cart, addItem, updateCartItem } = useCartContext()
-  const { productId, productName, variantId, variantName, imageUrl, initialGuests, cartItemId } = useProductDetail()
+  const { productId, productName, variantId, variantName, imageUrl, initialGuests } = useProductDetail()
   const { toast } = useToast()
   const router = useRouter()
   const [guests, setGuests] = useState<Record<string, number>>(initialGuests ?? { ADULT: 1 })

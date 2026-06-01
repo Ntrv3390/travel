@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useCallback } from "react";
-import { Search, MapPin, TrendingUp, Loader2, X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Search, MapPin, TrendingUp, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SearchProduct, SearchCity, SearchCategory, SearchSuggestion } from "@/types/search";
 
@@ -34,8 +34,6 @@ export function SearchOverlay({
   onClose,
   onKeyDown,
   dropdownRef,
-  inputRef,
-  setQuery,
 }: SearchOverlayProps) {
   const { attractions, cities, categories, popular } = grouped;
   const hasResults = attractions.length > 0 || cities.length > 0 || categories.length > 0;
@@ -82,8 +80,6 @@ export function SearchOverlay({
                   item={item}
                   highlighted={highlighted}
                   onSelect={onClose}
-                  inputRef={inputRef}
-                  setQuery={setQuery}
                 />
               );
             })}
@@ -106,8 +102,6 @@ export function SearchOverlay({
                   item={item}
                   highlighted={highlighted}
                   onSelect={onClose}
-                  inputRef={inputRef}
-                  setQuery={setQuery}
                 />
               );
             })}
@@ -130,8 +124,6 @@ export function SearchOverlay({
                   item={item}
                   highlighted={highlighted}
                   onSelect={onClose}
-                  inputRef={inputRef}
-                  setQuery={setQuery}
                 />
               );
             })}
@@ -154,8 +146,6 @@ export function SearchOverlay({
                   item={item}
                   highlighted={highlighted}
                   onSelect={onClose}
-                  inputRef={inputRef}
-                  setQuery={setQuery}
                 />
               );
             })}
@@ -225,14 +215,10 @@ function SearchProductItem({
   item,
   highlighted,
   onSelect,
-  inputRef,
-  setQuery,
 }: {
   item: SearchProduct;
   highlighted: boolean;
   onSelect: () => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  setQuery: (q: string) => void;
 }) {
   const ref = useRef<HTMLAnchorElement>(null);
 
@@ -282,14 +268,10 @@ function SearchCityItem({
   item,
   highlighted,
   onSelect,
-  inputRef,
-  setQuery,
 }: {
   item: SearchCity;
   highlighted: boolean;
   onSelect: () => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  setQuery: (q: string) => void;
 }) {
   const ref = useRef<HTMLAnchorElement>(null);
 
@@ -332,14 +314,10 @@ function SearchCategoryItem({
   item,
   highlighted,
   onSelect,
-  inputRef,
-  setQuery,
 }: {
   item: SearchCategory;
   highlighted: boolean;
   onSelect: () => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  setQuery: (q: string) => void;
 }) {
   const ref = useRef<HTMLAnchorElement>(null);
 
@@ -376,14 +354,10 @@ function SearchSuggestionItem({
   item,
   highlighted,
   onSelect,
-  inputRef,
-  setQuery,
 }: {
   item: SearchSuggestion;
   highlighted: boolean;
   onSelect: () => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  setQuery: (q: string) => void;
 }) {
   const ref = useRef<HTMLAnchorElement>(null);
 

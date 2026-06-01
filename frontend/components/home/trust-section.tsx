@@ -5,11 +5,6 @@ import { motion, useInView } from "framer-motion";
 import { CountUp } from "countup.js";
 import { Globe2, MapPin, Users, Star } from "lucide-react";
 
-function formatCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`;
-  return String(n);
-}
-
 function StatCard({ icon: Icon, value, suffix, decimal, badge, label, color }: {
   icon: typeof Globe2; value: number; suffix?: string; decimal?: boolean; badge?: string; label: string; color: string;
 }) {

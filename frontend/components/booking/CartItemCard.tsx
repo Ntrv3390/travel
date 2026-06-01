@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PriceDisplay } from "@/components/common/PriceDisplay"
-import { useToast } from "@/components/ui/toaster"
+
 import { toSlug } from "@/lib/utils"
 import type { CartItem } from "@/types/booking"
 
@@ -42,7 +42,7 @@ interface CartItemCardProps {
 }
 
 export function CartItemCard({ item, onUpdateGuest, onRemove }: CartItemCardProps) {
-  const { toast } = useToast()
+
 
   const guestCounts = item.guestCounts ?? { ADULT: item.adults }
   if (item.children > 0 && !guestCounts.CHILD) {

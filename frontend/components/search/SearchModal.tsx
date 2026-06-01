@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, MapPin, TrendingUp, Loader2, X, ArrowLeft } from "lucide-react";
+import { Search, MapPin, TrendingUp, Loader2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SearchProduct, SearchCity, SearchCategory, SearchSuggestion } from "@/types/search";
 

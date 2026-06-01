@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Star, MapPin, Clock, Ticket, XCircle, Zap } from "lucide-react";
+import Image from "next/image";
+import { Star, MapPin, Clock, XCircle, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { Experience } from "@/types/experience";
@@ -49,11 +50,12 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
       <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
         {/* Image */}
         <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
-          <img
+          <Image
             src={imageUrl.startsWith("//") ? `https:${imageUrl}` : imageUrl}
             alt={title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
 
           {/* Category badge top-left */}
