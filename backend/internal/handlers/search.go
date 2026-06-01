@@ -17,9 +17,32 @@ import (
 	"github.com/travel/backend/pkg/logger"
 )
 
+const (
+	searchCitiesCacheTTL    = 6 * time.Hour
+	searchProductsCacheTTL  = 10 * time.Minute
+	searchProductCityLimit  = 10
+)
+
 type SearchHandler struct {
 	headoutProxySvc *services.HeadoutProxyService
 }
+
+type cachedCitiesResult struct {
+	cities     []SearchCity
+	expiresAt  time.Time
+}
+
+type cachedProductsResult struct {
+	products   []SearchProduct
+	expiresAt  time.Time
+}
+
+var (
+	searchCitiesCacheMu sync.RWMutex
+	searchCitiesCache   cachedCitiesResult
+	searchProductsCacheMu sync.RWMutex
+	searchProductsCache = make(map[string]cachedProductsResult)
+)
 
 func NewSearchHandler() *SearchHandler {
 	cfg := config.Load()
@@ -112,7 +135,7 @@ func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode str
 
 	matchedCities := searchFilterAndRankCities(allCities, lower)
 
-	allProducts := h.fetchProductsLive(c.Request.Context(), allCities, currencyCode)
+	allProducts := h.fetchProductsLive(c.Request.Context(), currencyCode)
 
 	matchedProducts := searchFilterAndRankProducts(allProducts, lower)
 	matchedCategories := searchExtractAndRankCategories(matchedProducts, lower)
@@ -137,6 +160,14 @@ func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode str
 }
 
 func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
+	searchCitiesCacheMu.RLock()
+	if time.Now().Before(searchCitiesCache.expiresAt) && len(searchCitiesCache.cities) > 0 {
+		cached := append([]SearchCity(nil), searchCitiesCache.cities...)
+		searchCitiesCacheMu.RUnlock()
+		return cached
+	}
+	searchCitiesCacheMu.RUnlock()
+
 	var cities []SearchCity
 	limit := 200
 	offset := 0
@@ -192,27 +223,44 @@ func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
 		offset += limit
 	}
 
+	searchCitiesCacheMu.Lock()
+	searchCitiesCache = cachedCitiesResult{
+		cities: append([]SearchCity(nil), cities...),
+		expiresAt: time.Now().Add(searchCitiesCacheTTL),
+	}
+	searchCitiesCacheMu.Unlock()
+
 	return cities
 }
 
-func (h *SearchHandler) fetchProductsLive(ctx context.Context, cities []SearchCity, currencyCode string) []SearchProduct {
-	if len(cities) == 0 {
-		return nil
+func (h *SearchHandler) fetchProductsLive(ctx context.Context, currencyCode string) []SearchProduct {
+	cacheKey := strings.ToUpper(strings.TrimSpace(currencyCode))
+	if cacheKey == "" {
+		cacheKey = "USD"
 	}
+
+	searchProductsCacheMu.RLock()
+	if cached, ok := searchProductsCache[cacheKey]; ok && time.Now().Before(cached.expiresAt) {
+		products := append([]SearchProduct(nil), cached.products...)
+		searchProductsCacheMu.RUnlock()
+		return products
+	}
+	searchProductsCacheMu.RUnlock()
 
 	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	type cityProducts struct {
-		cityCode string
-		products []SearchProduct
-	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 20)
-	results := make([]cityProducts, 0, len(cities))
+	sem := make(chan struct{}, 6)
+	results := make([][]SearchProduct, 0, searchProductCityLimit)
 
-	for _, city := range cities {
+	cityCodes := productPopularCities
+	if len(cityCodes) > searchProductCityLimit {
+		cityCodes = cityCodes[:searchProductCityLimit]
+	}
+
+	for _, cityCode := range cityCodes {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(code string) {
@@ -220,22 +268,30 @@ func (h *SearchHandler) fetchProductsLive(ctx context.Context, cities []SearchCi
 			defer func() { <-sem }()
 			products := h.fetchProductsForCity(fetchCtx, code, currencyCode)
 			mu.Lock()
-			results = append(results, cityProducts{cityCode: code, products: products})
+			results = append(results, products)
 			mu.Unlock()
-		}(city.Code)
+		}(cityCode)
 	}
 	wg.Wait()
 
 	allProducts := make([]SearchProduct, 0)
 	seen := make(map[string]bool)
-	for _, r := range results {
-		for _, p := range r.products {
+	for _, cityProducts := range results {
+		for _, p := range cityProducts {
 			if !seen[p.ID] {
 				seen[p.ID] = true
 				allProducts = append(allProducts, p)
 			}
 		}
 	}
+
+	searchProductsCacheMu.Lock()
+	searchProductsCache[cacheKey] = cachedProductsResult{
+		products: append([]SearchProduct(nil), allProducts...),
+		expiresAt: time.Now().Add(searchProductsCacheTTL),
+	}
+	searchProductsCacheMu.Unlock()
+
 	return allProducts
 }
 

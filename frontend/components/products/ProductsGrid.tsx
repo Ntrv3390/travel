@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Loader2, PackageSearch } from "lucide-react";
+import { PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/products/ProductCard";
+import { ProductCardSkeleton } from "@/components/products/ProductCardSkeleton";
 import { getProducts } from "@/lib/api";
 import { useCurrency } from "@/hooks/useCurrency";
 import type { Product, ProductsQueryParams } from "@/types/product";
@@ -135,11 +136,10 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
 
   if (state.initialLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="h-10 w-10 animate-spin" />
-          <p className="text-sm">Loading amazing experiences…</p>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <ProductCardSkeleton key={index} />
+        ))}
       </div>
     );
   }
@@ -177,11 +177,10 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
       </div>
 
       {state.loading && (
-        <div className="mt-10 flex justify-center">
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-7 w-7 animate-spin" />
-            <p className="text-xs">Loading more…</p>
-          </div>
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <ProductCardSkeleton key={`loading-${index}`} />
+          ))}
         </div>
       )}
 

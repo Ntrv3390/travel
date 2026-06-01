@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { Star, ClipboardCheck, XCircle, RefreshCw, MapPin, Zap, Ticket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { useCurrency } from "@/hooks/useCurrency";
 import { toSlug } from "@/lib/utils";
 import type { Product } from "@/types/product";
 
@@ -16,6 +19,7 @@ const productTypeColors: Record<string, string> = {
 };
 
 export function ProductCard({ product }: { product: Product }) {
+  const { currency: selectedCurrency, formatPrice } = useCurrency();
   const {
     id,
     name,
@@ -37,7 +41,7 @@ export function ProductCard({ product }: { product: Product }) {
   const hasDiscount = discount > 0;
   const originalPrice = listingPrice?.minimumPrice?.originalPrice;
   const finalPrice = listingPrice?.minimumPrice?.finalPrice ?? pricing.headoutSellingPrice;
-  const symbol = currency?.localSymbol ?? "$";
+  const priceCurrency = listingPrice?.currencyCode ?? currency?.code ?? selectedCurrency;
   const rating = reviewsSummary?.averageRating ?? 0;
   const reviewCount = reviewsSummary?.ratingsCount ?? 0;
   const typeColor = productTypeColors[productType] ?? "bg-gray-100 text-gray-700 border-gray-200";
@@ -91,9 +95,9 @@ export function ProductCard({ product }: { product: Product }) {
           )}
 
           <div className="flex items-baseline gap-1.5">
-            <span className="text-lg font-bold">{symbol}{finalPrice.toFixed(2)}</span>
+            <span className="text-lg font-bold">{formatPrice(finalPrice, priceCurrency)}</span>
             {hasDiscount && originalPrice && (
-              <span className="text-sm text-muted-foreground line-through">{symbol}{originalPrice.toFixed(2)}</span>
+              <span className="text-sm text-muted-foreground line-through">{formatPrice(originalPrice, priceCurrency)}</span>
             )}
           </div>
 
