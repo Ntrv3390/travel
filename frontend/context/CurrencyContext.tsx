@@ -74,7 +74,11 @@ export function CurrencyProvider({
 
       // Persist to storage and cookie immediately
       setCurrencyState(code)
-      localStorage.setItem(STORAGE_KEY, code)
+      try {
+        localStorage.setItem(STORAGE_KEY, code)
+      } catch {
+        // localStorage may throw in private/incognito mode on mobile
+      }
       document.cookie = `${STORAGE_KEY}=${code};path=/;max-age=31536000;SameSite=Lax`
 
       // Show loading state

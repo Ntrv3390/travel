@@ -191,6 +191,7 @@ export function CurrencyPicker({ className }: { className?: string }) {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
+      if (window.innerWidth < 768) return
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false)
       }
@@ -293,7 +294,7 @@ export function CurrencyPicker({ className }: { className?: string }) {
       {open ? (
         <>
           {createPortal(
-            <div className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[2px] md:hidden" />,
+            <div className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[2px] md:hidden" onClick={() => setOpen(false)} />,
             document.body,
           )}
 

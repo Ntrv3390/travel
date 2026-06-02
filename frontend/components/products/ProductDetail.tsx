@@ -71,16 +71,16 @@ function VariantCard({ variant, inCart }: { variant: ProductVariant; inCart?: bo
   return (
     <Card className="overflow-hidden transition-all hover:shadow-md">
       <CardContent className="p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold">{variant.name ?? "Default"}</h4>
-                  {inCart && (
-                    <Badge className="border-brand-200 bg-brand-50 text-[10px] text-brand-700 shrink-0">
-                      <ShoppingCart className="mr-0.5 h-2.5 w-2.5" />
-                      In Cart
-                    </Badge>
-                  )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold">{variant.name ?? "Default"}</h4>
+              {inCart && (
+                <Badge className="border-brand-200 bg-brand-50 text-[10px] text-brand-700 shrink-0">
+                  <ShoppingCart className="mr-0.5 h-2.5 w-2.5" />
+                  In Cart
+                </Badge>
+              )}
               <Badge className="shrink-0 border-slate-200 bg-slate-50 text-[10px] text-slate-600">
                 {variant.inventoryType
                   ?.replace(/_/g, " ")
@@ -91,18 +91,19 @@ function VariantCard({ variant, inCart }: { variant: ProductVariant; inCart?: bo
               <p className="mt-1 text-xs text-muted-foreground">{variant.description}</p>
             )}
           </div>
-          {displayPrice !== undefined && (
+          {pricing?.netPrice !== undefined && (
             <div className="shrink-0 text-left sm:text-right">
               <p className="text-lg font-bold">
                 {typeof currencySymbol === "string" && currencySymbol.length <= 3
-                  ? `${currencySymbol}${displayPrice.toFixed(2)}`
-                  : `${currencySymbol} ${displayPrice.toFixed(2)}`}
+                  ? `${currencySymbol}${pricing.netPrice.toFixed(2)}`
+                  : `${currencySymbol} ${pricing.netPrice.toFixed(2)}`}
               </p>
-              {pricing?.netPrice && pricing.netPrice < displayPrice && (
+
+              {displayPrice !== undefined && displayPrice > pricing.netPrice && (
                 <p className="text-xs text-muted-foreground line-through">
                   {typeof currencySymbol === "string" && currencySymbol.length <= 3
-                    ? `${currencySymbol}${pricing.netPrice.toFixed(2)}`
-                    : `${currencySymbol} ${pricing.netPrice.toFixed(2)}`}
+                    ? `${currencySymbol}${displayPrice.toFixed(2)}`
+                    : `${currencySymbol} ${displayPrice.toFixed(2)}`}
                 </p>
               )}
             </div>
@@ -158,26 +159,26 @@ function OperatingScheduleTable({ schedules }: { schedules: Array<{ dayOfWeek: s
   const sorted = [...schedules].sort((a, b) => (dayOrder[a.dayOfWeek] ?? 99) - (dayOrder[b.dayOfWeek] ?? 99));
   return (
     <div className="overflow-x-auto">
-    <table className="w-full text-xs">
-      <thead>
-        <tr className="border-b text-muted-foreground">
-          <th className="py-1.5 pr-2 text-left font-medium">Day</th>
-          <th className="py-1.5 px-2 text-left font-medium">Open</th>
-          <th className="py-1.5 px-2 text-left font-medium">Close</th>
-          <th className="py-1.5 pl-2 text-left font-medium">Last Entry</th>
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((s, i) => (
-          <tr key={i} className={cn("border-b last:border-0", s.closed && "text-muted-foreground")}>
-            <td className="py-1.5 pr-2 font-medium">{s.dayOfWeek.charAt(0) + s.dayOfWeek.slice(1).toLowerCase()}</td>
-            <td className="py-1.5 px-2">{s.closed ? "—" : s.openingTime ?? "—"}</td>
-            <td className="py-1.5 px-2">{s.closed ? "—" : s.closingTime ?? "—"}</td>
-            <td className="py-1.5 pl-2">{s.closed ? "Closed" : s.lastEntryTime ?? "—"}</td>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b text-muted-foreground">
+            <th className="py-1.5 pr-2 text-left font-medium">Day</th>
+            <th className="py-1.5 px-2 text-left font-medium">Open</th>
+            <th className="py-1.5 px-2 text-left font-medium">Close</th>
+            <th className="py-1.5 pl-2 text-left font-medium">Last Entry</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sorted.map((s, i) => (
+            <tr key={i} className={cn("border-b last:border-0", s.closed && "text-muted-foreground")}>
+              <td className="py-1.5 pr-2 font-medium">{s.dayOfWeek.charAt(0) + s.dayOfWeek.slice(1).toLowerCase()}</td>
+              <td className="py-1.5 px-2">{s.closed ? "—" : s.openingTime ?? "—"}</td>
+              <td className="py-1.5 px-2">{s.closed ? "—" : s.closingTime ?? "—"}</td>
+              <td className="py-1.5 pl-2">{s.closed ? "Closed" : s.lastEntryTime ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -443,9 +444,8 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 tabIndex={0}
                 onClick={() => setSelectedVariantId(variant.id)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedVariantId(variant.id) }}
-                className={`cursor-pointer rounded-lg transition-all ${
-                  selectedVariantId === variant.id ? "ring-2 ring-brand-500" : "hover:ring-1 hover:ring-brand-300"
-                }`}
+                className={`cursor-pointer rounded-lg transition-all ${selectedVariantId === variant.id ? "ring-2 ring-brand-500" : "hover:ring-1 hover:ring-brand-300"
+                  }`}
               >
                 <VariantCard variant={variant} inCart={!!cartItem && String(cartItem.variantId) === String(variant.id)} />
               </div>
