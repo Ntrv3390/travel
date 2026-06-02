@@ -2,6 +2,7 @@
 
 import { useCurrency } from "@/hooks/useCurrency"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Check, ChevronDown, Globe2, Search, X, Loader2 } from "lucide-react"
 
 interface CurrencyInfo {
@@ -265,7 +266,7 @@ export function CurrencyPicker({ className }: { className?: string }) {
       <button
         onClick={() => setOpen((value) => !value)}
         disabled={isChanging}
-        className={`flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-medium transition-colors ${
+        className={`flex items-center gap-1 rounded-xl px-1.5 py-1.5 text-sm font-medium transition-colors sm:gap-2 sm:px-2.5 sm:py-2 ${
           className || "text-slate-700 hover:bg-slate-100"
         } ${isChanging ? "opacity-50 cursor-not-allowed" : ""}`}
         aria-expanded={open}
@@ -274,12 +275,12 @@ export function CurrencyPicker({ className }: { className?: string }) {
         {activeCurrency ? (
           <>
             <span className="text-base">{activeCurrency.symbol}</span>
-            <span>{activeCurrency.code}</span>
+            <span className="hidden sm:inline">{activeCurrency.code}</span>
           </>
         ) : (
           <>
             <Globe2 className="h-4 w-4" />
-            <span>{currency}</span>
+            <span className="hidden sm:inline">{currency}</span>
           </>
         )}
         {isChanging ? (
@@ -291,19 +292,25 @@ export function CurrencyPicker({ className }: { className?: string }) {
 
       {open ? (
         <>
-          <div className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[2px] md:hidden" />
+          {createPortal(
+            <div className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[2px] md:hidden" />,
+            document.body,
+          )}
 
-          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[2rem] border border-slate-200 bg-slate-50 shadow-2xl md:hidden">
-            <CurrencyMenuContent
-              currency={currency}
-              groupedCurrencies={groupedCurrencies}
-              filteredCount={filteredCurrencies.length}
-              onSelect={handleSelect}
-              onClose={() => setOpen(false)}
-              query={query}
-              setQuery={setQuery}
-            />
-          </div>
+          {createPortal(
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[2rem] border border-slate-200 bg-slate-50 shadow-2xl md:hidden">
+              <CurrencyMenuContent
+                currency={currency}
+                groupedCurrencies={groupedCurrencies}
+                filteredCount={filteredCurrencies.length}
+                onSelect={handleSelect}
+                onClose={() => setOpen(false)}
+                query={query}
+                setQuery={setQuery}
+              />
+            </div>,
+            document.body,
+          )}
 
           <div className="absolute right-0 top-full z-50 mt-2 hidden w-[min(42rem,92vw)] rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl md:block">
             <CurrencyMenuContent

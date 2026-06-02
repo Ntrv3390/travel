@@ -49,12 +49,12 @@ export function Navbar() {
           : "border-b border-transparent bg-transparent"
       }`}
     >
-      <div className="container py-2">
+      <div className="container py-0 sm:py-2">
         <Card
-          style={isSolid ? undefined : { backgroundColor: "transparent" }}
-          className={`flex h-16 items-center justify-between gap-4 rounded-2xl px-3 py-0 md:px-4 transition-all duration-500 ${
+          style={{ backgroundColor: "transparent" }}
+          className={`flex h-12 items-center justify-between gap-1 rounded-2xl px-1 py-0 sm:h-16 sm:gap-4 sm:px-3 md:px-4 transition-all duration-500 ${
             isSolid
-              ? "border border-white/70 bg-white/60 shadow-[0_8px_20px_rgba(15,23,42,0.07)]"
+              ? "border border-white/80 shadow-[0_8px_20px_rgba(15,23,42,0.07)]"
               : "border border-transparent shadow-none"
           }`}
         >
@@ -62,7 +62,7 @@ export function Navbar() {
             variant="link"
             asChild
             href="/"
-            className={`h-auto p-0 text-3xl font-black tracking-tight no-underline hover:no-underline sm:text-4xl transition-colors duration-500 ${
+            className={`h-auto p-0 text-2xl font-black tracking-tight no-underline hover:no-underline sm:text-3xl md:text-4xl transition-colors duration-500 ${
               isSolid ? "text-brand-700" : "text-white"
             }`}
           >
@@ -71,7 +71,7 @@ export function Navbar() {
           <div className="hidden flex-1 md:block">
             <SearchBar compact />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -111,7 +111,7 @@ export function Navbar() {
               variant="ghost"
               size="sm"
               asChild
-              className={`relative h-9 w-9 p-0 transition-colors duration-500 ${
+              className={`relative h-8 w-8 p-0 transition-colors duration-500 sm:h-9 sm:w-9 ${
                 isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
               }`}
             >
