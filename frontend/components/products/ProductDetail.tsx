@@ -52,12 +52,12 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
     <div className="rounded-lg border">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm font-semibold hover:bg-muted/50"
+        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold hover:bg-muted/50 sm:px-5 sm:py-3.5"
       >
         {title}
         {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
-      {open && <div className="border-t px-5 pb-4 pt-3">{children}</div>}
+      {open && <div className="border-t px-4 pb-4 pt-3 sm:px-5">{children}</div>}
     </div>
   );
 }
@@ -71,10 +71,10 @@ function VariantCard({ variant, inCart }: { variant: ProductVariant; inCart?: bo
   return (
     <Card className="overflow-hidden transition-all hover:shadow-md">
       <CardContent className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h4 className="truncate text-sm font-semibold">{variant.name ?? "Default"}</h4>
+                  <h4 className="text-sm font-semibold">{variant.name ?? "Default"}</h4>
                   {inCart && (
                     <Badge className="border-brand-200 bg-brand-50 text-[10px] text-brand-700 shrink-0">
                       <ShoppingCart className="mr-0.5 h-2.5 w-2.5" />
@@ -92,7 +92,7 @@ function VariantCard({ variant, inCart }: { variant: ProductVariant; inCart?: bo
             )}
           </div>
           {displayPrice !== undefined && (
-            <div className="shrink-0 text-right">
+            <div className="shrink-0 text-left sm:text-right">
               <p className="text-lg font-bold">
                 {typeof currencySymbol === "string" && currencySymbol.length <= 3
                   ? `${currencySymbol}${displayPrice.toFixed(2)}`
@@ -157,6 +157,7 @@ function OperatingScheduleTable({ schedules }: { schedules: Array<{ dayOfWeek: s
   };
   const sorted = [...schedules].sort((a, b) => (dayOrder[a.dayOfWeek] ?? 99) - (dayOrder[b.dayOfWeek] ?? 99));
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-xs">
       <thead>
         <tr className="border-b text-muted-foreground">
@@ -177,6 +178,7 @@ function OperatingScheduleTable({ schedules }: { schedules: Array<{ dayOfWeek: s
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -210,7 +212,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const cutoffTime = (product as { cutoffTimeInMinutes?: number | null }).cutoffTimeInMinutes;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10">
+    <div className="mx-auto max-w-5xl space-y-6 sm:space-y-10">
 
       {/* ── 1. Hero Section ── */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -235,13 +237,13 @@ export function ProductDetail({ product }: ProductDetailProps) {
             </Badge>
           </div>
           {images.length > 1 && (
-            <div className="mt-2 flex gap-2 overflow-x-auto">
+            <div className="mt-2 flex flex-wrap gap-2 sm:flex-nowrap sm:overflow-x-auto sm:scrollbar-hide">
               {images.map((img, i) => (
                 <button
                   key={i}
                   onClick={() => setSelectedImage(i)}
                   className={cn(
-                    "h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                    "h-14 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:h-16 sm:w-20",
                     i === selectedImage ? "border-brand-600 ring-1 ring-brand-600" : "border-transparent opacity-70 hover:opacity-100",
                   )}
                 >
@@ -258,9 +260,9 @@ export function ProductDetail({ product }: ProductDetailProps) {
         </div>
 
         {/* Title & Meta */}
-        <div className="flex flex-col justify-center space-y-4">
+        <div className="flex flex-col justify-center space-y-3 sm:space-y-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{product.name}</h1>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-3xl">{product.name}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5" />
@@ -331,13 +333,13 @@ export function ProductDetail({ product }: ProductDetailProps) {
 
       {/* ── 2. Pricing Panel ── */}
       {hasPricing && (
-        <div className="rounded-xl border bg-gradient-to-r from-brand-50 to-white p-6 shadow-sm">
+        <div className="rounded-xl border bg-gradient-to-r from-brand-50 to-white p-4 shadow-sm sm:p-6">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Starting from</p>
-          <div className="mt-1 flex items-baseline gap-3">
-            <span className="text-4xl font-bold tracking-tight">{symbol}{finalPrice.toFixed(2)}</span>
+          <div className="mt-1 flex flex-wrap items-baseline gap-2 sm:gap-3">
+            <span className="text-3xl font-bold tracking-tight sm:text-4xl">{symbol}{finalPrice.toFixed(2)}</span>
             {discount > 0 && originalPrice && (
               <>
-                <span className="text-xl text-muted-foreground line-through">{symbol}{originalPrice.toFixed(2)}</span>
+                <span className="text-base text-muted-foreground line-through sm:text-xl">{symbol}{originalPrice.toFixed(2)}</span>
                 <Badge className="bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{discount}% OFF</Badge>
               </>
             )}
@@ -429,7 +431,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
       {/* ── 5. Variants ── */}
       {product.variants && product.variants.length > 0 && (
         <div>
-          <h2 className="mb-4 text-lg font-bold">
+          <h2 className="mb-3 text-lg font-bold sm:mb-4">
             Available Options
             <span className="ml-2 text-sm font-normal text-muted-foreground">({product.variants.length})</span>
           </h2>
@@ -474,7 +476,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
       {/* ── 7. POI Schedules ── */}
       {poi && poi.length > 0 && (
         <div>
-          <h2 className="mb-4 text-lg font-bold">
+          <h2 className="mb-3 text-lg font-bold sm:mb-4">
             Points of Interest
             <span className="ml-2 text-sm font-normal text-muted-foreground">({poi.length})</span>
           </h2>
@@ -506,7 +508,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
 
       {/* ── 8. Policies ── */}
       <Separator />
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
         <div>
           <h3 className="text-sm font-semibold">Cancellation Policy</h3>
           {product.cancellationPolicy?.cancellable ? (

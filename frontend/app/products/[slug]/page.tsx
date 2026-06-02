@@ -43,14 +43,14 @@ export default function ProductDetailPage() {
       <main className="container py-8">
         <div className="mx-auto max-w-5xl">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 w-48 rounded bg-muted" />
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="h-8 w-32 rounded bg-muted sm:w-48" />
+            <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
               <div className="aspect-[4/3] rounded-xl bg-muted" />
-              <div className="space-y-4">
-                <div className="h-8 w-3/4 rounded bg-muted" />
+              <div className="space-y-3 sm:space-y-4">
+                <div className="h-7 w-3/4 rounded bg-muted sm:h-8" />
                 <div className="h-4 w-1/2 rounded bg-muted" />
-                <div className="h-20 w-full rounded-lg bg-muted" />
-                <div className="h-10 w-1/3 rounded bg-muted" />
+                <div className="h-16 w-full rounded-lg bg-muted sm:h-20" />
+                <div className="h-9 w-1/3 rounded bg-muted sm:h-10" />
               </div>
             </div>
           </div>
