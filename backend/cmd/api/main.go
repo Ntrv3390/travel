@@ -18,9 +18,12 @@ import (
 	gttdhandlers "github.com/travel/backend/internal/handlers/gttd"
 	"github.com/travel/backend/internal/handlers"
 	"github.com/travel/backend/internal/middleware"
+	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -44,6 +47,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+
+	// Seed admin users
+	seedUsers(database.GetDB())
 
 	// Initialize GTTD services
 	gttdServices, err := initGTTDServices()
@@ -79,12 +85,65 @@ func main() {
 	router.GET("/api/v1/experiences-availability/:id", expHandler.GetAvailability)
 	router.GET("/api/v1/experiences/search", expHandler.SearchExperiences)
 
-	// Admin sync routes (protected by admin auth)
-	adminGroup := router.Group("/api/v1/admin")
-	adminGroup.Use(middleware.AdminAuth())
+	// Email service
+	emailSvc := services.NewEmailService(services.SMTPConfig{
+		Host:       cfg.SMTPHost,
+		Port:       cfg.SMTPPort,
+		User:       cfg.SMTPUser,
+		Pass:       cfg.SMTPPass,
+		From:       cfg.SMTPFrom,
+		AdminEmail: cfg.AdminEmail,
+	})
+
+	// Auth routes
+	authHandler := handlers.NewAuthHandler(database.GetDB(), emailSvc)
+	router.POST("/api/v1/auth/signup", authHandler.SignUp)
+	router.POST("/api/v1/auth/signin", authHandler.SignIn)
+	router.POST("/api/v1/auth/forgot-password", authHandler.ForgotPassword)
+	router.POST("/api/v1/auth/reset-password", authHandler.ResetPassword)
+
+	// Help submission routes (public)
+	helpHandler := handlers.NewHelpHandler(database.GetDB(), emailSvc)
+	router.POST("/api/v1/help/submit", helpHandler.Submit)
+
+	// Token refresh (public — uses refresh_token, not access_token)
+	router.POST("/api/v1/auth/refresh", authHandler.RefreshToken)
+
+	// Protected auth routes
+	authProtected := router.Group("/api/v1/auth")
+	authProtected.Use(middleware.JWTAuth())
 	{
-		adminGroup.POST("/sync", expHandler.SyncExperiences)
-		adminGroup.POST("/sync/:id", expHandler.SyncExperienceByID)
+		authProtected.GET("/profile", authHandler.GetProfile)
+		authProtected.POST("/signout", authHandler.SignOut)
+	}
+
+	// Visitor tracking
+	visitorHandler := handlers.NewVisitorHandler(database.GetDB())
+	router.POST("/api/v1/track/visit", visitorHandler.TrackVisit)
+
+	// Headout proxy service (used by multiple handlers)
+	headoutProxy := services.NewHeadoutProxyService(cfg)
+
+	// Admin routes (protected by JWT + admin role)
+	adminHandler := handlers.NewAdminHandler(database.GetDB(), emailSvc, headoutProxy)
+	adminGroup := router.Group("/api/v1/admin")
+	adminGroup.Use(middleware.AdminAuthJWT())
+	{
+		adminGroup.GET("/stats", adminHandler.GetStats)
+		adminGroup.GET("/bookings", adminHandler.ListBookings)
+		adminGroup.GET("/bookings/:id/headout", adminHandler.GetHeadoutBooking)
+		adminGroup.GET("/help-submissions", adminHandler.ListHelpSubmissions)
+		adminGroup.GET("/users", adminHandler.ListUsers)
+		adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
+		adminGroup.GET("/visitors", visitorHandler.ListVisitors)
+	}
+
+	// Admin sync routes (protected by admin key - keep for backwards compatibility)
+	adminSyncGroup := router.Group("/api/v1/admin")
+	adminSyncGroup.Use(middleware.AdminAuth())
+	{
+		adminSyncGroup.POST("/sync", expHandler.SyncExperiences)
+		adminSyncGroup.POST("/sync/:id", expHandler.SyncExperienceByID)
 	}
 
 	// Search endpoint
@@ -122,7 +181,7 @@ func main() {
 	}
 
 	// Normalized booking flow routes (for frontend consumption)
-	bookingFlowHandler := handlers.NewBookingFlowHandler(cfg)
+	bookingFlowHandler := handlers.NewBookingFlowHandler(cfg, emailSvc)
 	bookingFlowGroup := router.Group("/api/v1/booking-flow")
 	{
 		bookingFlowGroup.GET("/calendar", bookingFlowHandler.GetCalendar)
@@ -135,7 +194,7 @@ func main() {
 	// Cart routes (for multi-item booking support)
 	cartSvc := services.NewCartService(database.GetDB())
 	cartHandler := handlers.NewCartHandler(cartSvc)
-	checkoutHandler := handlers.NewCheckoutHandler(cartSvc, services.NewHeadoutProxyService(cfg))
+	checkoutHandler := handlers.NewCheckoutHandler(cartSvc, services.NewHeadoutProxyService(cfg), emailSvc)
 	cartGroup := router.Group("/api/v1/cart")
 	{
 		cartGroup.GET("", cartHandler.GetCart)
@@ -326,6 +385,45 @@ func setupCronJobs(worker *gttd.Worker) {
 
 	c.Start()
 	logger.Infof("GTTD cron job scheduled: %s", cronSchedule)
+}
+
+func seedUsers(db *gorm.DB) {
+	if !db.Migrator().HasTable("users") {
+		logger.Warn("users table does not exist yet, skipping seed")
+		return
+	}
+	var count int64
+	db.Model(&models.User{}).Count(&count)
+	if count > 0 {
+		logger.Infof("Users already seeded (%d found), skipping", count)
+		return
+	}
+
+	users := []models.User{
+		{
+			Email: "info.triipzy@gmail.com",
+			Name:  "Triipzy Admin",
+			Role:  "admin",
+		},
+		{
+			Email: "mohammedputhawala793@gmail.com",
+			Name:  "Mohammed Puthawala",
+			Role:  "superadmin",
+		},
+	}
+
+	for _, u := range users {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+		if err != nil {
+			logger.Errorf("Failed to hash password for seed user %s: %v", u.Email, err)
+			continue
+		}
+		u.PasswordHash = string(hashedPassword)
+		if err := db.Create(&u).Error; err != nil {
+			logger.Errorf("Failed to seed user %s: %v", u.Email, err)
+		}
+	}
+	logger.Infof("Seeded %d users", len(users))
 }
 
 func corsMiddleware() gin.HandlerFunc {

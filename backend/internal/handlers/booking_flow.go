@@ -29,6 +29,7 @@ const (
 
 type BookingFlowHandler struct {
 	authService *services.HeadoutProxyService
+	emailSvc    *services.EmailService
 }
 
 type inventoryPersonPrice struct {
@@ -133,9 +134,10 @@ type headoutBookingResponse struct {
 	VariantName         string
 }
 
-func NewBookingFlowHandler(cfg *config.Config) *BookingFlowHandler {
+func NewBookingFlowHandler(cfg *config.Config, emailSvc *services.EmailService) *BookingFlowHandler {
 	return &BookingFlowHandler{
 		authService: services.NewHeadoutProxyService(cfg),
+		emailSvc:    emailSvc,
 	}
 }
 
@@ -588,21 +590,34 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		if headoutResp.VoucherURL != "" && headoutResp.VoucherURL != "embedded" {
 			ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
 		}
-		services.SendBookingConfirmation(services.BookingConfirmationData{
-			BookingID:        headoutResp.BookingID,
-			HeadoutReference: headoutResp.HeadoutReference,
-			CustomerName:     req.FirstName + " " + req.LastName,
-			CustomerEmail:    req.Email,
-			ExperienceName:   req.ProductName,
-			ExperienceDate:   req.Date,
-			TotalAmount:      headoutResp.TotalAmount,
-			Currency:         headoutResp.Currency,
-			Quantity:         totalPax,
-			TicketURL:        headoutResp.VoucherURL,
-			TicketData:       ticketText,
-		})
-		if len(headoutResp.TicketData) > 0 {
-			services.SendBookingTicket(req.Email, req.FirstName+" "+req.LastName, headoutResp.BookingID, headoutResp.TicketData)
+		if h.emailSvc != nil {
+			h.emailSvc.SendBookingConfirmation(services.BookingConfirmationData{
+				BookingID:        headoutResp.BookingID,
+				HeadoutReference: headoutResp.HeadoutReference,
+				CustomerName:     req.FirstName + " " + req.LastName,
+				CustomerEmail:    req.Email,
+				ExperienceName:   req.ProductName,
+				ExperienceDate:   req.Date,
+				TotalAmount:      headoutResp.TotalAmount,
+				Currency:         headoutResp.Currency,
+				Quantity:         totalPax,
+				TicketURL:        headoutResp.VoucherURL,
+				TicketData:       ticketText,
+			})
+			h.emailSvc.SendBookingAdminNotification(services.BookingAdminNotificationData{
+				BookingID:        headoutResp.BookingID,
+				HeadoutReference: headoutResp.HeadoutReference,
+				CustomerName:     req.FirstName + " " + req.LastName,
+				CustomerEmail:    req.Email,
+				ExperienceName:   req.ProductName,
+				ExperienceDate:   req.Date,
+				TotalAmount:      headoutResp.TotalAmount,
+				Currency:         headoutResp.Currency,
+				AdminURL:         fmt.Sprintf("http://localhost:3000/admin/bookings?highlight=%s", headoutResp.BookingID),
+			})
+			if len(headoutResp.TicketData) > 0 {
+				h.emailSvc.SendBookingTicket(req.Email, req.FirstName+" "+req.LastName, headoutResp.BookingID, headoutResp.TicketData)
+			}
 		}
 	}()
 

@@ -7,7 +7,9 @@ import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/ui/toaster";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { CartProvider } from "@/context/CartContext";
+import { AuthProvider } from "@/context/AuthContext";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
+import { VisitorTracker } from "@/components/layout/VisitorTracker";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import "@/styles/globals.css";
@@ -29,12 +31,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <CurrencyProvider initialCurrency={initialCurrency}>
           <CartProvider>
             <Toaster>
-              <div className="flex min-h-screen flex-col">
-                <Navbar />
-                <main className="flex-1">{children}</main>
-                <Footer />
-                <GlobalSearchModal />
-              </div>
+              <AuthProvider>
+                <div className="flex min-h-screen flex-col">
+                  <Navbar />
+                  <main className="flex-1">{children}</main>
+                  <Footer />
+                  <GlobalSearchModal />
+                  <VisitorTracker />
+                </div>
+              </AuthProvider>
             </Toaster>
           </CartProvider>
         </CurrencyProvider>

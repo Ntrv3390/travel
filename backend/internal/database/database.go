@@ -38,6 +38,42 @@ func Init(cfg *config.Config) error {
 		logger.Warnf("Migration failed, continuing without migrations: %v", err)
 	}
 
+	// Add unique index on visitors.ip
+	if db.Migrator().HasTable("visitors") {
+		db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_visitors_ip ON visitors(ip) WHERE deleted_at IS NULL`)
+	}
+
+	// Ensure visitors table exists
+	ensureTable("visitors", `CREATE TABLE IF NOT EXISTS visitors (
+		id SERIAL PRIMARY KEY,
+		ip VARCHAR(45) NOT NULL,
+		country VARCHAR(100) DEFAULT '',
+		city VARCHAR(200) DEFAULT '',
+		region VARCHAR(200) DEFAULT '',
+		isp VARCHAR(200) DEFAULT '',
+		user_agent TEXT DEFAULT '',
+		referrer TEXT DEFAULT '',
+		page_url TEXT DEFAULT '',
+		first_visit TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		last_visit TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		visit_count INTEGER DEFAULT 1,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+
+	// Ensure page_visits table exists
+	ensureTable("page_visits", `CREATE TABLE IF NOT EXISTS page_visits (
+		id SERIAL PRIMARY KEY,
+		visitor_id INTEGER NOT NULL REFERENCES visitors(id),
+		pathname TEXT NOT NULL,
+		visited_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_page_visits_pathname ON page_visits(pathname)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_page_visits_visitor_id ON page_visits(visitor_id)`)
+
 	// Ensure cart_items has the guest_counts column (GORM AutoMigrate sometimes misses jsonb columns)
 	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS guest_counts jsonb DEFAULT '{}';`).Error; err != nil {
 		logger.Warnf("Could not add guest_counts column to cart_items (may not exist yet): %v", err)
@@ -46,7 +82,63 @@ func Init(cfg *config.Config) error {
 		logger.Warnf("Could not add guest_counts column to bookings: %v", err)
 	}
 
+	// Ensure new tables exist (fallback if AutoMigrate fails)
+	ensureTable("users", `CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		email VARCHAR(255) UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		name VARCHAR(255) DEFAULT '',
+		role VARCHAR(50) NOT NULL DEFAULT 'user',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+	ensureTable("help_submissions", `CREATE TABLE IF NOT EXISTS help_submissions (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		email VARCHAR(255) NOT NULL,
+		subject VARCHAR(255) NOT NULL,
+		message TEXT NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+	// Indexes for search performance
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_bookings_email ON bookings(email)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_bookings_first_name ON bookings(first_name)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_bookings_last_name ON bookings(last_name)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_help_submissions_email ON help_submissions(email)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_help_submissions_name ON help_submissions(name)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_help_submissions_subject ON help_submissions(subject)`)
+
+	ensureTable("password_reset_tokens", `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+		id SERIAL PRIMARY KEY,
+		user_id INTEGER NOT NULL REFERENCES users(id),
+		token VARCHAR(255) UNIQUE NOT NULL,
+		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+		used BOOLEAN DEFAULT FALSE,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+	ensureTable("refresh_tokens", `CREATE TABLE IF NOT EXISTS refresh_tokens (
+		id SERIAL PRIMARY KEY,
+		user_id INTEGER NOT NULL REFERENCES users(id),
+		token VARCHAR(512) UNIQUE NOT NULL,
+		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+
 	return nil
+}
+
+func ensureTable(name, ddl string) {
+	if !db.Migrator().HasTable(name) {
+		logger.Infof("Creating table: %s", name)
+		if err := db.Exec(ddl).Error; err != nil {
+			logger.Errorf("Failed to create table %s: %v", name, err)
+		}
+	}
 }
 
 func Migrate() error {
@@ -61,6 +153,12 @@ func Migrate() error {
 		&models.Cart{},
 		&models.CartItem{},
 		&models.GTTDFeedUploadStatus{},
+		&models.User{},
+		&models.HelpSubmission{},
+		&models.PasswordResetToken{},
+		&models.Visitor{},
+		&models.PageVisit{},
+		&models.RefreshToken{},
 	)
 }
 

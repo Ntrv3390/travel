@@ -13,7 +13,7 @@ export function Footer() {
             <div>
               <h3 className="text-3xl font-black tracking-tight text-slate-900">Triipzy</h3>
               <p className="mt-3 max-w-sm text-sm leading-6 text-slate-600">
-                Curated premium experiences in 140+ destinations with trusted local operators.
+                Curated premium experiences in 211+ destinations with trusted local operators.
               </p>
               <div className="mt-4 flex items-center gap-2">
                 <Button
@@ -49,17 +49,14 @@ export function Footer() {
             <div>
               <h4 className="text-lg font-bold text-slate-900">Explore</h4>
               <div className="mt-3 grid gap-2 text-sm text-slate-600">
-                <Link href="#" className="transition hover:text-sky-600">
+                <Link href="/cities" className="transition hover:text-sky-600">
                   Destinations
                 </Link>
-                <Link href="#" className="transition hover:text-sky-600">
+                <Link href="/products" className="transition hover:text-sky-600">
                   Experiences
                 </Link>
-                <Link href="#" className="transition hover:text-sky-600">
-                  Last-minute deals
-                </Link>
-                <Link href="#" className="transition hover:text-sky-600">
-                  Gift cards
+                <Link href="/about" className="transition hover:text-sky-600">
+                  About Us
                 </Link>
               </div>
             </div>
@@ -67,17 +64,11 @@ export function Footer() {
             <div>
               <h4 className="text-lg font-bold text-slate-900">Support</h4>
               <div className="mt-3 grid gap-2 text-sm text-slate-600">
-                <Link href="#" className="transition hover:text-sky-600">
+                <Link href="/help" className="transition hover:text-sky-600">
                   Help center
                 </Link>
-                <Link href="#" className="transition hover:text-sky-600">
-                  Cancellation policy
-                </Link>
-                <Link href="#" className="transition hover:text-sky-600">
-                  Contact support
-                </Link>
-                <Link href="#" className="transition hover:text-sky-600">
-                  Safety standards
+                <Link href="/privacy-policy" className="transition hover:text-sky-600">
+                  Privacy policy
                 </Link>
               </div>
             </div>
@@ -96,6 +87,18 @@ export function Footer() {
                 </span>
               </div>
             </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6 text-sm">
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Legal
+            </h4>
+            <Link
+              href="/privacy-policy"
+              className="text-slate-600 transition hover:text-sky-600"
+            >
+              Privacy Policy
+            </Link>
           </div>
 
           <Separator className="mt-7" />

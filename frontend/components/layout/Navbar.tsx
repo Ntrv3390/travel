@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Search } from "lucide-react";
+import { ShoppingCart, Search, /* User, LogOut, Shield */ } from "lucide-react";
 import { SearchBar } from "@/components/search/SearchBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { CurrencyPicker } from "@/components/common/CurrencyPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useCart } from "@/hooks/useCart";
+// import { useAuth } from "@/context/AuthContext";
 
 export function Navbar() {
   const { itemCount } = useCart();
+  // const { user, isAdmin, signOut } = useAuth();
   const pathname = usePathname();
-  const isHome = pathname === "/";
+  const isHome = pathname === "/" || pathname === "/about" || pathname === "/help";
 
   const [scrolledPast, setScrolledPast] = useState(false);
   const [pageReady, setPageReady] = useState(false);
@@ -106,7 +108,93 @@ export function Navbar() {
             >
               <Link href="/cities">Cities</Link>
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className={`hidden md:inline-flex transition-colors duration-500 ${
+                isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+              }`}
+            >
+              <Link href="/about">About</Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className={`hidden md:inline-flex transition-colors duration-500 ${
+                isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+              }`}
+            >
+              <Link href="/help">Help</Link>
+            </Button>
             <CurrencyPicker className={isSolid ? "text-slate-700 hover:bg-slate-100" : "text-white hover:bg-white/10"} />
+            {/* {user ? (
+              <>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className={`hidden md:inline-flex transition-colors duration-500 ${
+                      isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+                    }`}
+                  >
+                    <Link href="/admin">
+                      <Shield className="h-4 w-4 mr-1.5" />
+                      Admin
+                    </Link>
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className={`hidden md:inline-flex transition-colors duration-500 ${
+                    isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+                  }`}
+                >
+                  <Link href="/account">
+                    <User className="h-4 w-4 mr-1.5" />
+                    Account
+                  </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => signOut()}
+                  className={`hidden md:inline-flex transition-colors duration-500 ${
+                    isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+                  }`}
+                >
+                  <LogOut className="h-4 w-4 mr-1.5" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className={`hidden md:inline-flex transition-colors duration-500 ${
+                    isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+                  }`}
+                >
+                  <Link href="/sign-in">Sign In</Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className={`hidden md:inline-flex transition-colors duration-500 ${
+                    isSolid ? "" : "text-white hover:text-white/80 hover:bg-white/10"
+                  }`}
+                >
+                  <Link href="/sign-up">Sign Up</Link>
+                </Button>
+              </>
+            )} */}
             <Button
               variant="ghost"
               size="sm"

@@ -19,6 +19,7 @@ import (
 type CheckoutHandler struct {
 	cartService *services.CartService
 	authService *services.HeadoutProxyService
+	emailSvc    *services.EmailService
 }
 
 type checkoutItemResult struct {
@@ -35,10 +36,11 @@ type checkoutResponse struct {
 	Results []checkoutItemResult `json:"results"`
 }
 
-func NewCheckoutHandler(cartService *services.CartService, authService *services.HeadoutProxyService) *CheckoutHandler {
+func NewCheckoutHandler(cartService *services.CartService, authService *services.HeadoutProxyService, emailSvc *services.EmailService) *CheckoutHandler {
 	return &CheckoutHandler{
 		cartService: cartService,
 		authService: authService,
+		emailSvc:    emailSvc,
 	}
 }
 
@@ -180,21 +182,34 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 	if headoutResp.VoucherURL != "" && headoutResp.VoucherURL != "embedded" {
 		ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
 	}
-	services.SendBookingConfirmation(services.BookingConfirmationData{
-		BookingID:        headoutResp.BookingID,
-		HeadoutReference: headoutResp.HeadoutReference,
-		CustomerName:     item.FirstName + " " + item.LastName,
-		CustomerEmail:    item.Email,
-		ExperienceName:   item.Title,
-		ExperienceDate:   item.Date,
-		TotalAmount:      headoutResp.TotalAmount,
-		Currency:         headoutResp.Currency,
-		Quantity:         totalPax,
-		TicketURL:        headoutResp.VoucherURL,
-		TicketData:       ticketText,
-	})
-	if len(headoutResp.TicketData) > 0 {
-		services.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData)
+	if h.emailSvc != nil {
+		h.emailSvc.SendBookingConfirmation(services.BookingConfirmationData{
+			BookingID:        headoutResp.BookingID,
+			HeadoutReference: headoutResp.HeadoutReference,
+			CustomerName:     item.FirstName + " " + item.LastName,
+			CustomerEmail:    item.Email,
+			ExperienceName:   item.Title,
+			ExperienceDate:   item.Date,
+			TotalAmount:      headoutResp.TotalAmount,
+			Currency:         headoutResp.Currency,
+			Quantity:         totalPax,
+			TicketURL:        headoutResp.VoucherURL,
+			TicketData:       ticketText,
+		})
+		h.emailSvc.SendBookingAdminNotification(services.BookingAdminNotificationData{
+			BookingID:        headoutResp.BookingID,
+			HeadoutReference: headoutResp.HeadoutReference,
+			CustomerName:     item.FirstName + " " + item.LastName,
+			CustomerEmail:    item.Email,
+			ExperienceName:   item.Title,
+			ExperienceDate:   item.Date,
+			TotalAmount:      headoutResp.TotalAmount,
+			Currency:         headoutResp.Currency,
+			AdminURL:         fmt.Sprintf("http://localhost:3000/admin/bookings?highlight=%s", headoutResp.BookingID),
+		})
+		if len(headoutResp.TicketData) > 0 {
+			h.emailSvc.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData)
+		}
 	}
 
 	result.Status = headoutResp.Status

@@ -26,6 +26,17 @@ type Config struct {
 
 	// Environment
 	Environment string
+
+	// JWT
+	JWTSecret string
+
+	// SMTP
+	SMTPHost    string
+	SMTPPort    string
+	SMTPUser    string
+	SMTPPass    string
+	SMTPFrom    string
+	AdminEmail string
 }
 
 func Load() *Config {
@@ -44,6 +55,17 @@ func Load() *Config {
 		HeadoutStageBaseURL:   getEnv("HEADOUT_STAGE_BASE_URL", "https://sandbox.api.dev-headout.com/api/public"),
 		HeadoutProdBaseURL:    getEnv("HEADOUT_PROD_BASE_URL", "https://www.headout.com/api/public"),
 		Environment:           getEnv("ENV", "development"),
+
+		// JWT
+		JWTSecret: getEnv("JWT_SECRET", "triipzy-jwt-secret-change-in-production"),
+
+		// SMTP
+		SMTPHost:    getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:    getEnv("SMTP_PORT", "587"),
+		SMTPUser:    getEnv("SMTP_USER", ""),
+		SMTPPass:    getEnv("SMTP_PASS", ""),
+		SMTPFrom:    getEnv("SMTP_FROM", "noreply@triipzy.com"),
+		AdminEmail: getEnv("ADMIN_EMAIL", ""),
 	}
 
 	cfg.HeadoutURL = resolveHeadoutURL(cfg)

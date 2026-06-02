@@ -13,8 +13,8 @@ const features = [
 ];
 
 const stats = [
-  { value: 50, suffix: "K+", label: "Travelers", color: "text-sky-500" },
-  { value: 99, suffix: "%", label: "Satisfaction", color: "text-emerald-500" },
+  { value: 51, suffix: "K+", label: "Travelers", color: "text-sky-500" },
+  { value: 99.9, suffix: "%", label: "Satisfaction", color: "text-emerald-500" },
   { value: 24, suffix: "/7", label: "Support", color: "text-amber-500" },
 ];
 

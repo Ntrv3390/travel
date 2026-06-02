@@ -58,6 +58,13 @@ services:
       GTTD_FEED_OUTPUT_DIR: ${GTTD_FEED_OUTPUT_DIR:-/tmp/gttd_feeds}
       GTTD_CRON_SCHEDULE: ${GTTD_CRON_SCHEDULE:-0 2 * * *}
       GTTD_ENV: ${GTTD_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET:-triipzy-jwt-secret-change-in-production}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@triipzy.com}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
