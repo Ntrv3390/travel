@@ -21,7 +21,6 @@ const productTypeColors: Record<string, string> = {
 
 export function ProductCard({ product }: { product: Product }) {
   const { currency: selectedCurrency, formatPrice } = useCurrency();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const {
     id,
     name,
@@ -35,7 +34,7 @@ export function ProductCard({ product }: { product: Product }) {
     reschedulePolicy,
     imageUrl,
     currency,
-  } = product as any;
+  } = product as Product;
 
   const discount = listingPrice?.bestDiscount ?? 0;
   const hasDiscount = discount > 0;

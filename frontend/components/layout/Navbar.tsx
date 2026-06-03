@@ -121,7 +121,7 @@ export function Navbar() {
               <Link href="/help">Help</Link>
             </Button>
             <CurrencyPicker className={isSolid ? "text-slate-700 hover:bg-slate-100" : "text-white hover:bg-white/10"} />
-            {/* {user ? (
+            {user ? (
               <>
                 {isAdmin && (
                   <Button
@@ -181,7 +181,7 @@ export function Navbar() {
                   <Link href="/sign-up">Sign Up</Link>
                 </Button>
               </>
-            )} */}
+            )}
             <Button
               variant="ghost"
               size="sm"

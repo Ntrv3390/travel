@@ -83,10 +83,10 @@ export interface ProductVariant {
   description: string | null;
   duration: number | null;
   inventoryType:
-    | "FIXED_START_FIXED_DURATION"
-    | "FIXED_START_FLEXIBLE_DURATION"
-    | "FLEXIBLE_START_FIXED_DURATION"
-    | "FLEXIBLE_START_FLEXIBLE_DURATION";
+  | "FIXED_START_FIXED_DURATION"
+  | "FIXED_START_FLEXIBLE_DURATION"
+  | "FLEXIBLE_START_FIXED_DURATION"
+  | "FLEXIBLE_START_FLEXIBLE_DURATION";
   pax: { min: number; max: number | null };
   cashback?: { value: number; type: "PERCENTAGE" | "ABSOLUTE" };
   ticketDeliveryInfoHtml: string | null;
@@ -148,6 +148,10 @@ export interface Product {
   localeSpecificUrls: Record<string, string>;
   hasInstantConfirmation: boolean;
   hasMobileTicket: boolean;
+  cityName: string | null;
+  title?: string;
+  imageUrl?: string;
+  fromPrice?: number;
   primaryCategory: ProductCategory;
   primarySubCategory: ProductSubCategory;
   primaryCollection: ProductCollection;

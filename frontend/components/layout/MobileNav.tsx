@@ -51,7 +51,7 @@ export function MobileNav() {
               Checkout
             </Link>
             <div className="my-1 border-t border-slate-100" />
-            {/* {user ? (
+            {user ? (
               <>
                 <Link href="/account" className="flex items-center gap-2 rounded px-3 py-2 text-sm hover:bg-muted" onClick={() => setOpen(false)}>
                   <User className="h-4 w-4" />
@@ -80,7 +80,7 @@ export function MobileNav() {
                   Sign Up
                 </Link>
               </>
-            )} */}
+            )}
           </nav>
         </Card>
       ) : null}
