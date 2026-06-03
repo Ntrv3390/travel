@@ -12,7 +12,6 @@ import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { VisitorTracker } from "@/components/layout/VisitorTracker";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
-import "@/styles/globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Triipzy - Experiences Worth Having", template: "%s | Triipzy" },
