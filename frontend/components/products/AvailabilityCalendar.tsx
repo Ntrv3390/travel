@@ -91,7 +91,7 @@ export function AvailabilityCalendar() {
   }, [variantId, currency])
 
   useEffect(() => {
-    if (initialDate && availabilities.length > 0 && !slots.length && !slotsLoading) {
+    if (initialDate && availabilities?.length > 0 && !slots.length && !slotsLoading) {
       const match = availabilities.find((a) => a.date === initialDate)
       if (match && match.availability !== "CLOSED") {
         fetchSlots(initialDate)
@@ -107,7 +107,7 @@ export function AvailabilityCalendar() {
   }
 
   const availMap = new Map<string, VariantAvailability>()
-  for (const a of availabilities) {
+  for (const a of (availabilities ?? [])) {
     availMap.set(a.date, a)
   }
 
@@ -169,7 +169,7 @@ export function AvailabilityCalendar() {
           <p className="text-xs text-red-500">{error}</p>
           <Button variant="outline" size="sm" onClick={fetchAvailabilities}>Retry</Button>
         </div>
-      ) : availabilities.length === 0 ? (
+      ) : (availabilities?.length ?? 0) === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No availability found for this month.</p>
       ) : (
         <>
@@ -236,7 +236,7 @@ export function AvailabilityCalendar() {
                   ) : (
                     <span className="mt-0.5 text-[9px] text-slate-300">—</span>
                   )}
-                  {info && info.remaining < 20 && info.availability !== "CLOSED" && (
+                  {info && (info.remaining ?? 0) < 20 && info.availability !== "CLOSED" && info.remaining != null && (
                     <span className="text-[8px] text-amber-500">{info.remaining} left</span>
                   )}
                 </div>

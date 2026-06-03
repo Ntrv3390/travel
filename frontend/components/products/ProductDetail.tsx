@@ -201,7 +201,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
     cartItem?.variantId ?? product.variants?.[0]?.id ?? null
   );
 
-  const images = product.media.filter((m) => m.type === "IMAGE");
+  const images = product.media?.filter((m) => m.type === "IMAGE") ?? [];
   const typeColor = productTypeColors[product.productType] ?? "bg-gray-100 text-gray-700 border-gray-200";
   const symbol = product.currency?.localSymbol ?? "$";
   const discount = product.listingPrice?.bestDiscount ?? 0;
@@ -430,14 +430,14 @@ export function ProductDetail({ product }: ProductDetailProps) {
       )}
 
       {/* ── 5. Variants ── */}
-      {product.variants && product.variants.length > 0 && (
+      {(product.variants?.length ?? 0) > 0 && (
         <div>
           <h2 className="mb-3 text-lg font-bold sm:mb-4">
             Available Options
-            <span className="ml-2 text-sm font-normal text-muted-foreground">({product.variants.length})</span>
+            <span className="ml-2 text-sm font-normal text-muted-foreground">({product.variants?.length})</span>
           </h2>
           <div className="space-y-3">
-            {product.variants.map((variant) => (
+            {product.variants?.map((variant) => (
               <div
                 key={String(variant.id)}
                 role="button"

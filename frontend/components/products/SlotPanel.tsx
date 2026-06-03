@@ -56,13 +56,13 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
   }
 
   const getPriceForType = (slot: SlotItem, type: string) => {
-    const person = slot.pricing.persons.find(p => p.type === type)
-    return person?.headoutSellingPrice ?? person?.price ?? slot.pricing.persons[0]?.headoutSellingPrice ?? 0
+    const person = slot.pricing?.persons?.find(p => p.type === type)
+    return person?.headoutSellingPrice ?? person?.price ?? slot.pricing?.persons?.[0]?.headoutSellingPrice ?? 0
   }
 
   const getBookingPriceForType = (slot: SlotItem, type: string) => {
-    const person = slot.pricing.persons.find(p => p.type === type)
-    return person?.price ?? person?.headoutSellingPrice ?? slot.pricing.persons[0]?.price ?? 0
+    const person = slot.pricing?.persons?.find(p => p.type === type)
+    return person?.price ?? person?.headoutSellingPrice ?? slot.pricing?.persons?.[0]?.price ?? 0
   }
 
   const calculateTotalPrice = (slot: SlotItem) => {
@@ -175,7 +175,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
       <div className="flex flex-col gap-2 rounded-lg border bg-muted/10 p-2.5">
         <span className="text-xs font-medium text-muted-foreground">Guests</span>
         <div className="flex flex-wrap items-center gap-3">
-          {slots[0].pricing.persons.map((p) => (
+          {slots[0]?.pricing?.persons?.map((p) => (
             <div key={p.type} className="flex items-center gap-1.5">
               <button
                 onClick={() => setGuests(prev => ({ ...prev, [p.type]: Math.max(0, (prev[p.type] || 0) - 1) }))}
@@ -223,7 +223,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
                 </div>
               </div>
 
-              {slot.pricing.persons.length > 0 && !isClosed && (
+              {slot.pricing?.persons?.length > 0 && !isClosed && (
                 <div className="mt-2 overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
@@ -252,7 +252,7 @@ export function SlotPanel({ slots, loading, error, onRetry, selectedDate }: Slot
                 </div>
               )}
 
-              {slot.pricing.groups.length > 0 && !isClosed && (
+              {slot.pricing?.groups?.length > 0 && !isClosed && (
                 <div className="mt-2 border-t pt-2">
                   <p className="mb-1 text-[10px] font-medium text-muted-foreground">Group pricing</p>
                   <div className="flex flex-wrap gap-2">

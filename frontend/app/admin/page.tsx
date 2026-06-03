@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarCheck, HelpCircle, Users, TrendingUp, Globe, Eye, ArrowUp, ArrowDown } from "lucide-react";
+import { CalendarCheck, HelpCircle, Users, TrendingUp, Globe, Eye, ArrowUp, ArrowDown, Activity, Database, Server, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface PageCount {
   pathname: string;
@@ -22,15 +23,57 @@ interface AdminStats {
   bottomPages: PageCount[];
 }
 
+interface SystemStatus {
+  server: {
+    status: string;
+    uptime: string;
+    started: string;
+  };
+  database: {
+    ok: boolean;
+    status: string;
+    error: string;
+  };
+  headout: {
+    available: boolean;
+  };
+}
+
+interface HealthInfo {
+  status: string;
+  message: string;
+}
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [health, setHealth] = useState<HealthInfo | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
     api.get<AdminStats>("/api/v1/admin/stats")
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch system status
+    const fetchStatus = () => {
+      Promise.all([
+        api.get<SystemStatus>("/api/v1/admin/status"),
+        api.get<HealthInfo>("/health")
+      ])
+        .then(([statusRes, healthRes]) => {
+          setStatus(statusRes);
+          setHealth(healthRes);
+        })
+        .catch(() => {})
+        .finally(() => setStatusLoading(false));
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000); // refresh every 30s
+    return () => clearInterval(interval);
   }, []);
 
   const statCards = [
@@ -48,9 +91,15 @@ export default function AdminDashboardPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Overview of your platform</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500">Overview of your platform</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+          <Activity className="h-3.5 w-3.5" />
+          Live Updates
+        </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -83,6 +132,125 @@ export default function AdminDashboardPage() {
             </motion.div>
           );
         })}
+      </div>
+
+      {/* System Status Section */}
+      <div className="mt-8 grid gap-6 md:grid-cols-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600">
+              <Server className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-slate-900">API Server</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {statusLoading ? (
+                  <Skeleton className="h-3 w-16" />
+                ) : (
+                  <>
+                    {health?.status === "healthy" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                    )}
+                    <span className={cn(
+                      "text-xs font-medium capitalize",
+                      health?.status === "healthy" ? "text-emerald-600" : "text-rose-600"
+                    )}>
+                      {health?.status || "Unknown"}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          {!statusLoading && status?.server && (
+            <div className="mt-4 flex items-center gap-4 border-t border-slate-50 pt-4">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <Clock className="h-3.5 w-3.5" />
+                Uptime: {status.server.uptime?.split(".")[0] || "Unknown"}
+              </div>
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600">
+              <Database className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-slate-900">Database</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {statusLoading ? (
+                  <Skeleton className="h-3 w-16" />
+                ) : (
+                  <>
+                    {status?.database?.ok ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                    )}
+                    <span className={cn(
+                      "text-xs font-medium capitalize",
+                      status?.database?.ok ? "text-emerald-600" : "text-rose-600"
+                    )}>
+                      {status?.database?.status || "Unknown"}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          {!statusLoading && status?.database?.error && (
+            <p className="mt-2 text-[10px] text-rose-500 truncate">{status.database.error}</p>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600">
+              <Globe className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-slate-900">Headout API</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {statusLoading ? (
+                  <Skeleton className="h-3 w-16" />
+                ) : (
+                  <>
+                    {status?.headout?.available ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                    )}
+                    <span className={cn(
+                      "text-xs font-medium capitalize",
+                      status?.headout?.available ? "text-emerald-600" : "text-rose-600"
+                    )}>
+                      {status?.headout?.available ? "Available" : "Unavailable"}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
 
       {/* Top & Bottom pages */}

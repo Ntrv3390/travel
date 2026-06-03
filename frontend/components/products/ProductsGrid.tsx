@@ -87,21 +87,21 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
       const tick = ++fetchTick.current;
       dispatch({ type: "FETCH_START" });
       const offset = overrideOffset !== undefined ? overrideOffset : append ? offsetRef.current : 0;
-      
+
       const signal = abortRef.current?.signal;
       const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: 20 }, { signal });
-      
+
       // If aborted, do nothing
       if (signal?.aborted) {
         isFetching.current = false;
         return;
       }
-      
+
       if (tick !== fetchTick.current) {
         isFetching.current = false;
         return;
       }
-      
+
       if (result.error) {
         // AbortError from fetch inside getProducts isn't handled as error
         if (result.error !== "AbortError") dispatch({ type: "FETCH_ERROR", error: result.error });
@@ -191,9 +191,12 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   return (
     <div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {state.products.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
+        {state.products.map((product) => {
+          console.log(product);
+          return ((
+            <ProductCard key={product.id} product={product} />
+          ))
+        })}
       </div>
 
       {state.loading && (

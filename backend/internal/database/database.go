@@ -129,6 +129,81 @@ func Init(cfg *config.Config) error {
 		deleted_at TIMESTAMP WITH TIME ZONE
 	)`)
 
+	// Ensure cities table exists
+	ensureTable("cities", `CREATE TABLE IF NOT EXISTS cities (
+		id SERIAL PRIMARY KEY,
+		code VARCHAR(100) UNIQUE NOT NULL,
+		name VARCHAR(255) NOT NULL DEFAULT '',
+		image_url VARCHAR(500) DEFAULT '',
+		country_code VARCHAR(10) DEFAULT '',
+		country_name VARCHAR(255) DEFAULT '',
+		timezone VARCHAR(100) DEFAULT '',
+		raw_headout_data jsonb DEFAULT '{}',
+		last_synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+
+	// Ensure settings table exists
+	ensureTable("settings", `CREATE TABLE IF NOT EXISTS settings (
+		id SERIAL PRIMARY KEY,
+		key VARCHAR(100) UNIQUE NOT NULL,
+		value VARCHAR(500) NOT NULL DEFAULT '',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	)`)
+
+	// Ensure products table exists
+	ensureTable("products", `CREATE TABLE IF NOT EXISTS products (
+		id SERIAL PRIMARY KEY,
+		headout_id VARCHAR(100) UNIQUE NOT NULL,
+		title VARCHAR(500) NOT NULL DEFAULT '',
+		description TEXT DEFAULT '',
+		city_code VARCHAR(100) DEFAULT '',
+		city_name VARCHAR(255) DEFAULT '',
+		category VARCHAR(255) DEFAULT '',
+		image_url VARCHAR(500) DEFAULT '',
+		currency VARCHAR(10) DEFAULT '',
+		price_from NUMERIC(12,4) DEFAULT 0,
+		rating NUMERIC(3,2) DEFAULT 0,
+		review_count INTEGER DEFAULT 0,
+		duration VARCHAR(100) DEFAULT '',
+		raw_headout_data jsonb DEFAULT '{}',
+		last_synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+	ensureTable("product_availabilities", `CREATE TABLE IF NOT EXISTS product_availabilities (
+		id SERIAL PRIMARY KEY,
+		product_id INTEGER NOT NULL REFERENCES products(id),
+		headout_product_id VARCHAR(100) DEFAULT '',
+		variant_id VARCHAR(100) DEFAULT '',
+		variant_title VARCHAR(500) DEFAULT '',
+		date VARCHAR(20) DEFAULT '',
+		start_time VARCHAR(20) DEFAULT '',
+		end_time VARCHAR(20) DEFAULT '',
+		inventory_id VARCHAR(100) DEFAULT '',
+		inventory_type VARCHAR(50) DEFAULT '',
+		price_amount NUMERIC(12,4) DEFAULT 0,
+		currency VARCHAR(10) DEFAULT '',
+		available_slots INTEGER DEFAULT 0,
+		raw_headout_data jsonb DEFAULT '{}',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_products_city_code ON products(city_code)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_product_availabilities_product_id ON product_availabilities(product_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_product_availabilities_headout_product_id ON product_availabilities(headout_product_id)`)
+
+	// Ensure default fetch_fresh setting exists (after table creation)
+	var settingCount int64
+	db.Model(&models.Setting{}).Where("key = ?", "fetch_fresh").Count(&settingCount)
+	if settingCount == 0 {
+		db.Create(&models.Setting{Key: "fetch_fresh", Value: "true"})
+	}
+
 	return nil
 }
 

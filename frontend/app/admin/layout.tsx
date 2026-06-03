@@ -10,11 +10,13 @@ import {
   HelpCircle,
   Users,
   Globe,
+  MapPin,
+  Package,
   Menu,
   X,
   LogOut,
   ChevronRight,
-  Shield,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,9 @@ import { cn } from "@/lib/utils";
 const sidebarLinks = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/bookings", label: "Bookings", icon: CalendarCheck },
+  { href: "/admin/cities", label: "Cities", icon: MapPin },
+  { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
   { href: "/admin/help-submissions", label: "Help Submissions", icon: HelpCircle },
   { href: "/admin/visitors", label: "Visitors", icon: Globe },
   { href: "/admin/users", label: "Users", icon: Users },
@@ -149,7 +154,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Menu className="h-5 w-5" />
           </button>
           <Link href="/admin" className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sky-500"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sky-500"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
             Triipzy
           </Link>
           <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">Admin</span>
@@ -158,7 +163,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               href="/"
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
               Visit Site
             </Link>
           </div>

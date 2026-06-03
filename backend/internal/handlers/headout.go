@@ -11,23 +11,27 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
+	"gorm.io/gorm"
 )
 
 type HeadoutHandler struct {
 	service       *services.HeadoutProxyService
 	publicService *services.HeadoutProxyService
+	db            *gorm.DB
 }
 
-func NewHeadoutHandler(cfg *config.Config) *HeadoutHandler {
+func NewHeadoutHandler(cfg *config.Config, db *gorm.DB) *HeadoutHandler {
 	publicCfg := *cfg
 	publicCfg.HeadoutURL = cfg.HeadoutURL
 
 	return &HeadoutHandler{
 		service:       services.NewHeadoutProxyService(cfg),
 		publicService: services.NewHeadoutProxyService(&publicCfg),
+		db:            db,
 	}
 }
 
@@ -77,6 +81,24 @@ func (h *HeadoutHandler) ListCategoriesByCityV1(c *gin.Context) {
 
 // v2 endpoints
 func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
+	// Check fetch_fresh setting
+	fetchFresh := true
+	var setting models.Setting
+	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err == nil {
+		if setting.Value == "false" {
+			fetchFresh = false
+		}
+	}
+
+	if fetchFresh {
+		h.listCitiesFromHeadout(c)
+		return
+	}
+
+	h.listCitiesFromDB(c)
+}
+
+func (h *HeadoutHandler) listCitiesFromHeadout(c *gin.Context) {
 	q := c.Request.URL.Query()
 
 	offset := 0
@@ -110,6 +132,73 @@ func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
 	h.proxyGetWithService(c, h.publicService, "/v2/cities/", true)
 }
 
+func (h *HeadoutHandler) listCitiesFromDB(c *gin.Context) {
+	q := c.Request.URL.Query()
+
+	offset := 0
+	if v := q.Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
+			return
+		}
+		offset = parsed
+	}
+
+	limit := 20
+	if v := q.Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
+			return
+		}
+		if parsed > 20 {
+			limit = 20
+		} else {
+			limit = parsed
+		}
+	}
+
+	var total int64
+	h.db.Model(&models.City{}).Count(&total)
+
+	var cities []models.City
+	h.db.Order("name asc").Offset(offset).Limit(limit).Find(&cities)
+
+	type cityResponse struct {
+		Code      string                `json:"code"`
+		Name      string                `json:"name"`
+		Image     models.CityImageJSON  `json:"image"`
+		Country   models.CityCountryJSON `json:"country"`
+		Timezone  string                `json:"timezone"`
+	}
+
+	resultCities := make([]cityResponse, 0, len(cities))
+	for _, cty := range cities {
+		resultCities = append(resultCities, cityResponse{
+			Code:     cty.Code,
+			Name:     cty.Name,
+			Image:    models.CityImageJSON{URL: cty.ImageURL},
+			Country:  models.CityCountryJSON{Code: cty.CountryCode, Name: cty.CountryName},
+			Timezone: cty.Timezone,
+		})
+	}
+
+	var nextOffset *int
+	if offset+limit < int(total) {
+		val := offset + limit
+		nextOffset = &val
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"cities":     resultCities,
+		"nextUrl":    nil,
+		"prevUrl":    nil,
+		"total":      total,
+		"nextOffset": nextOffset,
+	})
+}
+
 var productPopularCities = []string{
 	"NEW_YORK", "PARIS", "LONDON", "DUBAI", "TOKYO",
 	"BARCELONA", "ROME", "SINGAPORE", "BANGKOK", "ISTANBUL",
@@ -118,7 +207,21 @@ var productPopularCities = []string{
 }
 
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
+	// Check fetch_fresh setting
+	fetchFresh := true
+	var setting models.Setting
+	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err == nil {
+		if setting.Value == "false" {
+			fetchFresh = false
+		}
+	}
+
 	q := c.Request.URL.Query()
+
+	if !fetchFresh {
+		h.listProductsFromDB(c, q)
+		return
+	}
 
 	limit := 20
 	if v := q.Get("limit"); v != "" {
@@ -156,6 +259,96 @@ func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 	}
 
 	h.fetchRandomProductsV2(c, limit, offset, currencyCode)
+}
+
+func (h *HeadoutHandler) listProductsFromDB(c *gin.Context, q url.Values) {
+	offset := 0
+	if v := q.Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a non-negative integer"})
+			return
+		}
+		offset = parsed
+	}
+
+	limit := 20
+	if v := q.Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
+			return
+		}
+		if parsed > 100 {
+			limit = 100
+		} else {
+			limit = parsed
+		}
+	}
+
+	cityCode := strings.TrimSpace(q.Get("cityCode"))
+	category := strings.TrimSpace(q.Get("category"))
+
+	query := h.db.Model(&models.Product{})
+	if cityCode != "" && cityCode != "undefined" && cityCode != "null" {
+		query = query.Where("city_code = ?", cityCode)
+	}
+	if category != "" && category != "undefined" && category != "null" {
+		query = query.Where("category ILIKE ?", "%"+category+"%")
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var products []models.Product
+	query.Order("title asc").Offset(offset).Limit(limit).Find(&products)
+
+	type productResponse struct {
+		ID          string  `json:"id"`
+		Title       string  `json:"title"`
+		CityCode    string  `json:"cityCode"`
+		CityName    string  `json:"cityName"`
+		Category    string  `json:"category"`
+		ImageURL    string  `json:"imageUrl"`
+		FromPrice   float64 `json:"fromPrice"`
+		Currency    string  `json:"currency"`
+		Rating      float64 `json:"rating"`
+		ReviewCount int     `json:"reviewCount"`
+		Duration    string  `json:"duration"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+	}
+
+	resultProducts := make([]productResponse, 0, len(products))
+	for _, p := range products {
+		resultProducts = append(resultProducts, productResponse{
+			ID:          p.HeadoutID,
+			Title:       p.Title,
+			CityCode:    p.CityCode,
+			CityName:    p.CityName,
+			Category:    p.Category,
+			ImageURL:    p.ImageURL,
+			FromPrice:   p.PriceFrom,
+			Currency:    p.Currency,
+			Rating:      p.Rating,
+			ReviewCount: p.ReviewCount,
+			Duration:    p.Duration,
+		})
+	}
+
+	var nextOffset *int
+	if offset+limit < int(total) {
+		val := offset + limit
+		nextOffset = &val
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"products":   resultProducts,
+		"total":      total,
+		"nextOffset": nextOffset,
+		"nextUrl":    nil,
+		"prevUrl":    nil,
+	})
 }
 
 func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset int, currencyCode string) {

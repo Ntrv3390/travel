@@ -11,6 +11,7 @@ export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signIn } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -19,143 +20,266 @@ export default function SignInPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!email || !password) return;
+
     setLoading(true);
     setError("");
+
     try {
       await signIn(email, password);
+
       const redirect = searchParams.get("redirect") || "/";
       router.push(redirect);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid credentials. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Invalid credentials. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-50 via-white to-sky-100">
+      {/* Background Decorations */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -left-32 -top-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-sky-500/20 to-cyan-500/5 blur-[100px]" />
-        <div className="absolute -bottom-32 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/5 blur-[100px]" />
-        <div className="absolute left-1/2 top-1/3 h-[400px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-sky-400/10 to-transparent blur-[120px]" />
+        <div className="absolute -left-40 top-0 h-[450px] w-[450px] rounded-full bg-sky-200/40 blur-3xl" />
+        <div className="absolute -right-40 bottom-0 h-[450px] w-[450px] rounded-full bg-cyan-200/40 blur-3xl" />
+
         <div
-          className="absolute inset-0 opacity-[0.04]"
+          className="absolute inset-0 opacity-[0.03]"
           style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
-            backgroundSize: "64px 64px",
+            backgroundImage: `
+              linear-gradient(to right, #0369A1 1px, transparent 1px),
+              linear-gradient(to bottom, #0369A1 1px, transparent 1px)
+            `,
+            backgroundSize: "60px 60px",
           }}
         />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="relative z-10 w-full max-w-md px-4"
-      >
-        <div className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-xl p-8 shadow-2xl sm:p-10">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-center"
-          >
-            <Link href="/" className="inline-flex items-center gap-2 text-2xl font-black text-white">
-              Triipzy
-            </Link>
-            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/80">
-              <Sparkles className="h-3.5 w-3.5 text-sky-400" />
-              Welcome back
-            </div>
-            <h1 className="mt-4 text-2xl font-bold text-white sm:text-3xl">Sign in to your account</h1>
-            <p className="mt-2 text-sm text-white/60">Enter your credentials to continue</p>
-          </motion.div>
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-4">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(2,132,199,0.12)]"
+        >
+          <div className="grid lg:grid-cols-2">
+            {/* Left Side */}
+            <div className="hidden lg:flex flex-col justify-between bg-[#0369A1] p-8 text-white">
+              <div>
+                <Link href="/" className="text-3xl font-black tracking-tight">
+                  Triipzy
+                </Link>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400"
-              >
-                {error}
-              </motion.div>
-            )}
+                <div className="mt-10">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+                    <Sparkles className="h-4 w-4" />
+                    Travel Smarter
+                  </div>
 
-            <div>
-              <label htmlFor="email" className="text-sm font-medium text-white/80">Email</label>
-              <div className="relative mt-1.5">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="you@example.com"
-                  className="block w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/40 transition-colors focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                />
+                  <h1 className="mt-4 text-4xl font-bold leading-tight">
+                    Explore the world,
+                    <br />
+                    one trip at a time.
+                  </h1>
+
+                  <p className="mt-3 max-w-md text-base text-sky-100">
+                    Discover unforgettable experiences, attractions, tours, and
+                    adventures across the globe with Triipzy.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl lg:mt-5 border border-white/10 bg-white/10 p-6 backdrop-blur-sm">
+                <p className="text-sm text-sky-100">
+                  Join thousands of travelers booking experiences worldwide.
+                </p>
+
+                <div className="mt-4 flex items-center gap-8">
+                  <div>
+                    <div className="text-2xl font-bold">50K+</div>
+                    <div className="text-xs text-sky-100">Travelers</div>
+                  </div>
+
+                  <div>
+                    <div className="text-2xl font-bold">211+</div>
+                    <div className="text-xs text-sky-100">Destinations</div>
+                  </div>
+
+                  <div>
+                    <div className="text-2xl font-bold">4.9★</div>
+                    <div className="text-xs text-sky-100">Rating</div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label htmlFor="password" className="text-sm font-medium text-white/80">Password</label>
-              <div className="relative mt-1.5">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="Enter your password"
-                  className="block w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-10 py-2.5 text-sm text-white placeholder-white/40 transition-colors focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            {/* Right Side */}
+            <div className="flex items-center justify-center p-5 sm:p-7 lg:p-8">
+              <div className="w-full max-w-md">
+                {/* Mobile Logo */}
+                <div className="lg:hidden text-center">
+                  <Link
+                    href="/"
+                    className="text-3xl font-black tracking-tight text-[#0369A1]"
+                  >
+                    Triipzy
+                  </Link>
+                </div>
+
+                <div className="mt-6 lg:mt-0">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-2 text-sm font-medium text-[#0369A1]">
+                    <Sparkles className="h-4 w-4" />
+                    Welcome Back
+                  </div>
+
+                  <h2 className="mt-4 text-2xl font-bold text-slate-900">
+                    Sign in to your account
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Continue your journey with Triipzy.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
+                    >
+                      {error}
+                    </motion.div>
+                  )}
+
+                  {/* Email */}
+                  <div>
+                    <label
+                      htmlFor="email"
+                      className="mb-2 block text-sm font-medium text-slate-700"
+                    >
+                      Email Address
+                    </label>
+
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+
+                      <input
+                        id="email"
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-12 pr-4 text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0369A1] focus:ring-4 focus:ring-sky-100"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label
+                      htmlFor="password"
+                      className="mb-2 block text-sm font-medium text-slate-700"
+                    >
+                      Password
+                    </label>
+
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-12 pr-12 text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0369A1] focus:ring-4 focus:ring-sky-100"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Forgot Password */}
+                  <div className="flex justify-end">
+                    <Link
+                      href="/forgot-password"
+                      className="text-sm font-medium text-[#0369A1] transition-colors hover:text-sky-700"
+                    >
+                      Forgot Password?
+                    </Link>
+                  </div>
+
+                  {/* Submit */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0369A1] font-semibold text-white transition-all hover:bg-[#075985] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {loading ? (
+                      <svg
+                        className="h-5 w-5 animate-spin"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          className="opacity-25"
+                        />
+                        <path
+                          fill="currentColor"
+                          className="opacity-75"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                        />
+                      </svg>
+                    ) : (
+                      <>
+                        Sign In
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* Footer */}
+                <div className="mt-5 text-center">
+                  <p className="text-sm text-slate-600">
+                    Don&apos;t have an account?
+                    <Link
+                      href="/sign-up"
+                      className="ml-1 font-semibold text-[#0369A1] transition-colors hover:text-sky-700"
+                    >
+                      Create Account
+                    </Link>
+                  </p>
+                </div>
               </div>
             </div>
-
-            <div className="flex justify-end">
-              <Link href="/forgot-password" className="text-xs text-sky-400 hover:text-sky-300 transition-colors">
-                Forgot password?
-              </Link>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-11 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 text-sm font-semibold text-white shadow-lg shadow-sky-500/25 transition-all hover:shadow-xl hover:shadow-sky-500/30 disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          <p className="mt-6 text-center text-sm text-white/60">
-            Don&apos;t have an account?{" "}
-            <Link href="/sign-up" className="font-medium text-sky-400 hover:text-sky-300 transition-colors">
-              Sign up
-            </Link>
-          </p>
-        </div>
-      </motion.div>
-    </div>
+          </div>
+        </motion.div>
+      </div >
+    </div >
   );
 }

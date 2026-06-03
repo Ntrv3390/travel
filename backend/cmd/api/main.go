@@ -136,6 +136,17 @@ func main() {
 		adminGroup.GET("/users", adminHandler.ListUsers)
 		adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
 		adminGroup.GET("/visitors", visitorHandler.ListVisitors)
+		adminGroup.GET("/cities", adminHandler.ListCities)
+		adminGroup.POST("/cities/sync", adminHandler.SyncCities)
+		adminGroup.GET("/products", adminHandler.ListProducts)
+		adminGroup.POST("/products/sync", adminHandler.SyncProducts)
+		adminGroup.POST("/products/sync-all-individual", adminHandler.SyncAllIndividualProducts)
+		adminGroup.GET("/products/sync-status", adminHandler.GetSyncStatus)
+		adminGroup.POST("/products/:id/sync", adminHandler.SyncSingleProduct)
+		adminGroup.GET("/products/:id/availabilities", adminHandler.GetProductAvailabilities)
+		adminGroup.GET("/settings", adminHandler.GetSetting)
+		adminGroup.PUT("/settings", adminHandler.UpdateSetting)
+		adminGroup.GET("/status", adminHandler.GetStatus)
 	}
 
 	// Admin sync routes (protected by admin key - keep for backwards compatibility)
@@ -157,7 +168,7 @@ func main() {
 	router.GET("/api/v1/currencies", currencyHandler.ListCurrencies)
 
 	// Headout proxy routes
-	headoutHandler := handlers.NewHeadoutHandler(cfg)
+	headoutHandler := handlers.NewHeadoutHandler(cfg, database.GetDB())
 	headoutGroup := router.Group("/api/v1/headout")
 	{
 		headoutGroup.GET("/v1/product/get/:productId", headoutHandler.GetProductByID)
@@ -237,8 +248,8 @@ func main() {
 	server := &http.Server{
 		Addr:           ":" + cfg.Port,
 		Handler:        router,
-		ReadTimeout:    15 * time.Second,
-		WriteTimeout:   15 * time.Second,
+		ReadTimeout:    600 * time.Second,
+		WriteTimeout:   600 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 

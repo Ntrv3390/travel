@@ -24,31 +24,34 @@ export function ProductCard({ product }: { product: Product }) {
   const {
     id,
     name,
-    media,
-    city,
     productType,
     reviewsSummary,
     pricing,
-    listingPrice,
+    listingPrice, title,
     hasInstantConfirmation,
-    hasMobileTicket,
+    hasMobileTicket, fromPrice, cityName,
     cancellationPolicy,
     reschedulePolicy,
+    imageUrl,
     currency,
-  } = product;
+  } = product as any;
 
-  const imageUrl = media.find((m) => m.type === "IMAGE")?.url;
   const discount = listingPrice?.bestDiscount ?? 0;
   const hasDiscount = discount > 0;
   const originalPrice = listingPrice?.minimumPrice?.originalPrice;
-  const finalPrice = listingPrice?.minimumPrice?.finalPrice ?? pricing.headoutSellingPrice;
-  const priceCurrency = listingPrice?.currencyCode ?? currency?.code ?? selectedCurrency;
+  const finalPrice = fromPrice ??
+    listingPrice?.minimumPrice?.finalPrice ??
+    pricing?.headoutSellingPrice ??
+    0; const priceCurrency = listingPrice?.currencyCode ?? currency?.code ?? selectedCurrency;
   const rating = reviewsSummary?.averageRating ?? 0;
   const reviewCount = reviewsSummary?.ratingsCount ?? 0;
-  const typeColor = productTypeColors[productType] ?? "bg-gray-100 text-gray-700 border-gray-200";
+  const safeProductType = productType ?? "ACTIVITY";
 
-  const slug = toSlug(name);
-
+  const typeColor =
+    productTypeColors[safeProductType] ??
+    "bg-gray-100 text-gray-700 border-gray-200";
+  const productName = name ?? title ?? "product";
+  const slug = toSlug(productName);
   return (
     <Link href={`/products/${slug}-${id}`} className="group block">
       <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
@@ -56,7 +59,7 @@ export function ProductCard({ product }: { product: Product }) {
           {imageUrl ? (
             <img
               src={imageUrl.startsWith("//") ? `https:${imageUrl}` : imageUrl}
-              alt={name}
+              alt={productName}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
               loading="lazy"
             />
@@ -73,17 +76,20 @@ export function ProductCard({ product }: { product: Product }) {
           )}
 
           <Badge className={`absolute right-2 top-2 border text-xs font-medium shadow-sm ${typeColor}`}>
-            {productType === "AIRPORT_TRANSFER" ? "Airport Transfer" : productType.charAt(0) + productType.slice(1).toLowerCase()}
+            {safeProductType === "AIRPORT_TRANSFER"
+              ? "Airport Transfer"
+              : safeProductType.charAt(0) +
+              safeProductType.slice(1).toLowerCase()}
           </Badge>
         </div>
 
         <div className="space-y-2 p-3">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3" />
-            <span>{city?.name ?? "Unknown"}</span>
+            <span>{cityName ?? "Unknown"}</span>
           </div>
 
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{name}</h3>
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{productName}</h3>
 
           {rating > 0 && (
             <div className="flex items-center gap-1">

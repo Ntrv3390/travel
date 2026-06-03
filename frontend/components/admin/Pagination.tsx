@@ -47,7 +47,7 @@ export function Pagination({
   };
 
   return (
-    <div className={cn("flex flex-col items-center justify-between gap-4 border-t border-slate-100 px-4 py-4 sm:flex-row", className)}>
+    <div className={cn("flex flex-col items-center justify-between gap-4 px-4 py-4 sm:flex-row", className)}>
       <div className="text-sm text-slate-500">
         Showing <span className="font-medium text-slate-900">{totalItems === 0 ? 0 : startItem}</span> to{" "}
         <span className="font-medium text-slate-900">{endItem}</span> of{" "}
