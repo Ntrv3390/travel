@@ -81,7 +81,7 @@ export default function ForgotPasswordPage() {
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-600">
-                  We've sent a password reset link to
+                  We&apos;ve sent a password reset link to
                 </p>
 
                 <p className="mt-1 font-medium text-[#0369A1] break-all">
@@ -121,7 +121,7 @@ export default function ForgotPasswordPage() {
                   </h1>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    No worries. Enter your email address and we'll send you a secure reset link.
+                    No worries. Enter your email address and we&apos;ll send you a secure reset link.
                   </p>
                 </div>
 

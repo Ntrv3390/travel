@@ -21,6 +21,7 @@ const productTypeColors: Record<string, string> = {
 
 export function ProductCard({ product }: { product: Product }) {
   const { currency: selectedCurrency, formatPrice } = useCurrency();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const {
     id,
     name,

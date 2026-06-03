@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronLeft, ChevronRight, Users, Pencil, X, Check } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import { Search, Users, Pencil, X, Check } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,7 @@ export default function AdminUsersPage() {
         setTotal(res.total || 0);
         setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, []);
 

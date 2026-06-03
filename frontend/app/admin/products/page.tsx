@@ -78,7 +78,7 @@ export default function AdminProductsPage() {
         setTotal(res.total || 0);
         setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, []);
 
@@ -168,7 +168,7 @@ export default function AdminProductsPage() {
     }
   }, [availabilities]);
 
-  const handleExpand = useCallback((id: number, headoutId: string) => {
+  const handleExpand = useCallback((id: number) => {
     if (expandedId === id) {
       setExpandedId(null);
       return;
@@ -291,7 +291,7 @@ export default function AdminProductsPage() {
                 {products.map((product) => (
                   <React.Fragment key={product.id}>
                     <tr
-                      onClick={() => handleExpand(product.id, product.headout_id)}
+                      onClick={() => handleExpand(product.id)}
                       className="border-b border-slate-50 transition-colors hover:bg-slate-50/50 cursor-pointer"
                     >
                       <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700">{product.headout_id}</td>
@@ -427,8 +427,8 @@ export default function AdminProductsPage() {
                                                 avail.available_slots > 10
                                                   ? "bg-emerald-50 text-emerald-700"
                                                   : avail.available_slots > 0
-                                                  ? "bg-amber-50 text-amber-700"
-                                                  : "bg-red-50 text-red-700"
+                                                    ? "bg-amber-50 text-amber-700"
+                                                    : "bg-red-50 text-red-700"
                                               )}>
                                                 {avail.available_slots}
                                               </span>

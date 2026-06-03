@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef, useCallback, Suspense } from "react
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, ChevronLeft, ChevronRight, CalendarCheck, ExternalLink, X } from "lucide-react";
+import { Search, ChevronDown, CalendarCheck, ExternalLink, X } from "lucide-react";
 import { api, getAccessToken } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, toSlug } from "@/lib/utils";
@@ -66,7 +66,7 @@ function AdminBookingsContent() {
         setTotal(res.total || 0);
         setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, []);
 
@@ -240,7 +240,7 @@ function AdminBookingsContent() {
                                     <div key="guests" className="col-span-full rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                                       <div className="mb-3 flex items-center gap-2">
                                         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-sky-400 to-cyan-500 text-white">
-                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-users"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-users"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                                         </div>
                                         <p className="text-sm font-semibold text-slate-800">Guests ({guests.length})</p>
                                       </div>
