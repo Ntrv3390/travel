@@ -3,18 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Search, User, LogOut, Shield } from "lucide-react";
+import { ShoppingCart, Search, /* User, LogOut, Shield */ } from "lucide-react";
 import { SearchBar } from "@/components/search/SearchBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { CurrencyPicker } from "@/components/common/CurrencyPicker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useCart } from "@/hooks/useCart";
-import { useAuth } from "@/context/AuthContext";
+// import { useAuth } from "@/context/AuthContext";
 
 export function Navbar() {
   const { itemCount } = useCart();
-  const { user, isAdmin, signOut } = useAuth();
+  // const { user, isAdmin, signOut } = useAuth();
   const pathname = usePathname();
   const isHome = pathname === "/" || pathname === "/about" || pathname === "/help";
 
@@ -121,7 +121,7 @@ export function Navbar() {
               <Link href="/help">Help</Link>
             </Button>
             <CurrencyPicker className={isSolid ? "text-slate-700 hover:bg-slate-100" : "text-white hover:bg-white/10"} />
-            {user ? (
+            {/* {user ? (
               <>
                 {isAdmin && (
                   <Button
@@ -181,7 +181,7 @@ export function Navbar() {
                   <Link href="/sign-up">Sign Up</Link>
                 </Button>
               </>
-            )}
+            )} */}
             <Button
               variant="ghost"
               size="sm"
