@@ -4,7 +4,7 @@ import { TrustSection } from "@/components/home/trust-section";
 import { TrendingExperiences } from "@/components/home/trending-experiences";
 import { Destinations } from "@/components/home/destinations";
 import { Categories } from "@/components/home/categories";
-import { Collections } from "@/components/home/collections";
+// import { Collections } from "@/components/home/collections";
 import { WhyTriipzy } from "@/components/home/why-triipzy";
 import { Testimonials } from "@/components/home/testimonials";
 import type { City, HomeCategory, HomeCollection, Testimonial } from "@/types/api";
@@ -23,7 +23,7 @@ export default async function HomePage() {
   const citiesResponse = citiesResult.data as { cities: City[]; total: number } | null;
   const cities: City[] = citiesResponse?.cities ?? [];
   const categories: HomeCategory[] = categoriesResult.data ?? [];
-  const collections: HomeCollection[] = collectionsResult.data ?? [];
+  // const collections: HomeCollection[] = collectionsResult.data ?? [];
   const testimonials: Testimonial[] = testimonialsResult.data ?? [];
 
   const totalDestinations = citiesResponse?.total ?? cities.length;
