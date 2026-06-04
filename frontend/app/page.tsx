@@ -7,13 +7,13 @@ import { Categories } from "@/components/home/categories";
 // import { Collections } from "@/components/home/collections";
 import { WhyTriipzy } from "@/components/home/why-triipzy";
 import { Testimonials } from "@/components/home/testimonials";
-import type { City, HomeCategory, HomeCollection, Testimonial } from "@/types/api";
+import type { City, HomeCategory, /* HomeCollection */ Testimonial } from "@/types/api";
 
 // Revalidate city/category metadata daily; pricing is fetched client-side
 export const revalidate = 86400;
 
 export default async function HomePage() {
-  const [citiesResult, categoriesResult, collectionsResult, testimonialsResult] = await Promise.all([
+  const [citiesResult, categoriesResult, /* collectionsResult */, testimonialsResult] = await Promise.all([
     getCities(0, 50),
     getHomeCategories(),
     getHomeCollections(),
