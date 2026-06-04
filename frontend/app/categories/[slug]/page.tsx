@@ -1,13 +1,23 @@
+"use client";
+
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { SearchBar } from "@/components/search/SearchBar";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ExperiencesProvider } from "@/context/ExperiencesContext";
-import { env } from "@/lib/env";
-import type { Metadata } from "next";
+import { searchAll } from "@/lib/api";
+import { useCurrency } from "@/hooks/useCurrency";
+import { useParams } from "next/navigation";
 import type { Experience } from "@/types/experience";
-import type { SearchProduct, SearchAllResponse } from "@/types/search";
+import type { SearchProduct } from "@/types/search";
+
+const LIMIT = 40;
+
+function normalizeImageUrl(url: string): string {
+  if (url.startsWith("//")) return "https:" + url;
+  return url;
+}
 
 function toExperience(p: SearchProduct): Experience {
   return {
@@ -19,76 +29,95 @@ function toExperience(p: SearchProduct): Experience {
     citySlug: p.cityCode.toLowerCase(),
     slug: p.slug,
     country: "",
-    latitude: 0,
-    longitude: 0,
+    latitude: 0, longitude: 0,
     rating: p.rating,
     reviewCount: p.reviewCount,
-    images: [{ url: p.imageUrl, caption: p.name }],
+    images: [{ url: normalizeImageUrl(p.imageUrl), caption: p.name }],
     operatorName: "",
     categories: [p.category],
     languages: [],
-    durationMinSeconds: 0,
-    durationMaxSeconds: 0,
+    durationMinSeconds: 0, durationMaxSeconds: 0,
     cancellationPolicy: null,
     options: [{
-      id: "default",
-      headoutVariantId: "",
-      title: "Default",
-      description: "",
-      price: p.price,
-      currency: p.currency,
-      inclusions: [],
-      exclusions: [],
-      highlights: [],
-      fulfillmentMobile: false,
-      fulfillmentPrint: false,
-      fulfillmentPickup: false,
+      id: "default", headoutVariantId: "",
+      title: "Default", description: "",
+      price: p.price, currency: p.currency,
+      inclusions: [], exclusions: [], highlights: [],
+      fulfillmentMobile: false, fulfillmentPrint: false, fulfillmentPickup: false,
     }],
     gttdEnabled: false,
   };
 }
 
-export const dynamic = "force-dynamic";
-
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const name = params.slug.replace(/-/g, " ");
-  return {
-    title: `${name} Experiences`,
-    description: `Browse ${name} experiences and attractions.`,
-  };
+export default function CategoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <CategoryContent />
+    </Suspense>
+  );
 }
 
-export default async function CategoryPage({ params }: { params: { slug: string } }) {
-  const categoryName = params.slug.replace(/-/g, " ");
-  const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+function CategoryContent() {
+  const params = useParams();
+  const slug = (params.slug as string) ?? "";
+  const categoryName = slug.replace(/-/g, " ");
+  const { currency } = useCurrency();
+  const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [total, setTotal] = useState(0);
+  const [nextOffset, setNextOffset] = useState<number | null>(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const slugRef = useRef(slug);
+  const isFetching = useRef(false);
 
-  let products: SearchProduct[] = [];
-  let error: string | null = null;
-
-  try {
-    const url = new URL(`${env.API_URL}/api/v1/search`);
-    url.searchParams.set("q", categoryName);
-    url.searchParams.set("currencyCode", currency);
-    const res = await fetch(url.toString());
-    if (res.ok) {
-      const data: SearchAllResponse = await res.json();
-      products = data.products ?? [];
-    } else {
-      error = "Search is temporarily unavailable.";
+  const fetchResults = useCallback(async (s: string, offset: number, append: boolean) => {
+    if (!s) {
+      setExperiences([]);
+      setTotal(0);
+      setNextOffset(null);
+      setLoading(false);
+      return;
     }
-  } catch {
-    error = "Search is temporarily unavailable.";
-  }
+    const catName = s.replace(/-/g, " ");
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    isFetching.current = true;
+    const data = await searchAll(catName, { currencyCode: currency, offset, limit: LIMIT });
+    if (data) {
+      const filtered = data.products.filter((p) => p.category.toLowerCase() === catName.toLowerCase());
+      const exps = filtered.map(toExperience);
+      if (append) setExperiences((prev) => [...prev, ...exps]);
+      else setExperiences(exps);
+      setTotal(data.total ?? exps.length);
+      setNextOffset(data.nextOffset ?? null);
+      setError(null);
+    } else {
+      if (!append) setError("Search is temporarily unavailable.");
+    }
+    if (append) setLoadingMore(false);
+    else setLoading(false);
+    isFetching.current = false;
+  }, [currency]);
 
-  const experiences = products
-    .filter((p) => p.category.toLowerCase() === categoryName.toLowerCase())
-    .map(toExperience);
+  useEffect(() => {
+    if (slugRef.current !== slug) {
+      slugRef.current = slug;
+      setNextOffset(0);
+      setExperiences([]);
+    }
+    fetchResults(slug, 0, false);
+  }, [slug, fetchResults]);
+
+  const loadMore = useCallback(() => {
+    if (nextOffset === null || isFetching.current) return;
+    fetchResults(slug, nextOffset, true);
+  }, [slug, nextOffset, fetchResults]);
 
   return (
     <ExperiencesProvider
       initialExperiences={experiences}
-      totalCount={experiences.length}
+      totalCount={total}
       page={1}
       error={error}
     >
@@ -100,21 +129,21 @@ export default async function CategoryPage({ params }: { params: { slug: string 
             </Link>
             <h1 className="mt-2 text-display-sm font-bold tracking-tight">{categoryName}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {experiences.length} experiences found
+              {total} experiences found
             </p>
           </div>
           <SearchBar />
-          {error ? (
+          {error && !loading ? (
             <p className="text-sm text-red-500">{error}</p>
           ) : experiences.length ? (
-            <ExperienceGrid />
-          ) : (
+            <ExperienceGrid loadMore={loadMore} hasMore={nextOffset !== null} loadingMore={loadingMore} />
+          ) : !loading ? (
             <EmptyState
               title={`No ${categoryName} experiences found`}
               description="Try a different category or browse all experiences."
               action={{ label: "Browse all", href: "/search" }}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </ExperiencesProvider>

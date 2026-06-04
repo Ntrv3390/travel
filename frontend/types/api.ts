@@ -46,6 +46,40 @@ export interface CitiesResponse {
   nextOffset: number | null;
 }
 
+export interface HomeCategory {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  image_url: string;
+  icon_name: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface HomeCollection {
+  id: number;
+  title: string;
+  slug: string;
+  description: string;
+  image_url: string;
+  experience_count: number;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface Testimonial {
+  id: number;
+  name: string;
+  location: string;
+  text: string;
+  rating: number;
+  avatar: string;
+  color: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
 export interface SearchParams {
   category?: string;
   sort?: "recommended" | "price_asc" | "price_desc" | "rating";

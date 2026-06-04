@@ -69,9 +69,11 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   const { currency } = useCurrency();
   const fetchTick = useRef(0);
   const offsetRef = useRef<number>(0);
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const isFetching = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  const ITEM_LIMIT = 40;
+  const TRIGGER_INDEX = 25;
 
   const fetchProducts = useCallback(
     async (append: boolean, overrideOffset?: number) => {
@@ -89,7 +91,7 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
       const offset = overrideOffset !== undefined ? overrideOffset : append ? offsetRef.current : 0;
 
       const signal = abortRef.current?.signal;
-      const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: 20 }, { signal });
+      const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: ITEM_LIMIT }, { signal });
 
       // If aborted, do nothing
       if (signal?.aborted) {
@@ -141,19 +143,20 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
 
   useEffect(() => {
     if (state.initialLoading || state.loading || state.nextOffset === null || state.done || state.error) return;
-    const el = sentinelRef.current;
-    if (!el) return;
+    if (state.products.length < TRIGGER_INDEX) return;
+    const triggerEl = document.getElementById(`product-card-${state.products[TRIGGER_INDEX - 1]?.id}`);
+    if (!triggerEl) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && state.nextOffset !== null && !isFetching.current) {
           fetchProducts(true);
         }
       },
-      { rootMargin: "300px" },
+      { rootMargin: "200px" },
     );
-    observer.observe(el);
+    observer.observe(triggerEl);
     return () => observer.disconnect();
-  }, [state.initialLoading, state.loading, state.nextOffset, state.done, state.error, fetchProducts]);
+  }, [state.initialLoading, state.loading, state.nextOffset, state.done, state.error, state.products.length, fetchProducts]);
 
   if (state.initialLoading) {
     return (
@@ -186,15 +189,13 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
     );
   }
 
-  const hasMore = state.nextOffset !== null && !state.done;
-
   return (
     <div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {state.products.map((product) => {
           console.log(product);
           return ((
-            <ProductCard key={product.id} product={product} />
+            <div key={product.id} id={`product-card-${product.id}`}><ProductCard product={product} /></div>
           ))
         })}
       </div>
@@ -206,8 +207,6 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
           ))}
         </div>
       )}
-
-      {hasMore && <div ref={sentinelRef} className="h-4" />}
 
       {state.done && state.products.length > 0 && (
         <p className="mt-10 text-center text-sm text-muted-foreground">

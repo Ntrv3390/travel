@@ -19,27 +19,22 @@ export function TrendingExperiences({ initialExperiences = [] }: { initialExperi
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
-  const mountedRef = useRef(true);
+  const fetchId = useRef(0);
 
   useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    // Cancel any previous in-flight request
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    const id = ++fetchId.current;
 
     setLoading(true);
     getTopExperiences(50, 1, currency, { signal: abortRef.current.signal })
       .then((result) => {
-        if (!mountedRef.current) return;
+        if (id !== fetchId.current) return;
         setExperiences(result.data?.experiences ?? []);
       })
       .catch(() => {})
       .finally(() => {
-        if (mountedRef.current) setLoading(false);
+        if (id === fetchId.current) setLoading(false);
       });
   }, [currency]);
 
@@ -97,7 +92,7 @@ export function TrendingExperiences({ initialExperiences = [] }: { initialExperi
         className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-4 scrollbar-hide snap-x snap-mandatory"
       >
         {showSkeletons
-          ? Array.from({ length: 6 }).map((_, i) => (
+          ? Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="snap-start flex-shrink-0 w-64 sm:w-72">
                 <ExperienceCardSkeleton />
               </div>

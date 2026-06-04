@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 
 export function Footer() {
   return (
-    <footer className="mt-6 border-t border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100">
+    <footer className="border-t border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100">
       <div className="container py-10">
         <Card className="rounded-3xl border-slate-200/90 bg-white/90 p-6 shadow-[0_14px_36px_rgba(15,23,42,0.08)] backdrop-blur md:p-8">
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">

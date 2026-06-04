@@ -3,61 +3,25 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
+import type { Testimonial } from "@/types/api";
 
-const testimonials = [
-  {
-    name: "Sarah Johnson",
-    location: "New York, USA",
-    text: "Absolutely incredible! The sunset safari exceeded every expectation. Our guide was knowledgeable, the views were breathtaking, and every detail was perfectly organized.",
-    rating: 5,
-    avatar: "SJ",
-    color: "from-sky-400 to-cyan-500",
-  },
-  {
-    name: "Marcus Chen",
-    location: "Melbourne, Australia",
-    text: "The street food tour was a highlight of our Bangkok trip. We visited hidden gems we never would have found on our own. Already planning our next Triipzy adventure!",
-    rating: 5,
-    avatar: "MC",
-    color: "from-emerald-400 to-teal-500",
-  },
-  {
-    name: "Priya Patel",
-    location: "Mumbai, India",
-    text: "Booking through Triipzy was seamless. The Northern Lights tour was magical — the photographers knew exactly where to take us. Worth every penny!",
-    rating: 5,
-    avatar: "PP",
-    color: "from-purple-400 to-indigo-500",
-  },
-  {
-    name: "James Wilson",
-    location: "London, UK",
-    text: "I've used many travel platforms, but Triipzy stands out. The curated experiences are unique, customer support is responsive, and the pricing is transparent.",
-    rating: 4,
-    avatar: "JW",
-    color: "from-amber-400 to-orange-500",
-  },
-  {
-    name: "Emma Laurent",
-    location: "Paris, France",
-    text: "The hot air balloon ride in Cappadocia was the most magical morning of my life. Everything from pickup to drop-off was flawlessly coordinated. Thank you Triipzy!",
-    rating: 5,
-    avatar: "EL",
-    color: "from-rose-400 to-pink-500",
-  },
-];
+interface TestimonialsProps {
+  testimonials: Testimonial[];
+}
 
-export function Testimonials() {
+export function Testimonials({ testimonials }: TestimonialsProps) {
   const [current, setCurrent] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || testimonials.length === 0) return;
     const timer = setInterval(() => {
       setCurrent((prev) => (prev + 1) % testimonials.length);
     }, 4000);
     return () => clearInterval(timer);
-  }, [isPaused]);
+  }, [isPaused, testimonials.length]);
+
+  if (testimonials.length === 0) return null;
 
   const next = () => setCurrent((prev) => (prev + 1) % testimonials.length);
   const prev = () => setCurrent((prev) => (prev - 1 + testimonials.length) % testimonials.length);

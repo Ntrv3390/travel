@@ -2,11 +2,12 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, MapPin, RefreshCw, Loader2 } from "lucide-react";
+import { Search, ChevronDown, MapPin, Loader2, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import { Pagination } from "@/components/admin/Pagination";
+import { SyncModal } from "@/components/admin/SyncModal";
+import { cn } from "@/lib/utils";
 
 interface City {
   id: number;
@@ -34,8 +35,7 @@ const ITEMS_PER_PAGE = 50;
 export default function AdminCitiesPage() {
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -52,7 +52,7 @@ export default function AdminCitiesPage() {
         setTotal(res.total || 0);
         setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, []);
 
@@ -69,16 +69,13 @@ export default function AdminCitiesPage() {
   }, []);
 
   const handleSync = useCallback(async () => {
-    setSyncing(true);
-    setSyncResult(null);
+    setSyncModal({ open: true, running: true, progress: null, error: null });
     try {
       const res = await api.post<{ total: number; added: number; updated: number; failed: number }>("/api/v1/admin/cities/sync");
-      setSyncResult(`Synced ${res.total} cities — Added: ${res.added}, Updated: ${res.updated}, Failed: ${res.failed}`);
+      setSyncModal({ open: true, running: false, progress: res, error: null });
       fetchCities(page, search);
     } catch (err) {
-      setSyncResult("Sync failed: " + (err instanceof Error ? err.message : "Unknown error"));
-    } finally {
-      setSyncing(false);
+      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
     }
   }, [page, search, fetchCities]);
 
@@ -95,28 +92,17 @@ export default function AdminCitiesPage() {
         </div>
         <button
           onClick={handleSync}
-          disabled={syncing}
+          disabled={syncModal.running}
           className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {syncing ? (
+          {syncModal.running ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="h-4 w-4" />
           )}
-          {syncing ? "Syncing..." : "Sync Cities"}
+          {syncModal.running ? "Syncing..." : "Sync Cities"}
         </button>
       </div>
-
-      {syncResult && (
-        <div className={cn(
-          "mb-4 rounded-xl border px-4 py-3 text-sm",
-          syncResult.includes("failed") && !syncResult.includes("Failed: 0")
-            ? "border-amber-200 bg-amber-50 text-amber-700"
-            : "border-emerald-200 bg-emerald-50 text-emerald-700"
-        )}>
-          {syncResult}
-        </div>
-      )}
 
       {/* Search */}
       <div className="relative mb-6">
@@ -155,7 +141,7 @@ export default function AdminCitiesPage() {
           <p className="mt-4 text-sm font-medium text-slate-500">No cities found</p>
           <button
             onClick={handleSync}
-            disabled={syncing}
+            disabled={syncModal.running}
             className="mt-4 flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50"
           >
             <RefreshCw className="h-4 w-4" />
@@ -287,6 +273,15 @@ export default function AdminCitiesPage() {
         itemsPerPage={ITEMS_PER_PAGE}
         onPageChange={setPage}
         className="border-t border-slate-100 mt-6"
+      />
+
+      <SyncModal
+        open={syncModal.open}
+        onClose={() => setSyncModal({ open: false, running: false, progress: null, error: null })}
+        title="Cities"
+        progress={syncModal.progress}
+        error={syncModal.error}
+        running={syncModal.running}
       />
     </motion.div>
   );

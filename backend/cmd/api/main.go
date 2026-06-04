@@ -78,7 +78,7 @@ func main() {
 	router.GET("/ready", healthHandler.Ready)
 
 	// Experience routes
-	expHandler := handlers.NewExperienceHandler()
+	expHandler := handlers.NewExperienceHandler(database.GetDB())
 	router.GET("/api/v1/experiences", expHandler.GetExperiences)
 	router.GET("/api/v1/experiences/by-id/:id", expHandler.GetExperienceByID)
 	router.GET("/api/v1/experiences/:city/:slug", expHandler.GetExperienceByCityAndSlug)
@@ -147,6 +147,16 @@ func main() {
 		adminGroup.GET("/settings", adminHandler.GetSetting)
 		adminGroup.PUT("/settings", adminHandler.UpdateSetting)
 		adminGroup.GET("/status", adminHandler.GetStatus)
+		adminGroup.GET("/categories", adminHandler.ListCategoriesAdmin)
+		adminGroup.POST("/categories/sync", adminHandler.SyncCategoriesAdmin)
+		adminGroup.GET("/subcategories", adminHandler.ListSubcategoriesAdmin)
+		adminGroup.POST("/subcategories/sync", adminHandler.SyncSubcategoriesAdmin)
+		adminGroup.GET("/collections", adminHandler.ListCollectionsAdmin)
+		adminGroup.POST("/collections/sync", adminHandler.SyncCollectionsAdmin)
+		adminGroup.GET("/testimonials", adminHandler.ListTestimonialsAdmin)
+		adminGroup.POST("/testimonials", adminHandler.CreateTestimonial)
+		adminGroup.PUT("/testimonials/:id", adminHandler.UpdateTestimonial)
+		adminGroup.PATCH("/testimonials/:id/toggle", adminHandler.ToggleTestimonial)
 	}
 
 	// Admin sync routes (protected by admin key - keep for backwards compatibility)
@@ -158,10 +168,16 @@ func main() {
 	}
 
 	// Search endpoint
-	searchHandler := handlers.NewSearchHandler()
+	searchHandler := handlers.NewSearchHandler(database.GetDB())
 	router.GET("/api/v1/search", searchHandler.Search)
 	router.GET("/api/v1/search/cities/:slug", searchHandler.GetCityBySlug)
 	router.GET("/api/v1/search/categories/:slug", searchHandler.GetCategoryBySlug)
+
+	// Home page endpoints (curated categories, collections & testimonials)
+	homeHandler := handlers.NewHomeHandler(database.GetDB())
+	router.GET("/api/v1/home/categories", homeHandler.GetCategories)
+	router.GET("/api/v1/home/collections", homeHandler.GetCollections)
+	router.GET("/api/v1/home/testimonials", homeHandler.GetTestimonials)
 
 	// Currencies endpoint
 	currencyHandler := handlers.NewCurrencyHandler()

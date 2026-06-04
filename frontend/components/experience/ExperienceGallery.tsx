@@ -9,8 +9,10 @@ export function ExperienceGallery() {
   const images = experience.images;
   const title = experience.title;
 
+  const normalizeUrl = (url: string) => url.startsWith("//") ? "https:" + url : url;
+
   const uniqueImages = images.filter((image, index, array) => array.findIndex((candidate) => candidate.url === image.url) === index);
-  const heroImage = uniqueImages[0]?.url ?? "/images/fallback-experience.svg";
+  const heroImage = uniqueImages[0]?.url ? normalizeUrl(uniqueImages[0].url) : "/images/fallback-experience.svg";
   const thumbnailImages = uniqueImages.slice(1, 5);
   const hasMultipleImages = thumbnailImages.length > 0;
 
@@ -24,7 +26,7 @@ export function ExperienceGallery() {
         <div className="grid grid-cols-2 gap-2">
           {thumbnailImages.map((image, index) => (
             <div key={image.url + index} className="relative aspect-[4/3] overflow-hidden rounded-md">
-              <Image src={image.url} alt={image.caption || `${title} image ${index + 2}`} fill sizes="(max-width: 1024px) 50vw, 20vw" className="object-cover" />
+              <Image src={normalizeUrl(image.url)} alt={image.caption || `${title} image ${index + 2}`} fill sizes="(max-width: 1024px) 50vw, 20vw" className="object-cover" />
             </div>
           ))}
         </div>

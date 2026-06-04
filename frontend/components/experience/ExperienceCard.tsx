@@ -18,7 +18,8 @@ export function ExperienceCard({
   className?: string;
   priority?: boolean;
 }) {
-  const imageUrl = experience.images[0]?.url ?? "/images/fallback-experience.svg";
+  const rawUrl = experience.images[0]?.url;
+  const imageUrl = rawUrl ? (rawUrl.startsWith("//") ? "https:" + rawUrl : rawUrl) : "/images/fallback-experience.svg";
 
   return (
     <Link href={`/products/${experience.slug}-${experience.headoutId}`} className="group block">

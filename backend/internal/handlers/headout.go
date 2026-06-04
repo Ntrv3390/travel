@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/models"
@@ -80,21 +81,20 @@ func (h *HeadoutHandler) ListCategoriesByCityV1(c *gin.Context) {
 }
 
 // v2 endpoints
-func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
-	// Check fetch_fresh setting
-	fetchFresh := true
-	var setting models.Setting
-	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err == nil {
-		if setting.Value == "false" {
-			fetchFresh = false
-		}
-	}
 
-	if fetchFresh {
+func (h *HeadoutHandler) isFetchFresh() bool {
+	var setting models.Setting
+	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err != nil {
+		return true
+	}
+	return setting.Value != "false"
+}
+
+func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
+	if h.isFetchFresh() {
 		h.listCitiesFromHeadout(c)
 		return
 	}
-
 	h.listCitiesFromDB(c)
 }
 
@@ -110,7 +110,6 @@ func (h *HeadoutHandler) listCitiesFromHeadout(c *gin.Context) {
 		}
 		offset = parsed
 	}
-	q.Set("offset", strconv.Itoa(offset))
 
 	limit := 20
 	if v := q.Get("limit"); v != "" {
@@ -119,17 +118,122 @@ func (h *HeadoutHandler) listCitiesFromHeadout(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
 			return
 		}
-		if parsed > 20 {
-			limit = 20
+		if parsed > 40 {
+			limit = 40
 		} else {
 			limit = parsed
 		}
 	}
-	q.Set("limit", strconv.Itoa(limit))
 
-	c.Request.URL.RawQuery = q.Encode()
+	headoutLimit := limit
+	if headoutLimit > 200 {
+		headoutLimit = 200
+	}
 
-	h.proxyGetWithService(c, h.publicService, "/v2/cities/", true)
+	type cityRaw struct {
+		Code    string  `json:"code"`
+		Name    string  `json:"name"`
+		Image   *struct {
+			URL string `json:"url"`
+		} `json:"image"`
+		Country *struct {
+			Code string `json:"code"`
+			Name string `json:"name"`
+		} `json:"country"`
+		Timezone string `json:"timezone"`
+	}
+
+	allCities := make([]cityRaw, 0, limit)
+	var total int
+	var lastNextURL string
+
+	for len(allCities) < limit {
+		pq := url.Values{}
+		pq.Set("limit", strconv.Itoa(headoutLimit))
+		pq.Set("offset", strconv.Itoa(offset))
+
+		upstream, err := h.publicService.Get(c.Request.Context(), "/v2/cities/", pq, true)
+		if err != nil {
+			h.handleProxyError(c, err)
+			return
+		}
+		if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+			c.Data(upstream.StatusCode, upstream.Headers.Get("Content-Type"), upstream.Body)
+			return
+		}
+
+		var page struct {
+			Cities  []cityRaw `json:"cities"`
+			Total   int       `json:"total"`
+			NextURL string    `json:"nextUrl"`
+		}
+		if err := json.Unmarshal(upstream.Body, &page); err != nil {
+			c.Data(upstream.StatusCode, upstream.Headers.Get("Content-Type"), upstream.Body)
+			return
+		}
+
+		if len(page.Cities) == 0 {
+			break
+		}
+
+		needed := limit - len(allCities)
+		if len(page.Cities) <= needed {
+			allCities = append(allCities, page.Cities...)
+		} else {
+			allCities = append(allCities, page.Cities[:needed]...)
+		}
+
+		if total == 0 && page.Total > 0 {
+			total = page.Total
+		}
+
+		lastNextURL = page.NextURL
+
+		if len(page.Cities) < headoutLimit || page.NextURL == "" {
+			break
+		}
+		offset += headoutLimit
+	}
+
+	result := make([]map[string]interface{}, 0, len(allCities))
+	for _, cty := range allCities {
+		entry := map[string]interface{}{
+			"code":     cty.Code,
+			"name":     cty.Name,
+			"timezone": cty.Timezone,
+		}
+		if cty.Image != nil {
+			entry["image"] = map[string]interface{}{"url": cty.Image.URL}
+		}
+		if cty.Country != nil {
+			entry["country"] = map[string]interface{}{"code": cty.Country.Code, "name": cty.Country.Name}
+		}
+		result = append(result, entry)
+	}
+
+	var nextOffset *int
+	if lastNextURL != "" {
+		parsedURL, err := url.Parse(lastNextURL)
+		if err == nil {
+			if ns := parsedURL.Query().Get("offset"); ns != "" {
+				if n, err := strconv.Atoi(ns); err == nil {
+					nextOffset = &n
+				}
+			}
+		}
+	}
+	if nextOffset == nil && len(result) > 0 && total > len(result) {
+		val := offset + limit
+		nextOffset = &val
+	}
+
+	response := map[string]interface{}{
+		"cities":     result,
+		"total":      total,
+		"nextUrl":    lastNextURL,
+		"nextOffset": nextOffset,
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *HeadoutHandler) listCitiesFromDB(c *gin.Context) {
@@ -152,8 +256,8 @@ func (h *HeadoutHandler) listCitiesFromDB(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a non-negative integer"})
 			return
 		}
-		if parsed > 20 {
-			limit = 20
+		if parsed > 40 {
+			limit = 40
 		} else {
 			limit = parsed
 		}
@@ -207,18 +311,9 @@ var productPopularCities = []string{
 }
 
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
-	// Check fetch_fresh setting
-	fetchFresh := true
-	var setting models.Setting
-	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err == nil {
-		if setting.Value == "false" {
-			fetchFresh = false
-		}
-	}
-
 	q := c.Request.URL.Query()
 
-	if !fetchFresh {
+	if !h.isFetchFresh() {
 		h.listProductsFromDB(c, q)
 		return
 	}
@@ -417,10 +512,24 @@ func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset
 }
 
 func (h *HeadoutHandler) ListCategoriesV2(c *gin.Context) {
+	if !h.isFetchFresh() {
+		if h.writeCachedResponse(c, "/v2/categories") {
+			return
+		}
+		h.proxyAndCache(c, "/v2/categories", true)
+		return
+	}
 	h.proxyGet(c, "/v2/categories", true)
 }
 
 func (h *HeadoutHandler) ListCollectionsV2(c *gin.Context) {
+	if !h.isFetchFresh() {
+		if h.writeCachedResponse(c, "/v2/collections") {
+			return
+		}
+		h.proxyAndCache(c, "/v2/collections", true)
+		return
+	}
 	h.proxyGet(c, "/v2/collections", true)
 }
 
@@ -430,6 +539,27 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "productId is required"})
 		return
 	}
+
+	if !h.isFetchFresh() {
+		var product models.Product
+		err := h.db.Where("headout_id = ?", productID).First(&product).Error
+		if err == nil {
+			if len(product.RawHeadoutData) > 0 && string(product.RawHeadoutData) != "{}" {
+				h.writeRawJSON(c, product.RawHeadoutData)
+				return
+			}
+			h.writeProductFromDB(c, &product)
+			return
+		}
+
+		if err != gorm.ErrRecordNotFound {
+			logger.Errorf("DB error fetching product %s: %v", productID, err)
+		}
+
+		h.syncProductToDB(c, productID)
+		return
+	}
+
 	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(productID))
 	h.proxyGet(c, path, true)
 }
@@ -461,7 +591,266 @@ func (h *HeadoutHandler) ListNormalInventory(c *gin.Context) {
 }
 
 func (h *HeadoutHandler) ListSubcategoriesV2(c *gin.Context) {
+	if !h.isFetchFresh() {
+		if h.writeCachedResponse(c, "/v2/subcategories") {
+			return
+		}
+		h.proxyAndCache(c, "/v2/subcategories", true)
+		return
+	}
 	h.proxyGet(c, "/v2/subcategories", true)
+}
+
+func (h *HeadoutHandler) writeRawJSON(c *gin.Context, data []byte) {
+	c.Data(http.StatusOK, "application/json", data)
+}
+
+func (h *HeadoutHandler) writeProductFromDB(c *gin.Context, product *models.Product) {
+	type productImage struct {
+		URL string `json:"url"`
+	}
+	type productMedia struct {
+		URL string `json:"url"`
+	}
+	type productCity struct {
+		Code string `json:"code"`
+		Name string `json:"name"`
+	}
+	type productCountry struct {
+		Code string `json:"code"`
+		Name string `json:"name"`
+	}
+	type productCurrency struct {
+		Code string `json:"code"`
+	}
+	type listingPriceMin struct {
+		FinalPrice float64 `json:"finalPrice"`
+	}
+	type listingPrice struct {
+		MinimumPrice listingPriceMin `json:"minimumPrice"`
+		CurrencyCode string          `json:"currencyCode"`
+	}
+	type reviewsSummary struct {
+		AverageRating float64 `json:"averageRating"`
+		RatingsCount  int     `json:"ratingsCount"`
+	}
+	type productResponse struct {
+		ID             string          `json:"id"`
+		Name           string          `json:"name"`
+		Description    string          `json:"description"`
+		City           productCity     `json:"city"`
+		Category       string          `json:"category"`
+		Media          []productMedia  `json:"media"`
+		ListingPrice   listingPrice    `json:"listingPrice"`
+		ReviewsSummary reviewsSummary  `json:"reviewsSummary"`
+		Duration       string          `json:"duration"`
+	}
+
+	resp := productResponse{
+		ID:          product.HeadoutID,
+		Name:        product.Title,
+		Description: product.Description,
+		City: productCity{
+			Code: product.CityCode,
+			Name: product.CityName,
+		},
+		Category: product.Category,
+		Media:    []productMedia{},
+		ListingPrice: listingPrice{
+			MinimumPrice: listingPriceMin{FinalPrice: product.PriceFrom},
+			CurrencyCode: product.Currency,
+		},
+		ReviewsSummary: reviewsSummary{
+			AverageRating: product.Rating,
+			RatingsCount:  product.ReviewCount,
+		},
+		Duration: product.Duration,
+	}
+	if product.ImageURL != "" {
+		resp.Media = append(resp.Media, productMedia{URL: product.ImageURL})
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *HeadoutHandler) syncProductToDB(c *gin.Context, productID string) {
+	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(productID))
+	upstream, err := h.service.Get(c.Request.Context(), path, url.Values{}, true)
+	if err != nil {
+		logger.Errorf("Failed to fetch product %s from Headout for lazy sync: %v", productID, err)
+		h.handleProxyError(c, err)
+		return
+	}
+
+	if upstream.StatusCode >= 400 {
+		h.writeUpstreamResponse(c, upstream)
+		return
+	}
+
+	var pData map[string]interface{}
+	if err := json.Unmarshal(upstream.Body, &pData); err != nil {
+		logger.Errorf("Failed to parse product %s from Headout: %v", productID, err)
+		h.writeUpstreamResponse(c, upstream)
+		return
+	}
+
+	h.saveProductToDB(productID, pData)
+
+	h.writeUpstreamResponse(c, upstream)
+}
+
+func (h *HeadoutHandler) saveProductToDB(headoutID string, pData map[string]interface{}) {
+	title := extractString(pData, "name")
+	if title == "" {
+		title = extractString(pData, "title")
+	}
+	description := extractString(pData, "description")
+	cityName := extractNestedString(pData, "city.name", "cityName")
+	category := extractNestedString(pData, "primaryCategory.name", "category")
+
+	var imageURL string
+	if media, ok := pData["media"].([]interface{}); ok && len(media) > 0 {
+		if first, ok := media[0].(map[string]interface{}); ok {
+			if url, ok := first["url"].(string); ok {
+				imageURL = url
+			}
+		}
+	}
+	if imageURL == "" {
+		imageURL = extractNestedString(pData, "imageUrl")
+	}
+
+	currency := extractNestedString(pData, "currency.code", "listingPrice.currencyCode", "pricing.currency")
+
+	var priceFrom float64
+	if lp, ok := pData["listingPrice"].(map[string]interface{}); ok {
+		if mp, ok := lp["minimumPrice"].(map[string]interface{}); ok {
+			switch v := mp["finalPrice"].(type) {
+			case float64:
+				priceFrom = v
+			case json.Number:
+				priceFrom, _ = v.Float64()
+			}
+		}
+	}
+	if priceFrom == 0 {
+		if pricing, ok := pData["pricing"].(map[string]interface{}); ok {
+			switch v := pricing["headoutSellingPrice"].(type) {
+			case float64:
+				priceFrom = v
+			case json.Number:
+				priceFrom, _ = v.Float64()
+			}
+		}
+	}
+
+	var rating float64
+	if rs, ok := pData["reviewsSummary"].(map[string]interface{}); ok {
+		switch v := rs["averageRating"].(type) {
+		case float64:
+			rating = v
+		case json.Number:
+			rating, _ = v.Float64()
+		}
+	}
+
+	var reviewCount int
+	if rs, ok := pData["reviewsSummary"].(map[string]interface{}); ok {
+		switch v := rs["ratingsCount"].(type) {
+		case float64:
+			reviewCount = int(v)
+		case json.Number:
+			rc, _ := v.Int64()
+			reviewCount = int(rc)
+		}
+	}
+
+	duration := extractString(pData, "duration")
+	rawCityCode := extractNestedString(pData, "cityCode", "city.code")
+
+	rawJSON, _ := json.Marshal(pData)
+
+	var existing models.Product
+	err := h.db.Where("headout_id = ?", headoutID).First(&existing).Error
+
+	if err == gorm.ErrRecordNotFound {
+		product := models.Product{
+			HeadoutID:      headoutID,
+			Title:          title,
+			Description:    description,
+			CityCode:       rawCityCode,
+			CityName:       cityName,
+			Category:       category,
+			ImageURL:       imageURL,
+			Currency:       currency,
+			PriceFrom:      priceFrom,
+			Rating:         rating,
+			ReviewCount:    reviewCount,
+			Duration:       duration,
+			RawHeadoutData: rawJSON,
+			LastSyncedAt:   time.Now(),
+		}
+		if createErr := h.db.Create(&product).Error; createErr != nil {
+			logger.Errorf("Failed to save product %s to DB: %v", headoutID, createErr)
+		}
+	} else if err == nil {
+		existing.Title = title
+		existing.Description = description
+		existing.CityCode = rawCityCode
+		existing.CityName = cityName
+		existing.Category = category
+		existing.ImageURL = imageURL
+		existing.Currency = currency
+		existing.PriceFrom = priceFrom
+		existing.Rating = rating
+		existing.ReviewCount = reviewCount
+		existing.Duration = duration
+		existing.RawHeadoutData = rawJSON
+		existing.LastSyncedAt = time.Now()
+		if saveErr := h.db.Save(&existing).Error; saveErr != nil {
+			logger.Errorf("Failed to update product %s in DB: %v", headoutID, saveErr)
+		}
+	} else {
+		logger.Errorf("DB error checking product %s: %v", headoutID, err)
+	}
+}
+
+func (h *HeadoutHandler) writeCachedResponse(c *gin.Context, endpoint string) bool {
+	var cache models.APICache
+	if err := h.db.Where("endpoint = ?", endpoint).First(&cache).Error; err != nil {
+		return false
+	}
+	if len(cache.Response) == 0 || string(cache.Response) == "{}" {
+		return false
+	}
+	c.Data(http.StatusOK, "application/json", cache.Response)
+	return true
+}
+
+func (h *HeadoutHandler) proxyAndCache(c *gin.Context, path string, requiresAuth bool) {
+	upstream, err := h.service.Get(c.Request.Context(), path, c.Request.URL.Query(), requiresAuth)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+
+	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+		func() {
+			var existing models.APICache
+			err := h.db.Where("endpoint = ?", path).First(&existing).Error
+			if err == gorm.ErrRecordNotFound {
+				h.db.Create(&models.APICache{
+					Endpoint: path,
+					Response: upstream.Body,
+				})
+			} else if err == nil {
+				existing.Response = upstream.Body
+				h.db.Save(&existing)
+			}
+		}()
+	}
+
+	h.writeUpstreamResponse(c, upstream)
 }
 
 func (h *HeadoutHandler) proxyGet(c *gin.Context, path string, requiresAuth bool) {

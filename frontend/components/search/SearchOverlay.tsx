@@ -242,7 +242,7 @@ function SearchProductItem({
     >
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100">
         {item.imageUrl ? (
-          <Image src={item.imageUrl} alt={item.name} fill className="object-cover" sizes="48px" />
+          <Image src={item.imageUrl.startsWith("//") ? "https:" + item.imageUrl : item.imageUrl} alt={item.name} fill className="object-cover" sizes="48px" />
         ) : (
           <div className="flex h-full items-center justify-center text-slate-300">
             <Search className="h-5 w-5" />
@@ -295,7 +295,7 @@ function SearchCityItem({
     >
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100">
         {item.image ? (
-          <Image src={item.image} alt={item.name} fill className="object-cover" sizes="48px" />
+          <Image src={item.image.startsWith("//") ? "https:" + item.image : item.image} alt={item.name} fill className="object-cover" sizes="48px" />
         ) : (
           <div className="flex h-full items-center justify-center text-slate-300">
             <MapPin className="h-5 w-5" />

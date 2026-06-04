@@ -16,17 +16,33 @@ import (
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
+	"gorm.io/gorm"
 )
 
 type ExperienceHandler struct {
 	headoutProxySvc *services.HeadoutProxyService
+	db              *gorm.DB
+	catalogSvc      *services.ExperienceCatalogService
 }
 
-func NewExperienceHandler() *ExperienceHandler {
+func NewExperienceHandler(db *gorm.DB) *ExperienceHandler {
 	cfg := config.Load()
 	return &ExperienceHandler{
 		headoutProxySvc: services.NewHeadoutProxyService(cfg),
+		db:              db,
+		catalogSvc:      services.NewExperienceCatalogService(db),
 	}
+}
+
+func (h *ExperienceHandler) isFetchFresh() bool {
+	if h.db == nil {
+		return true
+	}
+	var setting models.Setting
+	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err != nil {
+		return true
+	}
+	return setting.Value != "false"
 }
 
 var popularCities = []string{
@@ -38,13 +54,30 @@ var popularCities = []string{
 	"Budapest", "Athens", "Kuala Lumpur", "Mumbai", "Seoul",
 }
 
-// GetExperiences returns experiences — always from Headout live
+// GetExperiences returns experiences — from DB when fetch_fresh=false, Headout otherwise
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	location := c.Query("location")
 	q := c.Query("q")
+	category := c.Query("category")
+	sort := c.Query("sort")
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 24)
+
+	if !h.isFetchFresh() && h.catalogSvc != nil {
+		result, err := h.catalogSvc.ListExperiences(c.Request.Context(), category, location, q, sort, currencyCode, page, limit)
+		if err == nil && result.Count > 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"data":          result.Experiences,
+				"count":         result.Count,
+				"page":          result.Page,
+				"limit":         result.Limit,
+				"total_pages":   result.TotalPages,
+				"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+			})
+			return
+		}
+	}
 
 	if q != "" && location != "" {
 		liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, location, page, limit)
@@ -107,10 +140,18 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	h.fetchRandomExperiences(c, page, limit, currencyCode)
 }
 
-// GetExperienceByID returns a single experience by ID — always from Headout
+// GetExperienceByID returns a single experience by ID — from DB when fetch_fresh=false, Headout otherwise
 func (h *ExperienceHandler) GetExperienceByID(c *gin.Context) {
 	id := c.Param("id")
 	currencyCode := c.Query("currencyCode")
+
+	if !h.isFetchFresh() && h.catalogSvc != nil {
+		exp, err := h.catalogSvc.GetExperienceByID(c.Request.Context(), id)
+		if err == nil && exp != nil {
+			c.JSON(http.StatusOK, gin.H{"data": exp})
+			return
+		}
+	}
 
 	liveExp, liveErr := h.fetchLiveExperienceByID(c, id, currencyCode)
 	if liveErr != nil {
@@ -122,11 +163,19 @@ func (h *ExperienceHandler) GetExperienceByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": liveExp})
 }
 
-// GetExperienceByCityAndSlug returns a single experience by city and slug — always from Headout
+// GetExperienceByCityAndSlug returns a single experience by city and slug — from DB when fetch_fresh=false, Headout otherwise
 func (h *ExperienceHandler) GetExperienceByCityAndSlug(c *gin.Context) {
 	city := c.Param("city")
 	slug := c.Param("slug")
 	currencyCode := c.Query("currencyCode")
+
+	if !h.isFetchFresh() && h.catalogSvc != nil {
+		exp, err := h.catalogSvc.GetExperienceByCityAndSlug(c.Request.Context(), city, slug)
+		if err == nil && exp != nil {
+			c.JSON(http.StatusOK, gin.H{"data": exp})
+			return
+		}
+	}
 
 	liveExp, liveErr := h.fetchLiveExperienceByCityAndSlug(c, city, slug, currencyCode)
 	if liveErr != nil {
@@ -138,7 +187,7 @@ func (h *ExperienceHandler) GetExperienceByCityAndSlug(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": liveExp})
 }
 
-// SearchExperiences searches for experiences — always from Headout
+// SearchExperiences searches for experiences — from DB when fetch_fresh=false, Headout otherwise
 func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	category := c.Query("category")
 	location := c.Query("location")
@@ -146,6 +195,21 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	currencyCode := c.Query("currencyCode")
 	page := parseIntQuery(c, "page", 1)
 	limit := parseIntQuery(c, "limit", 24)
+
+	if !h.isFetchFresh() && h.catalogSvc != nil {
+		result, err := h.catalogSvc.SearchExperiences(c.Request.Context(), category, location, q, "", currencyCode, page, limit)
+		if err == nil && result.Count > 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"data":          result.Experiences,
+				"count":         result.Count,
+				"page":          result.Page,
+				"limit":         result.Limit,
+				"total_pages":   result.TotalPages,
+				"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+			})
+			return
+		}
+	}
 
 	searchLocation := location
 	if searchLocation == "" {

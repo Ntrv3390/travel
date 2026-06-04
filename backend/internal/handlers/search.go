@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
+	"gorm.io/gorm"
 )
 
 const (
@@ -25,6 +27,7 @@ const (
 
 type SearchHandler struct {
 	headoutProxySvc *services.HeadoutProxyService
+	db              *gorm.DB
 }
 
 type cachedCitiesResult struct {
@@ -44,11 +47,23 @@ var (
 	searchProductsCache = make(map[string]cachedProductsResult)
 )
 
-func NewSearchHandler() *SearchHandler {
+func NewSearchHandler(db *gorm.DB) *SearchHandler {
 	cfg := config.Load()
 	return &SearchHandler{
 		headoutProxySvc: services.NewHeadoutProxyService(cfg),
+		db:              db,
 	}
+}
+
+func (h *SearchHandler) isFetchFresh() bool {
+	if h.db == nil {
+		return true
+	}
+	var setting models.Setting
+	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err != nil {
+		return true
+	}
+	return setting.Value != "false"
 }
 
 type SearchProduct struct {
@@ -93,6 +108,8 @@ type SearchSuggestion struct {
 type SearchResponse struct {
 	Query       string             `json:"query"`
 	Products    []SearchProduct    `json:"products"`
+	Total       int                `json:"total"`
+	NextOffset  *int               `json:"nextOffset"`
 	Cities      []SearchCity       `json:"cities"`
 	Categories  []SearchCategory   `json:"categories"`
 	Suggestions []SearchSuggestion `json:"suggestions"`
@@ -101,6 +118,14 @@ type SearchResponse struct {
 func (h *SearchHandler) Search(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	currencyCode := strings.TrimSpace(c.Query("currencyCode"))
+	offset := 0
+	limit := 40
+	if o, err := parseIntParam(c.Query("offset")); err == nil && o > 0 {
+		offset = o
+	}
+	if l, err := parseIntParam(c.Query("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
 	if q == "" {
 		popularCities := h.fetchAllCities(c)
 		if len(popularCities) > 8 {
@@ -118,6 +143,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, SearchResponse{
 			Query: q, Products: []SearchProduct{},
+			Total: 0, NextOffset: nil,
 			Cities: popularCities, Categories: []SearchCategory{},
 			Suggestions: suggestions,
 		})
@@ -126,7 +152,56 @@ func (h *SearchHandler) Search(c *gin.Context) {
 
 	results := h.performSearch(c, q, currencyCode)
 
+	// Apply pagination to products
+	total := len(results.Products)
+	var nextOffset *int
+	end := offset + limit
+	if end < total {
+		nxt := end
+		nextOffset = &nxt
+		results.Products = results.Products[offset:end]
+	} else if offset < total {
+		results.Products = results.Products[offset:]
+	} else {
+		results.Products = []SearchProduct{}
+	}
+	results.Total = total
+	results.NextOffset = nextOffset
+
 	c.JSON(http.StatusOK, results)
+}
+
+func (h *SearchHandler) fetchProductsFromDB() []SearchProduct {
+	var dbProducts []models.Product
+	if err := h.db.Where("title != ''").Limit(500).Find(&dbProducts).Error; err != nil {
+		logger.Errorf("Failed to fetch products from DB for search: %v", err)
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	products := make([]SearchProduct, 0, len(dbProducts))
+	for _, p := range dbProducts {
+		if seen[p.HeadoutID] {
+			continue
+		}
+		seen[p.HeadoutID] = true
+		slug := slugify(p.Title)
+		products = append(products, SearchProduct{
+			ID:          p.HeadoutID,
+			Name:        p.Title,
+			Slug:        slug,
+			City:        p.CityName,
+			CityCode:    p.CityCode,
+			Category:    p.Category,
+			ImageURL:    p.ImageURL,
+			Price:       p.PriceFrom,
+			Currency:    p.Currency,
+			Rating:      float32(p.Rating),
+			ReviewCount: p.ReviewCount,
+			URL:         "/products/" + slug + "-" + p.HeadoutID,
+		})
+	}
+	return products
 }
 
 func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode string) *SearchResponse {
@@ -135,9 +210,25 @@ func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode str
 
 	matchedCities := searchFilterAndRankCities(allCities, lower)
 
-	allProducts := h.fetchProductsLive(c.Request.Context(), currencyCode)
+	var allProducts []SearchProduct
+	if !h.isFetchFresh() && h.db != nil {
+		allProducts = h.fetchProductsFromDB()
+	} else {
+		allProducts = h.fetchProductsLive(c.Request.Context(), currencyCode)
+	}
 
 	matchedProducts := searchFilterAndRankProducts(allProducts, lower)
+
+	// Fallback: if no products matched, try harder
+	if len(matchedProducts) == 0 {
+		if h.db != nil {
+			matchedProducts = h.searchProductsFallbackDB(lower)
+		}
+		if len(matchedProducts) == 0 && h.isFetchFresh() {
+			matchedProducts = h.searchProductsFallbackHeadout(c.Request.Context(), lower, currencyCode)
+		}
+	}
+
 	matchedCategories := searchExtractAndRankCategories(matchedProducts, lower)
 	suggestions := searchBuildSuggestions(lower, matchedProducts, matchedCities, matchedCategories)
 	if matchedProducts == nil {
@@ -159,7 +250,177 @@ func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode str
 	}
 }
 
+func (h *SearchHandler) searchProductsFallbackDB(query string) []SearchProduct {
+	if h.db == nil {
+		return nil
+	}
+	var dbProducts []models.Product
+	if err := h.db.Where("LOWER(title) LIKE ?", "%"+query+"%").Limit(20).Find(&dbProducts).Error; err != nil {
+		logger.Errorf("Fallback DB search failed: %v", err)
+		return nil
+	}
+	seen := make(map[string]bool)
+	products := make([]SearchProduct, 0, len(dbProducts))
+	for _, p := range dbProducts {
+		if seen[p.HeadoutID] {
+			continue
+		}
+		seen[p.HeadoutID] = true
+		slug := slugify(p.Title)
+		products = append(products, SearchProduct{
+			ID: p.HeadoutID, Name: p.Title, Slug: slug,
+			City: p.CityName, CityCode: p.CityCode, Category: p.Category,
+			ImageURL: p.ImageURL, Price: p.PriceFrom, Currency: p.Currency,
+			Rating: float32(p.Rating), ReviewCount: p.ReviewCount,
+			URL: "/products/" + slug + "-" + p.HeadoutID,
+		})
+	}
+	return products
+}
+
+func (h *SearchHandler) searchProductsFallbackHeadout(ctx context.Context, q string, currencyCode string) []SearchProduct {
+	allCities := productPopularCities
+	maxCities := searchProductCityLimit * 2
+	if len(allCities) > maxCities {
+		allCities = allCities[:maxCities]
+	}
+
+	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 6)
+	results := make([][]SearchProduct, 0, len(allCities))
+
+	for _, cityCode := range allCities {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(code string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			vals := url.Values{}
+			vals.Set("cityCode", code)
+			if currencyCode != "" {
+				vals.Set("currencyCode", strings.ToUpper(currencyCode))
+			} else {
+				vals.Set("currencyCode", "USD")
+			}
+			vals.Set("language", "en")
+			vals.Set("limit", "100")
+			vals.Set("offset", "0")
+
+			upstream, err := h.headoutProxySvc.Get(fetchCtx, "/v1/product/listing/list-by/city", vals, false)
+			if err != nil || upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+				return
+			}
+
+			var payload struct {
+				Items []map[string]interface{} `json:"items"`
+			}
+			if err := json.Unmarshal(upstream.Body, &payload); err != nil {
+				return
+			}
+
+			products := make([]SearchProduct, 0, len(payload.Items))
+			for _, item := range payload.Items {
+				id := extractID(item)
+				if id == "" {
+					continue
+				}
+				name := getString(item, "name", "title")
+				if name == "" || !strings.Contains(strings.ToLower(name), q) {
+					continue
+				}
+				var imageURL string
+				if img, ok := item["image"].(map[string]interface{}); ok {
+					imageURL = getString(img, "url")
+				}
+				if imageURL == "" {
+					imageURL = getString(item, "image_url", "thumbnail", "hero_image")
+				}
+				cityName := getNestedString(item, "city", "name")
+				if cityName == "" {
+					cityName = getString(item, "location", "city_name")
+				}
+				if cityName == "" {
+					cityName = code
+				}
+				categoryName := ""
+				if pc, ok := item["primaryCategory"].(map[string]interface{}); ok {
+					categoryName = getString(pc, "name")
+				}
+				if categoryName == "" {
+					categoryName = getString(item, "category", "primary_category")
+				}
+				productType := getString(item, "productType")
+				curr, price := searchExtractPriceInfo(item, currencyCode)
+				rating := float32(getFloat(item, "rating", "average_rating"))
+				reviewCount := int(getFloat(item, "review_count", "ratings_count"))
+				if rating == 0 {
+					if rs, ok := item["reviewsSummary"].(map[string]interface{}); ok {
+						rating = float32(getFloat(rs, "averageRating"))
+						reviewCount = int(getFloat(rs, "ratingsCount"))
+					}
+				}
+				sl := slugify(name)
+				products = append(products, SearchProduct{
+					ID: id, Name: name, Slug: sl, City: cityName,
+					CityCode: code, Category: categoryName,
+					ImageURL: imageURL, Price: price, Currency: curr,
+					Rating: rating, ReviewCount: reviewCount,
+					ProductType: productType, URL: "/products/" + sl + "-" + id,
+				})
+			}
+
+			mu.Lock()
+			results = append(results, products)
+			mu.Unlock()
+		}(cityCode)
+	}
+	wg.Wait()
+
+	allProducts := make([]SearchProduct, 0)
+	seen := make(map[string]bool)
+	for _, cityProducts := range results {
+		for _, p := range cityProducts {
+			if !seen[p.ID] {
+				seen[p.ID] = true
+				allProducts = append(allProducts, p)
+			}
+		}
+	}
+
+	return allProducts
+}
+
+func (h *SearchHandler) fetchAllCitiesFromDB(c *gin.Context) []SearchCity {
+	var dbCities []models.City
+	if err := h.db.Order("name asc").Limit(200).Find(&dbCities).Error; err != nil {
+		logger.Errorf("Failed to fetch cities from DB for search: %v", err)
+		return nil
+	}
+
+	cities := make([]SearchCity, 0, len(dbCities))
+	for _, city := range dbCities {
+		slug := slugify(city.Name)
+		cities = append(cities, SearchCity{
+			Code:    city.Code,
+			Name:    city.Name,
+			Country: city.CountryName,
+			Image:   city.ImageURL,
+			Slug:    slug,
+			URL:     "/cities/" + slug,
+		})
+	}
+	return cities
+}
+
 func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
+	if !h.isFetchFresh() && h.db != nil {
+		return h.fetchAllCitiesFromDB(c)
+	}
+
 	searchCitiesCacheMu.RLock()
 	if time.Now().Before(searchCitiesCache.expiresAt) && len(searchCitiesCache.cities) > 0 {
 		cached := append([]SearchCity(nil), searchCitiesCache.cities...)
@@ -477,8 +738,8 @@ func searchFilterAndRankProducts(products []SearchProduct, query string) []Searc
 		}
 		return matched[i].product.ReviewCount > matched[j].product.ReviewCount
 	})
-	if len(matched) > 20 {
-		matched = matched[:20]
+	if len(matched) > 200 {
+		matched = matched[:200]
 	}
 	result := make([]SearchProduct, len(matched))
 	for i, s := range matched {
@@ -606,9 +867,50 @@ func searchScoreMatch(query, target string) int {
 func searchScoreFuzzy(query, target string) int {
 	query = strings.TrimSpace(query)
 	target = strings.TrimSpace(target)
-	if len(query) < 3 {
+	if len(query) < 2 {
 		return 0
 	}
+
+	// Full-name Levenshtein distance against entire target
+	fullDist := searchLevenshtein(query, target)
+	if fullDist >= 0 {
+		var fullThreshold int
+		switch {
+		case len(query) <= 3:
+			fullThreshold = 1
+		case len(query) <= 5:
+			fullThreshold = 2
+		case len(query) <= 8:
+			fullThreshold = 3
+		default:
+			fullThreshold = 4
+		}
+		if fullDist <= fullThreshold {
+			score := 50 - fullDist*8
+			if score < 20 {
+				score = 20
+			}
+			return score
+		}
+	}
+
+	// Word-level Levenshtein for short queries without trigrams
+	if len(query) < 3 {
+		targetWords := strings.Fields(target)
+		queryWord := strings.Fields(query)[0]
+		for _, tw := range targetWords {
+			dist := searchLevenshtein(queryWord, tw)
+			if len(queryWord) <= 3 && dist <= 1 {
+				return 25
+			}
+			if len(queryWord) <= 5 && dist <= 2 {
+				return 20
+			}
+		}
+		return 0
+	}
+
+	// Trigram matching for len(query) >= 3
 	queryTrigrams := searchBuildTrigrams(query)
 	targetTrigrams := searchBuildTrigrams(target)
 	if len(queryTrigrams) == 0 || len(targetTrigrams) == 0 {
@@ -625,18 +927,21 @@ func searchScoreFuzzy(query, target string) int {
 	hasCloseWord := false
 	for _, tw := range targetWords {
 		dist := searchLevenshtein(queryWord, tw)
-		if len(queryWord) <= 4 && dist <= 1 {
+		if len(tw) <= 4 && dist <= 1 {
 			hasCloseWord = true
 			break
 		}
-		if len(queryWord) <= 6 && dist <= 2 {
+		if len(tw) <= 7 && dist <= 2 {
 			hasCloseWord = true
 			break
 		}
 	}
 	similarity := float64(intersect) / float64(len(queryTrigrams))
-	if hasCloseWord && similarity >= 0.3 {
-		return int(40*similarity) + 20
+	if hasCloseWord {
+		if similarity >= 0.3 {
+			return int(40*similarity) + 20
+		}
+		return 15
 	}
 	if similarity >= 0.5 {
 		return int(30 * similarity)
@@ -729,4 +1034,18 @@ func (h *SearchHandler) GetCategoryBySlug(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"slug": slug, "name": strings.ReplaceAll(slug, "-", " ")})
+}
+
+func parseIntParam(s string) (int, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+	var n int
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("not a number: %s", s)
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }

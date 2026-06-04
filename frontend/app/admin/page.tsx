@@ -78,7 +78,7 @@ export default function AdminDashboardPage() {
 
   const statCards = [
     { label: "Total Bookings", value: stats?.totalBookings ?? 0, icon: CalendarCheck, gradient: "from-sky-500 to-cyan-500" },
-    { label: "Help Submissions", value: stats?.totalHelpSubmissions ?? 0, icon: HelpCircle, gradient: "from-violet-500 to-purple-500" },
+    { label: "Help", value: stats?.totalHelpSubmissions ?? 0, icon: HelpCircle, gradient: "from-violet-500 to-purple-500" },
     { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, gradient: "from-emerald-500 to-teal-500" },
     { label: "All Visitors", value: stats?.totalVisitors ?? 0, icon: Eye, gradient: "from-orange-500 to-amber-500" },
     { label: "Visitors Today", value: stats?.uniqueVisitorsToday ?? 0, icon: Globe, gradient: "from-rose-500 to-pink-500" },

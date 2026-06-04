@@ -2,7 +2,7 @@ import { CitiesGrid } from "@/components/cities/CitiesGrid";
 import { getCities } from "@/lib/api";
 import type { CitiesResponse } from "@/types/api";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 40;
 
 export const dynamic = "force-dynamic";
 

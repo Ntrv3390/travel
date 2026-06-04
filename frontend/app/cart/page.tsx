@@ -173,7 +173,7 @@ export default function CartPage() {
           <EmptyState
             title="Your cart is empty"
             description="Browse experiences and add them to your cart to book."
-            action={{ label: "Browse experiences", href: "/search" }}
+            action={{ label: "Browse experiences", href: "/products" }}
           />
         ) : (
           <div className="space-y-6">

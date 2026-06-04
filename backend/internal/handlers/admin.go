@@ -1529,6 +1529,447 @@ func extractString(data map[string]interface{}, key string) string {
 	}
 }
 
+func (h *AdminHandler) ListCategoriesAdmin(c *gin.Context) {
+	page, limit := parsePagination(c)
+	search := strings.TrimSpace(c.Query("search"))
+
+	query := h.db.Model(&models.Category{})
+
+	if search != "" {
+		pattern := "%" + search + "%"
+		query = query.Where("name ILIKE ? OR category_id ILIKE ?", pattern, pattern)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var items []models.Category
+	query.Order("name asc").Offset((page - 1) * limit).Limit(limit).Find(&items)
+
+	c.JSON(http.StatusOK, paginatedResponse{
+		Items: items,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+func (h *AdminHandler) SyncCategoriesAdmin(c *gin.Context) {
+	if h.headoutService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "headout service not available"})
+		return
+	}
+
+	cityCode := strings.TrimSpace(c.Query("cityCode"))
+	if cityCode == "" {
+		cityCode = "NEW_YORK"
+	}
+
+	type syncResult struct {
+		Total   int `json:"total"`
+		Added   int `json:"added"`
+		Updated int `json:"updated"`
+		Failed  int `json:"failed"`
+	}
+
+	result := syncResult{}
+
+	q := url.Values{}
+	q.Set("limit", "200")
+	q.Set("cityCode", cityCode)
+
+	resp, err := h.headoutService.Get(context.Background(), "/v2/categories", q, true)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to fetch categories: %v", err)})
+		return
+	}
+
+	var body struct {
+		Categories []json.RawMessage `json:"categories"`
+	}
+	if err := json.Unmarshal(resp.Body, &body); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to parse categories response"})
+		return
+	}
+
+	for _, raw := range body.Categories {
+		var item struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			result.Failed++
+			continue
+		}
+		if item.ID == "" {
+			result.Failed++
+			continue
+		}
+
+		rawJSON, _ := json.Marshal(raw)
+
+		var existing models.Category
+		err := h.db.Where("category_id = ?", item.ID).First(&existing).Error
+
+		if err == gorm.ErrRecordNotFound {
+			cat := models.Category{
+				CategoryID:     item.ID,
+				Name:           item.Name,
+				RawHeadoutData: rawJSON,
+				LastSyncedAt:   time.Now(),
+			}
+			if createErr := h.db.Create(&cat).Error; createErr != nil {
+				result.Failed++
+			} else {
+				result.Added++
+			}
+		} else if err == nil {
+			existing.Name = item.Name
+			existing.RawHeadoutData = rawJSON
+			existing.LastSyncedAt = time.Now()
+			if saveErr := h.db.Save(&existing).Error; saveErr != nil {
+				result.Failed++
+			} else {
+				result.Updated++
+			}
+		} else {
+			result.Failed++
+		}
+		result.Total++
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) ListSubcategoriesAdmin(c *gin.Context) {
+	page, limit := parsePagination(c)
+	search := strings.TrimSpace(c.Query("search"))
+
+	query := h.db.Model(&models.Subcategory{})
+
+	if search != "" {
+		pattern := "%" + search + "%"
+		query = query.Where("name ILIKE ? OR subcategory_id ILIKE ?", pattern, pattern)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var items []models.Subcategory
+	query.Order("name asc").Offset((page - 1) * limit).Limit(limit).Find(&items)
+
+	c.JSON(http.StatusOK, paginatedResponse{
+		Items: items,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+func (h *AdminHandler) SyncSubcategoriesAdmin(c *gin.Context) {
+	if h.headoutService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "headout service not available"})
+		return
+	}
+
+	cityCode := strings.TrimSpace(c.Query("cityCode"))
+	if cityCode == "" {
+		cityCode = "NEW_YORK"
+	}
+
+	type syncResult struct {
+		Total   int `json:"total"`
+		Added   int `json:"added"`
+		Updated int `json:"updated"`
+		Failed  int `json:"failed"`
+	}
+
+	result := syncResult{}
+
+	q := url.Values{}
+	q.Set("limit", "200")
+	q.Set("cityCode", cityCode)
+
+	resp, err := h.headoutService.Get(context.Background(), "/v2/subcategories", q, true)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to fetch subcategories: %v", err)})
+		return
+	}
+
+	var body struct {
+		Subcategories []json.RawMessage `json:"subcategories"`
+	}
+	if err := json.Unmarshal(resp.Body, &body); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to parse subcategories response"})
+		return
+	}
+
+	for _, raw := range body.Subcategories {
+		var item struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			result.Failed++
+			continue
+		}
+		if item.ID == "" {
+			result.Failed++
+			continue
+		}
+
+		rawJSON, _ := json.Marshal(raw)
+
+		var existing models.Subcategory
+		err := h.db.Where("subcategory_id = ?", item.ID).First(&existing).Error
+
+		if err == gorm.ErrRecordNotFound {
+			sub := models.Subcategory{
+				SubcategoryID:  item.ID,
+				Name:           item.Name,
+				RawHeadoutData: rawJSON,
+				LastSyncedAt:   time.Now(),
+			}
+			if createErr := h.db.Create(&sub).Error; createErr != nil {
+				result.Failed++
+			} else {
+				result.Added++
+			}
+		} else if err == nil {
+			existing.Name = item.Name
+			existing.RawHeadoutData = rawJSON
+			existing.LastSyncedAt = time.Now()
+			if saveErr := h.db.Save(&existing).Error; saveErr != nil {
+				result.Failed++
+			} else {
+				result.Updated++
+			}
+		} else {
+			result.Failed++
+		}
+		result.Total++
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) ListCollectionsAdmin(c *gin.Context) {
+	page, limit := parsePagination(c)
+	search := strings.TrimSpace(c.Query("search"))
+
+	query := h.db.Model(&models.Collection{})
+
+	if search != "" {
+		pattern := "%" + search + "%"
+		query = query.Where("name ILIKE ? OR description ILIKE ? OR collection_id ILIKE ?", pattern, pattern, pattern)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var items []models.Collection
+	query.Order("name asc").Offset((page - 1) * limit).Limit(limit).Find(&items)
+
+	c.JSON(http.StatusOK, paginatedResponse{
+		Items: items,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+func (h *AdminHandler) SyncCollectionsAdmin(c *gin.Context) {
+	if h.headoutService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "headout service not available"})
+		return
+	}
+
+	type syncResult struct {
+		Total   int `json:"total"`
+		Added   int `json:"added"`
+		Updated int `json:"updated"`
+		Failed  int `json:"failed"`
+	}
+
+	result := syncResult{}
+
+	resp, err := h.headoutService.Get(context.Background(), "/v2/collections", nil, true)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to fetch collections: %v", err)})
+		return
+	}
+
+	var body struct {
+		Collections []json.RawMessage `json:"collections"`
+	}
+	if err := json.Unmarshal(resp.Body, &body); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to parse collections response"})
+		return
+	}
+
+	for _, raw := range body.Collections {
+		var item struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			HeroImage   *struct {
+				URL string `json:"url"`
+			} `json:"heroImage"`
+			CardImage *struct {
+				URL string `json:"url"`
+			} `json:"cardImage"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			result.Failed++
+			continue
+		}
+		if item.ID == "" {
+			result.Failed++
+			continue
+		}
+
+		var heroURL, cardURL string
+		if item.HeroImage != nil {
+			heroURL = item.HeroImage.URL
+		}
+		if item.CardImage != nil {
+			cardURL = item.CardImage.URL
+		}
+
+		rawJSON, _ := json.Marshal(raw)
+
+		var existing models.Collection
+		err := h.db.Where("collection_id = ?", item.ID).First(&existing).Error
+
+		if err == gorm.ErrRecordNotFound {
+			col := models.Collection{
+				CollectionID:   item.ID,
+				Name:           item.Name,
+				Description:    item.Description,
+				HeroImageURL:   heroURL,
+				CardImageURL:   cardURL,
+				RawHeadoutData: rawJSON,
+				LastSyncedAt:   time.Now(),
+			}
+			if createErr := h.db.Create(&col).Error; createErr != nil {
+				result.Failed++
+			} else {
+				result.Added++
+			}
+		} else if err == nil {
+			existing.Name = item.Name
+			existing.Description = item.Description
+			existing.HeroImageURL = heroURL
+			existing.CardImageURL = cardURL
+			existing.RawHeadoutData = rawJSON
+			existing.LastSyncedAt = time.Now()
+			if saveErr := h.db.Save(&existing).Error; saveErr != nil {
+				result.Failed++
+			} else {
+				result.Updated++
+			}
+		} else {
+			result.Failed++
+		}
+		result.Total++
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) ListTestimonialsAdmin(c *gin.Context) {
+	page, limit := parsePagination(c)
+	search := strings.TrimSpace(c.Query("search"))
+
+	query := h.db.Model(&models.Testimonial{})
+
+	if search != "" {
+		pattern := "%" + search + "%"
+		query = query.Where("name ILIKE ? OR text ILIKE ? OR location ILIKE ?", pattern, pattern, pattern)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var items []models.Testimonial
+	query.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&items)
+
+	c.JSON(http.StatusOK, paginatedResponse{
+		Items: items,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+func (h *AdminHandler) CreateTestimonial(c *gin.Context) {
+	var input models.Testimonial
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var maxSort int64
+	h.db.Model(&models.Testimonial{}).Select("COALESCE(MAX(sort_order), 0)").Scan(&maxSort)
+	input.SortOrder = int(maxSort) + 1
+	input.IsActive = true
+
+	if err := h.db.Create(&input).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create testimonial"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": input})
+}
+
+func (h *AdminHandler) UpdateTestimonial(c *gin.Context) {
+	id := c.Param("id")
+
+	var existing models.Testimonial
+	if err := h.db.First(&existing, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "testimonial not found"})
+		return
+	}
+
+	var input models.Testimonial
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	existing.Name = input.Name
+	existing.Location = input.Location
+	existing.Text = input.Text
+	existing.Rating = input.Rating
+	existing.Avatar = input.Avatar
+	existing.Color = input.Color
+
+	if err := h.db.Save(&existing).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update testimonial"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": existing})
+}
+
+func (h *AdminHandler) ToggleTestimonial(c *gin.Context) {
+	id := c.Param("id")
+
+	var existing models.Testimonial
+	if err := h.db.First(&existing, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "testimonial not found"})
+		return
+	}
+
+	existing.IsActive = !existing.IsActive
+	if err := h.db.Save(&existing).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to toggle testimonial"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": existing})
+}
+
 func parsePagination(c *gin.Context) (int, int) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit := maxPageLimit

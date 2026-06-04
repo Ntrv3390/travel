@@ -71,7 +71,7 @@ export function CartItemCard({ item, onUpdateGuest, onRemove }: CartItemCardProp
       <div className="relative h-20 w-20 flex-none overflow-hidden rounded-lg">
         {item.imageUrl ? (
           <Image
-            src={item.imageUrl}
+            src={item.imageUrl.startsWith("//") ? "https:" + item.imageUrl : item.imageUrl}
             alt={item.title || "Experience"}
             fill
             className="object-cover"

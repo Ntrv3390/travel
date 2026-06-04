@@ -17,19 +17,29 @@ import {
   LogOut,
   ChevronRight,
   Settings,
+  Tags,
+  Layers,
+  BookOpen,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 const sidebarLinks = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+
+  // A-Z sorted
   { href: "/admin/bookings", label: "Bookings", icon: CalendarCheck },
+  { href: "/admin/categories", label: "Categories", icon: Tags },
+  { href: "/admin/subcategories", label: "Subcategories", icon: Layers },
+  { href: "/admin/collections", label: "Collections", icon: BookOpen },
   { href: "/admin/cities", label: "Cities", icon: MapPin },
+  { href: "/admin/help-submissions", label: "Help", icon: HelpCircle },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/settings", label: "Settings", icon: Settings },
-  { href: "/admin/help-submissions", label: "Help Submissions", icon: HelpCircle },
-  { href: "/admin/visitors", label: "Visitors", icon: Globe },
+  { href: "/admin/testimonials", label: "Testimonials", icon: MessageSquare },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/visitors", label: "Visitors", icon: Globe },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -99,22 +109,49 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex-1 space-y-1 overflow-y-auto p-4">
           {sidebarLinks.map((link) => {
             const isActive = pathname === link.href;
+            const isDashboard = link.href === "/admin";
             const Icon = link.icon;
+
             return (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-sky-50 text-sky-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                  "group flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all",
+
+                  isDashboard
+                    ? isActive
+                      ? "mb-3 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow-lg"
+                      : "mb-3 rounded-xl bg-sky-100 text-sky-700 hover:bg-sky-200"
+                    : isActive
+                      ? "rounded-lg border-l-4 border-sky-600 bg-sky-50 text-sky-700"
+                      : "rounded-lg border-l-4 border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 )}
               >
-                <Icon className={cn("h-5 w-5", isActive ? "text-sky-600" : "text-slate-400")} />
-                {link.label}
-                {isActive && <ChevronRight className="ml-auto h-4 w-4 text-sky-400" />}
+                <Icon
+                  className={cn(
+                    "h-5 w-5 shrink-0",
+                    isDashboard
+                      ? isActive
+                        ? "text-white"
+                        : "text-sky-600"
+                      : isActive
+                        ? "text-sky-600"
+                        : "text-slate-400 group-hover:text-slate-600"
+                  )}
+                />
+
+                <span className="truncate">{link.label}</span>
+
+                {isActive && (
+                  <ChevronRight
+                    className={cn(
+                      "ml-auto h-4 w-4",
+                      isDashboard ? "text-white" : "text-sky-500"
+                    )}
+                  />
+                )}
               </Link>
             );
           })}

@@ -310,7 +310,7 @@ export async function getProductById(
 
 export async function searchAll(
   q: string,
-  options?: { signal?: AbortSignal; currencyCode?: string },
+  options?: { signal?: AbortSignal; currencyCode?: string; offset?: number; limit?: number },
 ): Promise<SearchAllResponse | null> {
   try {
     const url = new URL(`${API_BASE}/api/v1/search`);
@@ -318,6 +318,8 @@ export async function searchAll(
     if (options?.currencyCode) {
       url.searchParams.set("currencyCode", options.currencyCode);
     }
+    if (options?.offset !== undefined) url.searchParams.set("offset", String(options.offset));
+    if (options?.limit !== undefined) url.searchParams.set("limit", String(options.limit));
     const res = await fetch(url.toString(), {
       signal: options?.signal,
     });
@@ -325,6 +327,45 @@ export async function searchAll(
     return res.json();
   } catch {
     return null;
+  }
+}
+
+export async function getHomeCategories() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/home/categories`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getHomeTestimonials() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/home/testimonials`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getHomeCollections() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/home/collections`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
   }
 }
 
@@ -348,6 +389,7 @@ export async function getCityExperiences(city: string, params: SearchParams = {}
   url.searchParams.set("limit", params.limit ?? "24");
   if (params.category) url.searchParams.set("category", params.category);
   if (params.currency) url.searchParams.set("currencyCode", params.currency);
+  if (params.sort) url.searchParams.set("sort", params.sort);
   return requestExperiences(url.toString());
 }
 

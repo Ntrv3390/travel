@@ -40,6 +40,8 @@ export interface SearchSuggestion {
 export interface SearchAllResponse {
   query: string;
   products: SearchProduct[];
+  total?: number;
+  nextOffset?: number | null;
   cities: SearchCity[];
   categories: SearchCategory[];
   suggestions: SearchSuggestion[];

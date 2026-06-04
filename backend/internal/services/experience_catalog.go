@@ -53,9 +53,16 @@ func (s *ExperienceCatalogService) ListExperiences(ctx context.Context, category
 	}
 
 	var experiences []models.Experience
-	order := "created_at DESC"
-	if sort == "popular" {
+	var order string
+	switch sort {
+	case "price_asc":
+		order = "price ASC"
+	case "price_desc":
+		order = "price DESC"
+	case "rating":
 		order = "rating DESC, review_count DESC"
+	default:
+		order = "created_at DESC"
 	}
 	if err := q.Order(order).Limit(limit).Offset(offset).Find(&experiences).Error; err != nil {
 		return nil, err

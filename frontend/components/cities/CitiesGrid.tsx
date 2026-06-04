@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CityCard } from "@/components/cities/CityCard";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 import { getCities } from "@/lib/api";
 import type { City, CitiesResponse } from "@/types/api";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 40;
+const TRIGGER_INDEX = 25;
 
 function CityCardSkeleton() {
   return (
@@ -29,9 +28,12 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
   const [nextOffset, setNextOffset] = useState<number | null>(initialNextOffset);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(initialNextOffset === null);
+  const isFetching = useRef(false);
 
-  const handleLoadMore = async () => {
-    if (nextOffset === null || loading) return;
+  const loadMore = async () => {
+    if (nextOffset === null || isFetching.current) return;
+    isFetching.current = true;
     setLoading(true);
     setError(null);
     const result = await getCities(nextOffset, PAGE_SIZE);
@@ -39,17 +41,38 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
       const data = result.data as CitiesResponse;
       setCities((prev) => [...prev, ...data.cities]);
       setNextOffset(data.nextOffset);
+      if (data.nextOffset === null) setDone(true);
     } else {
-      setError(result.error ?? "Failed to load cities. Please try again.");
+      setError(result.error ?? "Failed to load cities.");
     }
     setLoading(false);
+    isFetching.current = false;
   };
+
+  useEffect(() => {
+    if (loading || nextOffset === null || done || error || cities.length === 0) return;
+    const triggerIndex = Math.min(TRIGGER_INDEX - 1, cities.length - 1);
+    const triggerEl = document.getElementById(`city-card-${triggerIndex}`);
+    if (!triggerEl) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && nextOffset !== null && !isFetching.current) {
+          loadMore();
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(triggerEl);
+    return () => observer.disconnect();
+  }, [loading, nextOffset, done, error, cities.length]);
 
   return (
     <div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {cities.map((city) => (
-          <CityCard key={city.code} city={city} />
+        {cities.map((city, i) => (
+          <div key={city.code} id={`city-card-${i}`}>
+            <CityCard city={city} />
+          </div>
         ))}
         {loading && Array.from({ length: 4 }).map((_, i) => (
           <CityCardSkeleton key={`skeleton-${i}`} />
@@ -59,19 +82,19 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
       {error && (
         <div className="mt-6 flex flex-col items-center gap-3">
           <p className="text-sm text-destructive">{error}</p>
-          <Button onClick={handleLoadMore} variant="outline" size="sm">
+          <button
+            onClick={loadMore}
+            className="rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+          >
             Retry
-          </Button>
+          </button>
         </div>
       )}
 
-      {nextOffset !== null && !error && (
-        <div className="mt-8 flex justify-center">
-          <Button onClick={handleLoadMore} disabled={loading} variant="outline" size="lg">
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {loading ? "Loading..." : "Load More"}
-          </Button>
-        </div>
+      {done && cities.length > 0 && (
+        <p className="mt-10 text-center text-sm text-muted-foreground">
+          All {cities.length} destinations loaded
+        </p>
       )}
     </div>
   );
