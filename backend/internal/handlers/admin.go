@@ -15,6 +15,7 @@ import (
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
+	"github.com/travel/backend/pkg/logger"
 	"gorm.io/gorm"
 )
 
