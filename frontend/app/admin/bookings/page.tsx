@@ -66,7 +66,7 @@ function AdminBookingsContent() {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -93,7 +93,7 @@ function AdminBookingsContent() {
   const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
   const viewHeadoutResponse = useCallback(async (booking: Booking) => {
     const id = String(booking.id);

@@ -52,7 +52,7 @@ export default function AdminCitiesPage() {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -64,7 +64,7 @@ export default function AdminCitiesPage() {
   const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
   const handleSync = useCallback(async () => {
     setSyncModal({ open: true, running: true, progress: null, error: null });

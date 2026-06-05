@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, ChevronLeft, ChevronRight, Package, RefreshCw, Loader2, ExternalLink, X, Check, Ban, AlertTriangle, BarChart3 } from "lucide-react";
+import { Search, ChevronDown, Package, RefreshCw, Loader2, ExternalLink, X, Check, Ban, AlertTriangle, BarChart3 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/admin/Pagination";
@@ -101,7 +101,7 @@ export default function AdminProductsPage() {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -126,7 +126,7 @@ export default function AdminProductsPage() {
   const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
   const pollSyncStatus = useCallback(async (syncId: string, interval = 2000): Promise<Record<string, unknown>> => {
     while (true) {

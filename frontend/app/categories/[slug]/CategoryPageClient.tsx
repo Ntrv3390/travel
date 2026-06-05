@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SearchBar } from "@/components/search/SearchBar";
 import { ExperienceGrid } from "@/components/experience/ExperienceGrid";

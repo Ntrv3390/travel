@@ -46,7 +46,7 @@ export default function AdminHelpSubmissionsPage() {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -58,7 +58,7 @@ export default function AdminHelpSubmissionsPage() {
   const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
   return (
     <motion.div

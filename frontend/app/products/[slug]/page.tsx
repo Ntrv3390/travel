@@ -6,7 +6,6 @@ type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const slug = params.slug;
-  const id = slug.split("-").pop() ?? "";
   const title = slug.replace(/-\d+$/, "").replace(/-/g, " ");
 
   return {

@@ -52,7 +52,7 @@ export default function AdminUsersPage() {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -64,7 +64,7 @@ export default function AdminUsersPage() {
   const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
   const startEditing = useCallback((user: AdminUser) => {
     setEditingId(user.id);

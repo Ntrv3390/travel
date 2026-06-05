@@ -59,7 +59,7 @@ export default function AdminVisitorsPage() {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -71,7 +71,7 @@ export default function AdminVisitorsPage() {
   const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
   return (
     <motion.div
