@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { HelpPage } from "@/components/help/HelpPage";
-import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
+import { BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 
 export const metadata: Metadata = {
   title: "Help Center | Triipzy",
@@ -22,7 +22,6 @@ export default function HelpRoute() {
   return (
     <>
       <BreadcrumbJsonLd items={[{ label: "Help Center" }]} />
-      <Breadcrumb items={[{ label: "Help Center" }]} className="container pt-6" />
       <HelpPage />
     </>
   );

@@ -23,6 +23,7 @@ import {
   HeadphonesIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { cn } from "@/lib/utils";
 
 const fadeUp = {
@@ -159,6 +160,9 @@ export function HelpPage() {
           />
         </div>
         <div className="relative z-10 container py-24 sm:py-32">
+          <div className="mb-8">
+            <Breadcrumb items={[{ label: "Help Center" }]} className="text-white/60 [&_span]:text-white/80 [&_a]:text-white/60 [&_a:hover]:text-sky-300" />
+          </div>
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/80 backdrop-blur-md">
               <Sparkles className="h-3.5 w-3.5 text-sky-400" />
