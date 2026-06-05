@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PriceDisplay } from "@/components/common/PriceDisplay"
+import { useCartContext } from "@/context/CartContext"
+import { useToast } from "@/components/ui/toaster"
 
 import { toSlug } from "@/lib/utils"
 import type { CartItem } from "@/types/booking"
@@ -37,11 +39,11 @@ function getLabel(type: string): string {
 
 interface CartItemCardProps {
   item: CartItem
-  onUpdateGuest?: (itemId: string, guestCounts: Record<string, number>, priceAmount: number) => void
-  onRemove?: (itemId: string) => void
 }
 
-export function CartItemCard({ item, onUpdateGuest, onRemove }: CartItemCardProps) {
+export function CartItemCard({ item }: CartItemCardProps) {
+  const { updateCartItem, removeItem } = useCartContext()
+  const { toast } = useToast()
 
 
   const guestCounts = item.guestCounts ?? { ADULT: item.adults }
@@ -52,7 +54,7 @@ export function CartItemCard({ item, onUpdateGuest, onRemove }: CartItemCardProp
   const totalGuests = Object.values(guestCounts).reduce((a, b) => a + b, 0)
   const unitPrice = totalGuests > 0 ? item.priceAmount / totalGuests : 0
 
-  const handleGuestChange = (type: string, delta: number) => {
+  const handleGuestChange = async (type: string, delta: number) => {
     const current = guestCounts[type] ?? 0
     const newCount = current + delta
     if (newCount < 1) return
@@ -61,8 +63,24 @@ export function CartItemCard({ item, onUpdateGuest, onRemove }: CartItemCardProp
     const newTotalGuests = Object.values(newGuestCounts).reduce((a, b) => a + b, 0)
     const newPrice = Math.round(newTotalGuests * unitPrice * 100) / 100
 
-    if (onUpdateGuest) {
-      onUpdateGuest(item.id, newGuestCounts, newPrice)
+    try {
+      await updateCartItem(item.id, {
+        guestCounts: newGuestCounts,
+        adults: newGuestCounts.ADULT ?? 0,
+        children: newGuestCounts.CHILD ?? 0,
+        priceAmount: newPrice,
+      })
+    } catch {
+      toast({ title: "Failed to update", description: "Could not update guest count.", variant: "error" })
+    }
+  }
+
+  const handleRemove = async () => {
+    try {
+      await removeItem(item.id)
+      toast({ title: "Removed", description: "Item removed from your cart.", variant: "success" })
+    } catch {
+      toast({ title: "Failed to remove", description: "Could not remove item.", variant: "error" })
     }
   }
 
@@ -138,7 +156,7 @@ export function CartItemCard({ item, onUpdateGuest, onRemove }: CartItemCardProp
           variant="ghost"
           size="sm"
           className="text-muted-foreground hover:text-red-600"
-          onClick={() => onRemove?.(item.id)}
+          onClick={handleRemove}
         >
           <Trash2 className="h-4 w-4" />
         </Button>

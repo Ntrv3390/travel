@@ -37,7 +37,7 @@ export function Hero({ stats }: { stats: HeroStats }) {
             pointerEvents: "none",
           }}
           allow="autoplay; encrypted-media"
-          title=""
+          title="Triipzy travel experience video"
         />
         <div className="absolute inset-0 bg-gradient-to-br from-sky-950/85 via-slate-900/80 to-indigo-950/85" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(56,189,248,0.15),transparent_60%)]" />

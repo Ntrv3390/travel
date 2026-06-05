@@ -1,102 +1,41 @@
-"use client";
+import type { Metadata } from "next";
+import { ProductDetailClient } from "./ProductDetailClient";
+import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ProductDetail } from "@/components/products/ProductDetail";
-import { getProductById } from "@/lib/api";
-import { useCurrency } from "@/hooks/useCurrency";
-import type { Product } from "@/types/product";
+type Props = { params: { slug: string } };
 
-export default function ProductDetailPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
-  const id = slug?.split("-").pop() ?? "";
-  const { currency } = useCurrency();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const slug = params.slug;
+  const id = slug.split("-").pop() ?? "";
+  const title = slug.replace(/-\d+$/, "").replace(/-/g, " ");
 
-  const fetchProduct = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    const result = await getProductById(id, { currencyCode: currency });
-    if (result.error) {
-      setError(result.error);
-    } else if (result.data) {
-      setProduct(result.data);
-    } else {
-      setError("Product not found");
-    }
-    setLoading(false);
-  }, [id, currency]);
+  return {
+    title: `${title || "Experience"} | Triipzy`,
+    description: `Book ${title || "this experience"} on Triipzy. Discover tours, activities, and unforgettable experiences.`,
+    openGraph: {
+      title: `${title || "Experience"} | Triipzy`,
+      description: `Book ${title || "this experience"} on Triipzy.`,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title || "Experience"} | Triipzy`,
+      description: `Book ${title || "this experience"} on Triipzy.`,
+    },
+    alternates: { canonical: `/products/${slug}` },
+  };
+}
 
-  useEffect(() => {
-    fetchProduct();
-  }, [fetchProduct]);
-
-  if (loading) {
-    return (
-      <main className="container py-8">
-        <div className="mx-auto max-w-5xl">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 w-32 rounded bg-muted sm:w-48" />
-            <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
-              <div className="aspect-[4/3] rounded-xl bg-muted" />
-              <div className="space-y-3 sm:space-y-4">
-                <div className="h-7 w-3/4 rounded bg-muted sm:h-8" />
-                <div className="h-4 w-1/2 rounded bg-muted" />
-                <div className="h-16 w-full rounded-lg bg-muted sm:h-20" />
-                <div className="h-9 w-1/3 rounded bg-muted sm:h-10" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="container py-8">
-        <div className="mx-auto max-w-5xl">
-          <div className="flex flex-col items-center gap-4 py-20">
-            <p className="text-lg font-medium text-red-500">{error}</p>
-            <p className="text-sm text-muted-foreground">Product ID: {id}</p>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchProduct} disabled={loading}>
-                <Loader2 className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                Retry
-              </Button>
-              <Button variant="ghost" asChild>
-                <Link href="/products">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Products
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!product) return null;
-
+export default function ProductDetailPage({ params }: Props) {
+  const title = params.slug.replace(/-\d+$/, "").replace(/-/g, " ");
   return (
-    <main className="container py-8">
-      <div className="mb-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/products">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Products
-          </Link>
-        </Button>
-      </div>
-      <ProductDetail product={product} />
-    </main>
+    <>
+      <BreadcrumbJsonLd items={[{ label: "Experiences", href: "/products" }, { label: title || "Experience" }]} />
+      <Breadcrumb
+        items={[{ label: "Experiences", href: "/products" }, { label: title || "Experience" }]}
+        className="container pt-6"
+      />
+      <ProductDetailClient />
+    </>
   );
 }

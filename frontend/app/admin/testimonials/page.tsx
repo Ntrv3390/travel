@@ -6,6 +6,7 @@ import { Search, Plus, Pencil, CheckCircle2, XCircle, X, Loader2 } from "lucide-
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/admin/Pagination";
+import { useAdminPagination } from "@/hooks/useAdminPagination";
 
 interface Testimonial {
   id: number;
@@ -47,9 +48,7 @@ export default function AdminTestimonialsPage() {
   const [items, setItems] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [modal, setModal] = useState<{ open: boolean; editing: Testimonial | null }>({ open: false, editing: null });
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -62,12 +61,11 @@ export default function AdminTestimonialsPage() {
     api.get<PaginatedResponse<Testimonial>>(`/api/v1/admin/testimonials?${params}`)
       .then((res) => {
         setItems(res.items || []);
-        setTotal(res.total || 0);
-        setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
+        updateFromResponse(res.total || 0, res.limit);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchItems(page, search), 300);
@@ -132,7 +130,7 @@ export default function AdminTestimonialsPage() {
       </div>
 
       {!loading && items.length > 0 && (
-        <Pagination currentPage={page} totalPages={totalPages} totalItems={total} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPage} className="border-b border-slate-100" />
+        <Pagination {...paginationProps} className="border-b border-slate-100" />
       )}
 
       {loading ? (
@@ -203,7 +201,7 @@ export default function AdminTestimonialsPage() {
         </div>
       )}
 
-      <Pagination currentPage={page} totalPages={totalPages} totalItems={total} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPage} className="border-t border-slate-100 mt-6" />
+      <Pagination {...paginationProps} className="border-t border-slate-100 mt-6" />
 
       {/* Add/Edit Modal */}
       {modal.open && (

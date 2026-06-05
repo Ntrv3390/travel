@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Booking Confirmed | Triipzy",
+  description: "Your booking has been confirmed.",
+  robots: { index: false, follow: false },
+};
 
 export default function ConfirmationPage({
   searchParams,

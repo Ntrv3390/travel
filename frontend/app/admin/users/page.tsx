@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { Pagination } from "@/components/admin/Pagination";
+import { useAdminPagination } from "@/hooks/useAdminPagination";
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -31,9 +32,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ email: string; role: "user" | "admin" | "superadmin" }>({ email: "", role: "user" });
   const [saving, setSaving] = useState(false);
@@ -49,8 +48,7 @@ export default function AdminUsersPage() {
     api.get<PaginatedResponse<AdminUser>>(`/api/v1/admin/users?${params}`)
       .then((res) => {
         setUsers(res.items || []);
-        setTotal(res.total || 0);
-        setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
+        updateFromResponse(res.total || 0, res.limit);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
@@ -226,14 +224,7 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={total}
-        itemsPerPage={ITEMS_PER_PAGE}
-        onPageChange={setPage}
-        className="mt-6"
-      />
+      <Pagination className="mt-6" {...paginationProps} />
     </motion.div>
   );
 }

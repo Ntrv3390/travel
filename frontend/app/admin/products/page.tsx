@@ -7,7 +7,9 @@ import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/admin/Pagination";
 import { SyncModal } from "@/components/admin/SyncModal";
+import { AvailabilityCalendarView } from "@/components/admin/AvailabilityCalendarView";
 import { cn } from "@/lib/utils";
+import { useAdminPagination } from "@/hooks/useAdminPagination";
 import Link from "next/link";
 
 interface Product {
@@ -78,9 +80,7 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [availabilities, setAvailabilities] = useState<Record<number, ProductAvailability[]>>({});
   const [loadingAvail, setLoadingAvail] = useState<Record<number, boolean>>({});
@@ -89,10 +89,6 @@ export default function AdminProductsPage() {
   const [headoutModal, setHeadoutModal] = useState<{ data: Record<string, unknown> | null; loading: boolean; error: string } | null>(null);
   const [availabilityInsights, setAvailabilityInsights] = useState<AvailabilityInsights | null>(null);
   const [showUnavailableList, setShowUnavailableList] = useState(false);
-  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
-  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
-  const [selectedAvailDate, setSelectedAvailDate] = useState<string | null>(null);
-  const [selectedAvailVariant, setSelectedAvailVariant] = useState<string | null>(null);
 
   const fetchProducts = useCallback((p: number, q: string) => {
     setLoading(true);
@@ -101,8 +97,7 @@ export default function AdminProductsPage() {
     api.get<PaginatedResponse<Product>>(`/api/v1/admin/products?${params}`)
       .then((res) => {
         setProducts(res.items || []);
-        setTotal(res.total || 0);
-        setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
+        updateFromResponse(res.total || 0, res.limit);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
@@ -427,12 +422,8 @@ export default function AdminProductsPage() {
       {/* Top Pagination */}
       {!loading && products.length > 0 && (
         <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={total}
-          itemsPerPage={ITEMS_PER_PAGE}
-          onPageChange={setPage}
           className="border-b border-slate-100"
+          {...paginationProps}
         />
       )}
 
@@ -725,14 +716,6 @@ export default function AdminProductsPage() {
                                 ) : availabilities[product.id]?.length > 0 ? (
                                   <AvailabilityCalendarView
                                     availabilities={availabilities[product.id]}
-                                    selectedVariant={selectedAvailVariant}
-                                    onSelectVariant={setSelectedAvailVariant}
-                                    calYear={calYear}
-                                    calMonth={calMonth}
-                                    onCalYearChange={setCalYear}
-                                    onCalMonthChange={setCalMonth}
-                                    selectedDate={selectedAvailDate}
-                                    onSelectDate={setSelectedAvailDate}
                                     currency={product.currency || "USD"}
                                   />
                                 ) : (
@@ -788,12 +771,8 @@ export default function AdminProductsPage() {
       )}
 
       <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={total}
-        itemsPerPage={ITEMS_PER_PAGE}
-        onPageChange={setPage}
         className="border-t border-slate-100 mt-6"
+        {...paginationProps}
       />
 
       <SyncModal
@@ -851,286 +830,5 @@ export default function AdminProductsPage() {
         )}
       </AnimatePresence>
     </motion.div>
-  );
-}
-
-const CAL_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CAL_MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function getFirstDayOfMonth(year: number, month: number) {
-  return new Date(year, month, 1).getDay();
-}
-
-function formatDateStr(year: number, month: number, day: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function todayStr() {
-  const d = new Date();
-  return formatDateStr(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-interface CalendarProps {
-  availabilities: ProductAvailability[];
-  selectedVariant: string | null;
-  onSelectVariant: (v: string | null) => void;
-  calYear: number;
-  calMonth: number;
-  onCalYearChange: (y: number) => void;
-  onCalMonthChange: (m: number) => void;
-  selectedDate: string | null;
-  onSelectDate: (d: string | null) => void;
-  currency: string;
-}
-
-function AvailabilityCalendarView({
-  availabilities,
-  selectedVariant,
-  onSelectVariant,
-  calYear,
-  calMonth,
-  onCalYearChange,
-  onCalMonthChange,
-  selectedDate,
-  onSelectDate,
-  currency,
-}: CalendarProps) {
-  const today = todayStr();
-
-  const variants = React.useMemo(() => {
-    const map = new Map<string, { title: string; count: number }>();
-    for (const a of availabilities) {
-      const key = a.variant_id || "unknown";
-      const existing = map.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        map.set(key, { title: a.variant_title || a.variant_id, count: 1 });
-      }
-    }
-    return Array.from(map.entries());
-  }, [availabilities]);
-
-  const effectiveVariant = selectedVariant || (variants.length > 0 ? variants[0][0] : null);
-
-  const filteredAvail = React.useMemo(() => {
-    if (!effectiveVariant) return availabilities;
-    return availabilities.filter((a) => a.variant_id === effectiveVariant);
-  }, [availabilities, effectiveVariant]);
-
-  const availByDate = React.useMemo(() => {
-    const map = new Map<string, ProductAvailability[]>();
-    for (const a of filteredAvail) {
-      if (!a.date) continue;
-      const existing = map.get(a.date);
-      if (existing) {
-        existing.push(a);
-      } else {
-        map.set(a.date, [a]);
-      }
-    }
-    return map;
-  }, [filteredAvail]);
-
-  const daysInMonth = getDaysInMonth(calYear, calMonth);
-  const firstDay = getFirstDayOfMonth(calYear, calMonth);
-
-  const prevMonth = () => {
-    if (calMonth === 0) {
-      onCalMonthChange(11);
-      onCalYearChange(calYear - 1);
-    } else {
-      onCalMonthChange(calMonth - 1);
-    }
-  };
-
-  const nextMonth = () => {
-    if (calMonth === 11) {
-      onCalMonthChange(0);
-      onCalYearChange(calYear + 1);
-    } else {
-      onCalMonthChange(calMonth + 1);
-    }
-  };
-
-  const selectedSlots = selectedDate ? (availByDate.get(selectedDate) || []) : [];
-
-  return (
-    <div>
-      {/* Variant tabs */}
-      {variants.length > 1 && (
-        <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
-          {variants.map(([id, info]) => (
-            <button
-              key={id}
-              onClick={(e) => { e.stopPropagation(); onSelectVariant(id); }}
-              className={cn(
-                "whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors",
-                effectiveVariant === id
-                  ? "bg-sky-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              )}
-            >
-              {info.title}
-              <span className="ml-1 opacity-60">({info.count})</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Month navigation */}
-      <div className="mb-2 flex items-center justify-between">
-        <button
-          onClick={(e) => { e.stopPropagation(); prevMonth(); }}
-          className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <span className="text-xs font-semibold text-slate-700">
-          {CAL_MONTH_NAMES[calMonth]} {calYear}
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); nextMonth(); }}
-          className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Calendar grid */}
-      <div className="mb-1 grid grid-cols-7 gap-0">
-        {CAL_DAY_NAMES.map((d) => (
-          <div key={d} className="py-1 text-center text-[10px] font-medium text-slate-400 uppercase">
-            {d}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-px">
-        {Array.from({ length: firstDay }).map((_, i) => (
-          <div key={`empty-${i}`} className="aspect-square" />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1;
-          const dateStr = formatDateStr(calYear, calMonth, day);
-          const slots = availByDate.get(dateStr) || [];
-          const bestSlot = slots[0];
-          const isPast = dateStr < today;
-          const isToday = dateStr === today;
-          const isSelected = dateStr === selectedDate;
-          const hasAvailability = slots.some((s) => s.available_slots > 0);
-
-          let bg = "bg-transparent";
-          let textColor = "text-slate-500";
-          if (isSelected) {
-            bg = "ring-2 ring-sky-600 bg-sky-50";
-          } else if (isToday) {
-            bg = "ring-1 ring-sky-400 bg-sky-50/50";
-          } else if (isPast) {
-            bg = "bg-slate-50";
-          }
-          if (isPast) textColor = "text-slate-300";
-
-          if (!isPast && slots.length > 0) {
-            bg += " cursor-pointer hover:bg-slate-50";
-          }
-
-          const statusColor = !hasAvailability && slots.length > 0
-            ? "text-red-500"
-            : bestSlot && bestSlot.available_slots <= 10 && bestSlot.available_slots > 0
-              ? "text-amber-600"
-              : "text-emerald-600";
-
-          return (
-            <div
-              key={day}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isPast && slots.length > 0) onSelectDate(dateStr === selectedDate ? null : dateStr);
-              }}
-              className={cn(
-                "flex flex-col items-center justify-center rounded-md px-0.5 py-1 text-center transition-colors",
-                bg,
-              )}
-            >
-              <span className={cn("text-xs font-medium", textColor)}>{day}</span>
-              {bestSlot && bestSlot.price_amount > 0 ? (
-                <span className={cn("mt-0.5 truncate text-[9px] font-semibold leading-tight", statusColor)}>
-                  {currency} {bestSlot.price_amount.toFixed(0)}
-                </span>
-              ) : slots.length > 0 && !hasAvailability ? (
-                <span className="mt-0.5 text-[9px] text-red-400">Closed</span>
-              ) : slots.length > 0 ? (
-                <span className="mt-0.5 text-[9px] text-emerald-500">Open</span>
-              ) : (
-                <span className="mt-0.5 text-[9px] text-slate-300">—</span>
-              )}
-              {bestSlot && bestSlot.available_slots > 0 && bestSlot.available_slots < 20 && (
-                <span className="text-[8px] text-amber-500">{bestSlot.available_slots} left</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" /> Available
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-sm bg-amber-500" /> Limited
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-sm bg-red-400" /> Closed
-        </span>
-      </div>
-
-      {/* Selected date slot details */}
-      {selectedDate && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-xs font-semibold text-slate-700">{selectedDate}</h4>
-            <button
-              onClick={(e) => { e.stopPropagation(); onSelectDate(null); }}
-              className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="space-y-1.5">
-            {selectedSlots.map((slot) => (
-              <div key={slot.id} className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-xs">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-700">{slot.variant_title || slot.variant_id}</p>
-                  <p className="text-[10px] text-slate-400">
-                    {slot.start_time ? `${slot.start_time} - ${slot.end_time || "?"}` : "All day"}
-                    {slot.inventory_type ? ` · ${slot.inventory_type}` : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="font-mono text-slate-700">
-                    {slot.price_amount > 0 ? `${slot.currency || currency} ${slot.price_amount.toFixed(2)}` : "—"}
-                  </span>
-                  <span className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                    slot.available_slots > 10
-                      ? "bg-emerald-50 text-emerald-700"
-                      : slot.available_slots > 0
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-red-50 text-red-700"
-                  )}>
-                    {slot.available_slots > 10 ? "Unlimited" : slot.available_slots > 0 ? `${slot.available_slots} left` : "Closed"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

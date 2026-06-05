@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/admin/Pagination";
 import { SyncModal } from "@/components/admin/SyncModal";
 import { cn } from "@/lib/utils";
+import { useAdminPagination } from "@/hooks/useAdminPagination";
 
 interface City {
   id: number;
@@ -37,9 +38,7 @@ export default function AdminCitiesPage() {
   const [loading, setLoading] = useState(true);
   const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchCities = useCallback((p: number, q: string) => {
@@ -49,8 +48,7 @@ export default function AdminCitiesPage() {
     api.get<PaginatedResponse<City>>(`/api/v1/admin/cities?${params}`)
       .then((res) => {
         setCities(res.items || []);
-        setTotal(res.total || 0);
-        setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
+        updateFromResponse(res.total || 0, res.limit);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
@@ -118,14 +116,7 @@ export default function AdminCitiesPage() {
 
       {/* Top Pagination */}
       {!loading && cities.length > 0 && (
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={total}
-          itemsPerPage={ITEMS_PER_PAGE}
-          onPageChange={setPage}
-          className="border-b border-slate-100"
-        />
+      <Pagination className="border-b border-slate-100" {...paginationProps} />
       )}
 
       {/* Table */}
@@ -266,14 +257,7 @@ export default function AdminCitiesPage() {
         </div>
       )}
 
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={total}
-        itemsPerPage={ITEMS_PER_PAGE}
-        onPageChange={setPage}
-        className="border-t border-slate-100 mt-6"
-      />
+      <Pagination className="border-t border-slate-100 mt-6" {...paginationProps} />
 
       <SyncModal
         open={syncModal.open}

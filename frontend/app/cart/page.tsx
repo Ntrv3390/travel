@@ -11,6 +11,7 @@ import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { CartItemCard } from "@/components/booking/CartItemCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCart } from "@/hooks/useCart";
+import { useCartContext } from "@/context/CartContext";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useToast } from "@/components/ui/toaster";
 import type { CartItem } from "@/types/booking";
@@ -56,7 +57,8 @@ function groupItems(items: CartItem[]): ActivityGroup[] {
 
 export default function CartPage() {
   const router = useRouter();
-  const { cart, isLoading, clearCart, updateCartItem, removeItem, itemCount, staleCurrency } = useCart();
+  const { cart, isLoading, clearCart, itemCount, staleCurrency } = useCart();
+  const { removeItem } = useCartContext();
   const { currency, isChanging } = useCurrency();
   const { toast } = useToast();
   const [bookingId, setBookingId] = useState<string | null>(null);
@@ -64,28 +66,6 @@ export default function CartPage() {
   const items = useMemo(() => cart?.items ?? [], [cart?.items]);
   const groups = useMemo(() => groupItems(items), [items]);
   const cartTotal = groups.reduce((sum, g) => sum + g.activityTotal, 0);
-
-  const handleUpdateGuest = async (itemId: string, guestCounts: Record<string, number>, priceAmount: number) => {
-    try {
-      await updateCartItem(itemId, {
-        guestCounts,
-        adults: guestCounts.ADULT ?? 0,
-        children: guestCounts.CHILD ?? 0,
-        priceAmount,
-      });
-    } catch {
-      toast({ title: "Failed to update", description: "Could not update guest count.", variant: "error" });
-    }
-  };
-
-  const handleRemoveItem = async (itemId: string) => {
-    try {
-      await removeItem(itemId);
-      toast({ title: "Removed", description: "Item removed from your cart.", variant: "success" });
-    } catch {
-      toast({ title: "Failed to remove", description: "Could not remove item.", variant: "error" });
-    }
-  };
 
   const handleRemoveActivity = async (group: ActivityGroup) => {
     try {
@@ -205,8 +185,6 @@ export default function CartPage() {
                     <div key={booking.item.id} className="group relative">
                       <CartItemCard
                         item={booking.item}
-                        onUpdateGuest={handleUpdateGuest}
-                        onRemove={handleRemoveItem}
                       />
                       <div className="flex justify-end px-4 pb-3">
                         <Button size="sm" onClick={() => handleCheckout(booking.item)} disabled={bookingId === booking.item.id}>

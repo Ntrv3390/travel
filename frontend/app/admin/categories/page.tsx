@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Pagination } from "@/components/admin/Pagination";
 import { SyncModal } from "@/components/admin/SyncModal";
+import { useAdminPagination } from "@/hooks/useAdminPagination";
 
 interface CategoryItem {
   id: number;
@@ -30,9 +31,7 @@ export default function AdminCategoriesPage() {
   const [items, setItems] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [headoutModal, setHeadoutModal] = useState<Record<string, unknown> | null>(null);
   const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
@@ -44,12 +43,11 @@ export default function AdminCategoriesPage() {
     api.get<PaginatedResponse<CategoryItem>>(`/api/v1/admin/categories?${params}`)
       .then((res) => {
         setItems(res.items || []);
-        setTotal(res.total || 0);
-        setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
+        updateFromResponse(res.total || 0, res.limit);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateFromResponse]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchItems(page, search), 300);
@@ -90,7 +88,7 @@ export default function AdminCategoriesPage() {
       </div>
 
       {!loading && items.length > 0 && (
-        <Pagination currentPage={page} totalPages={totalPages} totalItems={total} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPage} className="border-b border-slate-100" />
+        <Pagination {...paginationProps} className="border-b border-slate-100" />
       )}
 
       {loading ? (
@@ -163,7 +161,7 @@ export default function AdminCategoriesPage() {
         </div>
       )}
 
-      <Pagination currentPage={page} totalPages={totalPages} totalItems={total} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPage} className="border-t border-slate-100 mt-6" />
+      <Pagination {...paginationProps} className="border-t border-slate-100 mt-6" />
 
       <AnimatePresence>
         {headoutModal && (

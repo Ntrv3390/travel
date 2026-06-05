@@ -9,6 +9,7 @@ import { api, getAccessToken } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, toSlug } from "@/lib/utils";
 import { Pagination } from "@/components/admin/Pagination";
+import { useAdminPagination } from "@/hooks/useAdminPagination";
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -48,9 +49,7 @@ function AdminBookingsContent() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [headoutModal, setHeadoutModal] = useState<{ bookingId: string; data: unknown; loading: boolean; error: string } | null>(null);
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
@@ -63,8 +62,7 @@ function AdminBookingsContent() {
     api.get<PaginatedResponse<Booking>>(`/api/v1/admin/bookings?${params}`)
       .then((res) => {
         setBookings(res.items || []);
-        setTotal(res.total || 0);
-        setTotalPages(Math.max(1, Math.ceil((res.total || 0) / (res.limit || ITEMS_PER_PAGE))));
+        updateFromResponse(res.total || 0, res.limit);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
@@ -468,14 +466,7 @@ function AdminBookingsContent() {
         </div>
       )}
 
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={total}
-        itemsPerPage={ITEMS_PER_PAGE}
-        onPageChange={setPage}
-        className="mt-6"
-      />
+      <Pagination className="mt-6" {...paginationProps} />
       {/* Headout Response Modal */}
       <AnimatePresence>
         {headoutModal && (

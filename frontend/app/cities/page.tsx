@@ -1,6 +1,26 @@
+import type { Metadata } from "next";
 import { CitiesGrid } from "@/components/cities/CitiesGrid";
+import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 import { getCities } from "@/lib/api";
 import type { CitiesResponse } from "@/types/api";
+
+export const metadata: Metadata = {
+  title: "Top Travel Destinations & Cities | Triipzy",
+  description: "Explore tours and activities across 200+ destinations worldwide. Find the best experiences in top cities.",
+  openGraph: {
+    title: "Top Travel Destinations | Triipzy",
+    description: "Explore tours and activities across 200+ destinations worldwide.",
+    images: [{ url: "/api/og?title=Top+Destinations&subtitle=200%2B+cities+worldwide&page=cities", width: 1200, height: 630, alt: "Triipzy Destinations" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Top Travel Destinations | Triipzy",
+    description: "Explore tours and activities across 200+ destinations worldwide.",
+    images: ["/api/og?title=Top+Destinations&subtitle=200%2B+cities+worldwide&page=cities"],
+  },
+  alternates: { canonical: "/cities" },
+};
 
 const PAGE_SIZE = 40;
 
@@ -15,6 +35,8 @@ export default async function CitiesPage() {
 
   return (
     <section className="container py-section">
+      <BreadcrumbJsonLd items={[{ label: "Destinations" }]} />
+      <Breadcrumb items={[{ label: "Destinations" }]} className="mb-6" />
       <div className="mb-8">
         <h1 className="text-display-sm font-bold">Cities</h1>
         <p className="mt-2 text-muted-foreground">

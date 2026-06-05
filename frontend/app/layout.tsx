@@ -16,9 +16,37 @@ import "@/styles/globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Triipzy - Experiences Worth Having", template: "%s | Triipzy" },
-  description: "Book tours, activities and experiences worldwide.",
+  description: "Discover and book unique tours, activities, and experiences worldwide. Best prices, instant confirmation, and 24/7 support.",
   metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL),
   icons: { icon: "/favicon.svg" },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: "Triipzy",
+    title: "Triipzy - Experiences Worth Having",
+    description: "Discover and book unique tours, activities, and experiences worldwide.",
+    images: [{ url: "/api/og?title=Triipzy&subtitle=Experiences+Worth+Having&page=home", width: 1200, height: 630, alt: "Triipzy" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Triipzy - Experiences Worth Having",
+    description: "Discover and book unique tours, activities, and experiences worldwide.",
+    images: ["/api/og?title=Triipzy&subtitle=Experiences+Worth+Having&page=home"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  alternates: {
+    canonical: env.NEXT_PUBLIC_SITE_URL,
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
