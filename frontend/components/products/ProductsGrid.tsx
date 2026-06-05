@@ -143,8 +143,9 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
 
   useEffect(() => {
     if (state.initialLoading || state.loading || state.nextOffset === null || state.done || state.error) return;
-    if (state.products.length < TRIGGER_INDEX) return;
-    const triggerEl = document.getElementById(`product-card-${state.products[TRIGGER_INDEX - 1]?.id}`);
+    if (state.products.length === 0) return;
+    const triggerIndex = Math.min(TRIGGER_INDEX - 1, state.products.length - 1);
+    const triggerEl = document.getElementById(`product-card-${state.products[triggerIndex]?.id}`);
     if (!triggerEl) return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -192,12 +193,9 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   return (
     <div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {state.products.map((product) => {
-          console.log(product);
-          return ((
-            <div key={product.id} id={`product-card-${product.id}`}><ProductCard product={product} /></div>
-          ))
-        })}
+        {state.products.map((product) => (
+          <div key={product.id} id={`product-card-${product.id}`}><ProductCard product={product} /></div>
+        ))}
       </div>
 
       {state.loading && (

@@ -173,7 +173,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 
 func (h *SearchHandler) fetchProductsFromDB() []SearchProduct {
 	var dbProducts []models.Product
-	if err := h.db.Where("title != '' AND (is_available = ? OR is_available IS NULL)", true).Limit(500).Find(&dbProducts).Error; err != nil {
+	if err := h.db.Where("title != '' AND (is_available = ? OR is_available IS NULL)", true).Limit(2000).Find(&dbProducts).Error; err != nil {
 		logger.Errorf("Failed to fetch products from DB for search: %v", err)
 		return nil
 	}
@@ -306,24 +306,23 @@ func (h *SearchHandler) searchProductsFallbackHeadout(ctx context.Context, q str
 			} else {
 				vals.Set("currencyCode", "USD")
 			}
-			vals.Set("language", "en")
+			vals.Set("languageCode", "EN")
 			vals.Set("limit", "100")
 			vals.Set("offset", "0")
 
-			upstream, err := h.headoutProxySvc.Get(fetchCtx, "/v1/product/listing/list-by/city", vals, false)
+			upstream, err := h.headoutProxySvc.Get(fetchCtx, "/v2/products/", vals, true)
 			if err != nil || upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
 				return
 			}
 
-			var payload struct {
-				Items []map[string]interface{} `json:"items"`
-			}
-			if err := json.Unmarshal(upstream.Body, &payload); err != nil {
+			var rawPayload interface{}
+			if err := json.Unmarshal(upstream.Body, &rawPayload); err != nil {
 				return
 			}
+			items := extractProductsArray(rawPayload)
 
-			products := make([]SearchProduct, 0, len(payload.Items))
-			for _, item := range payload.Items {
+			products := make([]SearchProduct, 0, len(items))
+			for _, item := range items {
 				id := extractID(item)
 				if id == "" {
 					continue
@@ -338,6 +337,13 @@ func (h *SearchHandler) searchProductsFallbackHeadout(ctx context.Context, q str
 				}
 				if imageURL == "" {
 					imageURL = getString(item, "image_url", "thumbnail", "hero_image")
+				}
+				if imageURL == "" {
+					if media, ok := item["media"].([]interface{}); ok && len(media) > 0 {
+						if first, ok := media[0].(map[string]interface{}); ok {
+							imageURL = getString(first, "url")
+						}
+					}
 				}
 				cityName := getNestedString(item, "city", "name")
 				if cityName == "" {
@@ -564,11 +570,11 @@ func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode strin
 	} else {
 		query.Set("currencyCode", "USD")
 	}
-	query.Set("language", "en")
-	query.Set("limit", "50")
+	query.Set("languageCode", "EN")
+	query.Set("limit", "100")
 	query.Set("offset", "0")
 
-	upstream, err := h.headoutProxySvc.Get(ctx, "/v1/product/listing/list-by/city", query, false)
+	upstream, err := h.headoutProxySvc.Get(ctx, "/v2/products/", query, true)
 	if err != nil {
 		return nil
 	}
@@ -576,15 +582,13 @@ func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode strin
 		return nil
 	}
 
-	var payload struct {
-		Items []map[string]interface{} `json:"items"`
-	}
+	var payload interface{}
 	if err := json.Unmarshal(upstream.Body, &payload); err != nil {
 		return nil
 	}
-
-	products := make([]SearchProduct, 0, len(payload.Items))
-	for _, item := range payload.Items {
+	items := extractProductsArray(payload)
+	products := make([]SearchProduct, 0, len(items))
+	for _, item := range items {
 		id := extractID(item)
 		if id == "" {
 			continue
@@ -600,6 +604,13 @@ func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode strin
 		}
 		if imageURL == "" {
 			imageURL = getString(item, "image_url", "thumbnail", "hero_image")
+		}
+		if imageURL == "" {
+			if media, ok := item["media"].([]interface{}); ok && len(media) > 0 {
+				if first, ok := media[0].(map[string]interface{}); ok {
+					imageURL = getString(first, "url")
+				}
+			}
 		}
 
 		cityName := getNestedString(item, "city", "name")

@@ -77,6 +77,25 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 			})
 			return
 		}
+		// Experiences table is empty or errored — fall back to products table
+		if h.db != nil {
+			products := h.fetchExperiencesFromProductsTable(category, location, q, page, limit)
+			if len(products) > 0 {
+				totalPages := 1
+				if len(products) >= limit {
+					totalPages = page + 1
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"data":          products,
+					"count":         len(products),
+					"page":          page,
+					"limit":         limit,
+					"total_pages":   totalPages,
+					"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+				})
+				return
+			}
+		}
 	}
 
 	if q != "" && location != "" {
@@ -99,9 +118,30 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 		}
 		if liveErr != nil {
 			logger.Errorf("Failed to fetch from Headout: %v", liveErr)
-			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
-			return
 		}
+		if h.db != nil {
+			products := h.fetchExperiencesFromProductsTable(category, location, q, page, limit)
+			if len(products) > 0 {
+				totalPages := 1
+				if len(products) >= limit {
+					totalPages = page + 1
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"data":          products,
+					"count":         len(products),
+					"page":          page,
+					"limit":         limit,
+					"total_pages":   totalPages,
+					"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+				})
+				return
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data": []models.Experience{}, "count": 0, "page": page, "limit": limit,
+			"total_pages": 0, "currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+		})
+		return
 	}
 
 	// If location is derived from query text, use that
@@ -112,13 +152,33 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	if location != "" {
 		liveExperiences, liveErr := h.fetchLiveExperiencesForLocation(c, location, page, limit)
 		if liveErr != nil && q != "" && location == q {
-			// q was used as location but Headout rejected it — do multi-city query search
 			h.searchByQueryAcrossCities(c, q, page, limit, currencyCode)
 			return
 		}
 		if liveErr != nil {
 			logger.Errorf("Failed to fetch from Headout: %v", liveErr)
-			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch from Headout"})
+			if h.db != nil {
+				products := h.fetchExperiencesFromProductsTable(category, location, q, page, limit)
+				if len(products) > 0 {
+					totalPages := 1
+					if len(products) >= limit {
+						totalPages = page + 1
+					}
+					c.JSON(http.StatusOK, gin.H{
+						"data":          products,
+						"count":         len(products),
+						"page":          page,
+						"limit":         limit,
+						"total_pages":   totalPages,
+						"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+					})
+					return
+				}
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"data": []models.Experience{}, "count": 0, "page": page, "limit": limit,
+				"total_pages": 0, "currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+			})
 			return
 		}
 		totalPages := 1
@@ -208,6 +268,25 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 				"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
 			})
 			return
+		}
+		// Experiences table is empty or errored — fall back to products table
+		if h.db != nil {
+			products := h.fetchExperiencesFromProductsTable(category, location, q, page, limit)
+			if len(products) > 0 {
+				totalPages := 1
+				if len(products) >= limit {
+					totalPages = page + 1
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"data":          products,
+					"count":         len(products),
+					"page":          page,
+					"limit":         limit,
+					"total_pages":   totalPages,
+					"currency_code": strings.ToUpper(defaultIfEmpty(currencyCode, "USD")),
+				})
+				return
+			}
 		}
 	}
 
@@ -619,11 +698,11 @@ func (h *ExperienceHandler) fetchLiveExperienceByCityAndSlug(c *gin.Context, cit
 	query := url.Values{}
 	query.Set("cityCode", cityCode)
 	query.Set("currencyCode", strings.ToUpper(defaultIfEmpty(currencyCode, "USD")))
-	query.Set("language", "en")
+	query.Set("languageCode", "EN")
 	query.Set("limit", "50")
 	query.Set("offset", "0")
 
-	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, true)
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v2/products/", query, true)
 	if err != nil {
 		return nil, fmt.Errorf("headout request: %w", err)
 	}
@@ -703,11 +782,11 @@ func (h *ExperienceHandler) fetchLiveExperiencesForLocation(c *gin.Context, loca
 	query := url.Values{}
 	query.Set("cityCode", cityCode)
 	query.Set("currencyCode", strings.ToUpper(defaultIfEmpty(c.Query("currencyCode"), "USD")))
-	query.Set("language", defaultIfEmpty(c.Query("language"), "en"))
+	query.Set("languageCode", defaultIfEmpty(c.Query("languageCode"), "EN"))
 	query.Set("limit", strconv.Itoa(limit))
 	query.Set("offset", strconv.Itoa(offset))
 
-	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v1/product/listing/list-by/city", query, true)
+	upstream, err := h.headoutProxySvc.Get(c.Request.Context(), "/v2/products/", query, true)
 	if err != nil {
 		return nil, err
 	}
@@ -811,6 +890,26 @@ func mapHeadoutProductToExperience(item map[string]interface{}, fallbackID uint)
 		currency = "USD"
 	}
 
+	rating := float32(firstNonZero(getFloat(item, "rating", "average_rating"), getNestedFloat(item, "ratingCumulative", "avg")))
+	reviewCount := int(firstNonZero(getFloat(item, "review_count", "ratings_count"), getNestedFloat(item, "ratingCumulative", "count")))
+	if rating == 0 {
+		if rs, ok := item["reviewsSummary"].(map[string]interface{}); ok {
+			rating = float32(getFloat(rs, "averageRating"))
+			reviewCount = int(getFloat(rs, "ratingsCount"))
+		}
+	}
+
+	price := firstNonZero(getFloat(item, "price", "starting_price", "base_price"), getNestedFloat(item, "pricing", "minimumPrice", "finalPrice"), getNestedFloat(item, "pricing", "headoutSellingPrice"))
+
+	imageURL := firstNonEmpty(getString(item, "image_url", "thumbnail", "hero_image"), getNestedString(item, "image", "url"))
+	if imageURL == "" {
+		if media, ok := item["media"].([]interface{}); ok && len(media) > 0 {
+			if first, ok := media[0].(map[string]interface{}); ok {
+				imageURL = getString(first, "url")
+			}
+		}
+	}
+
 	return models.Experience{
 		ID:          fallbackID,
 		HeadoutID:   headoutID,
@@ -819,11 +918,11 @@ func mapHeadoutProductToExperience(item map[string]interface{}, fallbackID uint)
 		Category:    firstNonEmpty(getString(item, "category", "primary_category"), getNestedString(item, "primaryCategory", "name")),
 		Location:    location,
 		Duration:    getString(item, "duration", "duration_text"),
-		Price:       firstNonZero(getFloat(item, "price", "starting_price", "base_price"), getNestedFloat(item, "pricing", "minimumPrice", "finalPrice")),
+		Price:       price,
 		Currency:    currency,
-		Rating:      float32(firstNonZero(getFloat(item, "rating", "average_rating"), getNestedFloat(item, "ratingCumulative", "avg"))),
-		ReviewCount: int(firstNonZero(getFloat(item, "review_count", "ratings_count"), getNestedFloat(item, "ratingCumulative", "count"))),
-		ImageURL:    firstNonEmpty(getString(item, "image_url", "thumbnail", "hero_image"), getNestedString(item, "image", "url")),
+		Rating:      rating,
+		ReviewCount: reviewCount,
+		ImageURL:    imageURL,
 		Status:      "active",
 	}, true
 }
@@ -962,6 +1061,51 @@ func toCityCode(location string) string {
 
 	replacer := strings.NewReplacer("-", "_", " ", "_")
 	return strings.ToUpper(replacer.Replace(trimmed))
+}
+
+// fetchExperiencesFromProductsTable queries the products table and converts to Experience format.
+// Used as fallback when the experiences table is empty.
+func (h *ExperienceHandler) fetchExperiencesFromProductsTable(category, location, q string, page, limit int) []models.Experience {
+	offset := (page - 1) * limit
+	query := h.db.Model(&models.Product{}).Where("title != '' AND (is_available = ? OR is_available IS NULL)", true)
+
+	if location != "" {
+		query = query.Where("LOWER(city_name) LIKE ? OR LOWER(city_code) LIKE ?",
+			"%"+strings.ToLower(location)+"%", "%"+strings.ToLower(toCityCode(location))+"%")
+	}
+	if category != "" {
+		query = query.Where("LOWER(category) LIKE ?", "%"+strings.ToLower(category)+"%")
+	}
+	if q != "" {
+		like := "%" + strings.ToLower(q) + "%"
+		query = query.Where("LOWER(title) LIKE ? OR LOWER(description) LIKE ? OR LOWER(category) LIKE ?", like, like, like)
+	}
+
+	var dbProducts []models.Product
+	if err := query.Order("title asc").Offset(offset).Limit(limit).Find(&dbProducts).Error; err != nil {
+		logger.Errorf("Failed to fetch products from products table: %v", err)
+		return nil
+	}
+
+	experiences := make([]models.Experience, 0, len(dbProducts))
+	for i, p := range dbProducts {
+		experiences = append(experiences, models.Experience{
+			ID:          uint(i + 1),
+			HeadoutID:   p.HeadoutID,
+			Title:       p.Title,
+			Description: p.Description,
+			Category:    p.Category,
+			Location:    p.CityName,
+			Duration:    p.Duration,
+			Price:       p.PriceFrom,
+			Currency:    p.Currency,
+			Rating:      float32(p.Rating),
+			ReviewCount: p.ReviewCount,
+			ImageURL:    p.ImageURL,
+			Status:      "active",
+		})
+	}
+	return experiences
 }
 
 func min(a, b int) int {

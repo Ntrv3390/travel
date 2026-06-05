@@ -30,17 +30,20 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(initialNextOffset === null);
   const isFetching = useRef(false);
+  const nextOffsetRef = useRef<number | null>(initialNextOffset);
 
   const loadMore = async () => {
-    if (nextOffset === null || isFetching.current) return;
+    const offset = nextOffsetRef.current;
+    if (offset === null || isFetching.current) return;
     isFetching.current = true;
     setLoading(true);
     setError(null);
-    const result = await getCities(nextOffset, PAGE_SIZE);
+    const result = await getCities(offset, PAGE_SIZE);
     if (result.data) {
       const data = result.data as CitiesResponse;
       setCities((prev) => [...prev, ...data.cities]);
       setNextOffset(data.nextOffset);
+      nextOffsetRef.current = data.nextOffset;
       if (data.nextOffset === null) setDone(true);
     } else {
       setError(result.error ?? "Failed to load cities.");
@@ -56,7 +59,7 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
     if (!triggerEl) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && nextOffset !== null && !isFetching.current) {
+        if (entries[0].isIntersecting && nextOffsetRef.current !== null && !isFetching.current) {
           loadMore();
         }
       },

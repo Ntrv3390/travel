@@ -40,7 +40,7 @@ func (h *HeadoutHandler) GetProductByID(c *gin.Context) {
 }
 
 func (h *HeadoutHandler) ListProductsByCity(c *gin.Context) {
-	h.proxyGetWithService(c, h.publicService, "/v1/product/listing/list-by/city", false)
+	h.proxyGetWithService(c, h.publicService, "/v2/products/", false)
 }
 
 func (h *HeadoutHandler) ListProductsByCategory(c *gin.Context) {

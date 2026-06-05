@@ -93,11 +93,11 @@ func (s *SyncService) syncCity(ctx context.Context, cityCode string) (*SyncResul
 		query.Set("cityCode", cityCode)
 		currencyCode := "USD" // default, can be made configurable
 		query.Set("currencyCode", currencyCode)
-		query.Set("language", "en")
+		query.Set("languageCode", "EN")
 		query.Set("limit", strconv.Itoa(limit))
 		query.Set("offset", strconv.Itoa(page*limit))
 
-		upstream, err := s.publicProxy.Get(ctx, "/v1/product/listing/list-by/city", query, false)
+		upstream, err := s.publicProxy.Get(ctx, "/v2/products/", query, true)
 		if err != nil {
 			return result, fmt.Errorf("fetch page %d: %w", page, err)
 		}
