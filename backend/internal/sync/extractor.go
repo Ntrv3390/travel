@@ -6,22 +6,26 @@ import (
 	"strings"
 )
 
-// ExtractString extracts a string value from a map for a given key.
-func ExtractString(data map[string]interface{}, key string) string {
-	v, exists := data[key]
-	if !exists {
-		return ""
+// ExtractString extracts a string value from a map for any of the given keys.
+// Returns the first matching value found.
+func ExtractString(data map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		v, exists := data[key]
+		if !exists {
+			continue
+		}
+		switch val := v.(type) {
+		case string:
+			return val
+		case float64:
+			return fmt.Sprintf("%.0f", val)
+		case json.Number:
+			return val.String()
+		default:
+			return fmt.Sprintf("%v", val)
+		}
 	}
-	switch val := v.(type) {
-	case string:
-		return val
-	case float64:
-		return fmt.Sprintf("%.0f", val)
-	case json.Number:
-		return val.String()
-	default:
-		return fmt.Sprintf("%v", val)
-	}
+	return ""
 }
 
 // ExtractNestedString extracts a string by traversing dot-separated paths.
