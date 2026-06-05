@@ -10,21 +10,30 @@ import { cn } from "@/lib/utils";
 export default function AdminSettingsPage() {
   const [fetchFresh, setFetchFresh] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.get<{ key: string; value: string }>("/api/v1/admin/settings?key=fetch_fresh")
-      .then((res) => setFetchFresh(res.value === "true"))
-      .catch(() => {})
+      .then((res) => {
+        setFetchFresh(res.value === "true");
+        setError(null);
+      })
+      .catch(() => setError("Failed to load settings"))
       .finally(() => setLoading(false));
   }, []);
 
   const toggleFetchFresh = useCallback(async () => {
     const newValue = !fetchFresh;
+    setSaving(true);
     try {
       await api.put("/api/v1/admin/settings", { key: "fetch_fresh", value: String(newValue) });
       setFetchFresh(newValue);
+      setError(null);
     } catch {
-      // silently fail
+      setError("Failed to update setting");
+    } finally {
+      setSaving(false);
     }
   }, [fetchFresh]);
 
@@ -40,6 +49,12 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="max-w-2xl space-y-6">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* Fetch Fresh Toggle */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -66,8 +81,9 @@ export default function AdminSettingsPage() {
             ) : (
               <button
                 onClick={toggleFetchFresh}
+                disabled={saving}
                 className={cn(
-                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2",
+                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:opacity-50",
                   fetchFresh ? "bg-sky-500" : "bg-slate-300"
                 )}
                 role="switch"

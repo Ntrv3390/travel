@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
+	"github.com/travel/backend/pkg/config"
 	"gorm.io/gorm"
 )
 
@@ -28,10 +29,17 @@ type AdminHandler struct {
 	db             *gorm.DB
 	emailService   *services.EmailService
 	headoutService *services.HeadoutProxyService
+	availSyncSvc   *services.AvailabilitySyncService
 }
 
 func NewAdminHandler(db *gorm.DB, emailService *services.EmailService, headoutService *services.HeadoutProxyService) *AdminHandler {
-	return &AdminHandler{db: db, emailService: emailService, headoutService: headoutService}
+	cfg := config.Load()
+	return &AdminHandler{
+		db:             db,
+		emailService:   emailService,
+		headoutService: headoutService,
+		availSyncSvc:   services.NewAvailabilitySyncService(cfg),
+	}
 }
 
 type paginatedResponse struct {
@@ -893,15 +901,52 @@ func (h *AdminHandler) SyncSingleProduct(c *gin.Context) {
 			continue
 		}
 
-		var availBody struct {
-			Availabilities []json.RawMessage `json:"availabilities"`
-		}
-		if err := json.Unmarshal(availResp.Body, &availBody); err != nil {
-			result.Availabilities.Failed++
-			continue
+		// Parse availability response - handle multiple Headout API response formats
+		var rawAvailabilities []json.RawMessage
+		if err := json.Unmarshal(availResp.Body, &struct {
+			Availabilities *[]json.RawMessage `json:"availabilities"`
+			Data          *struct {
+				Availabilities *[]json.RawMessage `json:"availabilities"`
+			} `json:"data"`
+			Slots *[]json.RawMessage `json:"slots"`
+			Items *[]json.RawMessage `json:"items"`
+		}{
+			Availabilities: &rawAvailabilities,
+		}); err != nil {
+			// Fallback: try parsing as a generic object
+			var genericBody map[string]interface{}
+			if err2 := json.Unmarshal(availResp.Body, &genericBody); err2 == nil {
+				rawAvailabilities = extractRawMessages(genericBody, "availabilities", "slots", "items")
+				if data, ok := genericBody["data"].(map[string]interface{}); ok {
+					rawAvailabilities = append(rawAvailabilities, extractRawMessages(data, "availabilities", "slots", "items")...)
+				}
+			} else {
+				result.Availabilities.Failed++
+				continue
+			}
 		}
 
-		for _, rawSlot := range availBody.Availabilities {
+		if len(rawAvailabilities) == 0 {
+			// Try alternate parsing approach
+			var altBody struct {
+				Availabilities []json.RawMessage `json:"availabilities"`
+				Slots          []json.RawMessage `json:"slots"`
+				Items          []json.RawMessage `json:"items"`
+				Data           *struct {
+					Availabilities []json.RawMessage `json:"availabilities"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(availResp.Body, &altBody); err == nil {
+				rawAvailabilities = append(rawAvailabilities, altBody.Availabilities...)
+				rawAvailabilities = append(rawAvailabilities, altBody.Slots...)
+				rawAvailabilities = append(rawAvailabilities, altBody.Items...)
+				if altBody.Data != nil {
+					rawAvailabilities = append(rawAvailabilities, altBody.Data.Availabilities...)
+				}
+			}
+		}
+
+		for _, rawSlot := range rawAvailabilities {
 			var slotData map[string]interface{}
 			if err := json.Unmarshal(rawSlot, &slotData); err != nil {
 				result.Availabilities.Failed++
@@ -1189,15 +1234,38 @@ func (h *AdminHandler) runSyncAllIndividual() map[string]interface{} {
 				continue
 			}
 
-			var availBody struct {
+			// Parse availability response - handle multiple Headout API response formats
+			var rawAvailabilities []json.RawMessage
+			var altBody struct {
 				Availabilities []json.RawMessage `json:"availabilities"`
+				Slots          []json.RawMessage `json:"slots"`
+				Items          []json.RawMessage `json:"items"`
+				Data           *struct {
+					Availabilities []json.RawMessage `json:"availabilities"`
+				} `json:"data"`
 			}
-			if err := json.Unmarshal(availResp.Body, &availBody); err != nil {
-				result.AvailFailed++
-				continue
+			if err := json.Unmarshal(availResp.Body, &altBody); err == nil {
+				rawAvailabilities = append(rawAvailabilities, altBody.Availabilities...)
+				rawAvailabilities = append(rawAvailabilities, altBody.Slots...)
+				rawAvailabilities = append(rawAvailabilities, altBody.Items...)
+				if altBody.Data != nil {
+					rawAvailabilities = append(rawAvailabilities, altBody.Data.Availabilities...)
+				}
+			} else {
+				// Fallback: try parsing as a generic object
+				var genericBody map[string]interface{}
+				if err2 := json.Unmarshal(availResp.Body, &genericBody); err2 == nil {
+					rawAvailabilities = extractRawMessages(genericBody, "availabilities", "slots", "items")
+					if data, ok := genericBody["data"].(map[string]interface{}); ok {
+						rawAvailabilities = append(rawAvailabilities, extractRawMessages(data, "availabilities", "slots", "items")...)
+					}
+				} else {
+					result.AvailFailed++
+					continue
+				}
 			}
 
-			for _, rawSlot := range availBody.Availabilities {
+			for _, rawSlot := range rawAvailabilities {
 				var slotData map[string]interface{}
 				if err := json.Unmarshal(rawSlot, &slotData); err != nil {
 					result.AvailFailed++
@@ -1527,6 +1595,23 @@ func extractString(data map[string]interface{}, key string) string {
 	default:
 		return fmt.Sprintf("%v", val)
 	}
+}
+
+// extractRawMessages extracts json.RawMessage arrays from a map using multiple possible keys
+func extractRawMessages(data map[string]interface{}, keys ...string) []json.RawMessage {
+	var result []json.RawMessage
+	for _, key := range keys {
+		if val, ok := data[key]; ok {
+			if arr, ok := val.([]interface{}); ok {
+				for _, item := range arr {
+					if rawBytes, err := json.Marshal(item); err == nil {
+						result = append(result, rawBytes)
+					}
+				}
+			}
+		}
+	}
+	return result
 }
 
 func (h *AdminHandler) ListCategoriesAdmin(c *gin.Context) {
@@ -1979,4 +2064,157 @@ func parsePagination(c *gin.Context) (int, int) {
 	}
 
 	return page, limit
+}
+
+// GetAvailabilityInsights returns counts of available vs unavailable products
+// and optionally the list of unavailable products
+func (h *AdminHandler) GetAvailabilityInsights(c *gin.Context) {
+	includeList := c.Query("include_list") == "true"
+
+	var totalProducts int64
+	h.db.Model(&models.Product{}).Count(&totalProducts)
+
+	var unavailableCount int64
+	h.db.Model(&models.Product{}).Where("is_available = ? OR is_available IS NULL", false).Count(&unavailableCount)
+
+	availableCount := totalProducts - unavailableCount
+
+	type insight struct {
+		Total      int64 `json:"total"`
+		Available  int64 `json:"available"`
+		Unavailable int64 `json:"unavailable"`
+	}
+
+	result := insight{
+		Total:       totalProducts,
+		Available:   availableCount,
+		Unavailable: unavailableCount,
+	}
+
+	if includeList {
+		var unavailableProducts []models.Product
+		h.db.Where("is_available = ? OR is_available IS NULL", false).
+			Order("title asc").
+			Select("id, headout_id, title, city_name, category, image_url, is_available, last_availability_sync_at").
+			Find(&unavailableProducts)
+
+		type productSummary struct {
+			ID                    uint   `json:"id"`
+			HeadoutID             string `json:"headout_id"`
+			Title                 string `json:"title"`
+			CityName              string `json:"city_name"`
+			Category              string `json:"category"`
+			ImageURL              string `json:"image_url"`
+			IsAvailable           bool   `json:"is_available"`
+			LastAvailabilitySyncAt *time.Time `json:"last_availability_sync_at"`
+		}
+
+		products := make([]productSummary, 0, len(unavailableProducts))
+		for _, p := range unavailableProducts {
+			products = append(products, productSummary{
+				ID:                    p.ID,
+				HeadoutID:             p.HeadoutID,
+				Title:                 p.Title,
+				CityName:              p.CityName,
+				Category:              p.Category,
+				ImageURL:              p.ImageURL,
+				IsAvailable:           p.IsAvailable,
+				LastAvailabilitySyncAt: p.LastAvailabilitySyncAt,
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"total":       totalProducts,
+			"available":   availableCount,
+			"unavailable": unavailableCount,
+			"products":    products,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// SyncProductAvailability syncs availability for a single product
+func (h *AdminHandler) SyncProductAvailability(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("id"))
+	if productID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "product id is required"})
+		return
+	}
+
+	var product models.Product
+	if err := h.db.Where("headout_id = ?", productID).First(&product).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Try by internal ID
+			if err2 := h.db.First(&product, productID).Error; err2 != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+	}
+
+	available, err := h.availSyncSvc.SyncSingleProductAvailability(c.Request.Context(), product)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to sync availability: %v", err)})
+		return
+	}
+
+	now := time.Now()
+	h.db.Model(&product).Updates(map[string]interface{}{
+		"is_available":               available,
+		"last_availability_sync_at": now,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"product_id":  product.HeadoutID,
+		"title":       product.Title,
+		"is_available": available,
+		"synced_at":   now.Format(time.RFC3339),
+	})
+}
+
+// SyncAllAvailability triggers a full availability sync for all products
+func (h *AdminHandler) SyncAllAvailability(c *gin.Context) {
+	if h.headoutService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "headout service not available"})
+		return
+	}
+
+	syncID := fmt.Sprintf("avail_%d", time.Now().UnixNano())
+
+	syncMu.Lock()
+	syncProgress[syncID] = map[string]interface{}{
+		"status": "running",
+		"type":   "sync_availability",
+	}
+	syncMu.Unlock()
+
+	go func(id string) {
+		result, err := h.availSyncSvc.SyncAllProductAvailability(context.Background())
+		syncMu.Lock()
+		if err != nil {
+			syncProgress[id] = map[string]interface{}{
+				"status": "failed",
+				"error":  err.Error(),
+			}
+		} else {
+			syncProgress[id] = map[string]interface{}{
+				"status":      "completed",
+				"total":       result.TotalProducts,
+				"available":   result.Available,
+				"unavailable": result.Unavailable,
+				"failed":      result.Failed,
+			}
+		}
+		syncMu.Unlock()
+	}(syncID)
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"status":  "started",
+		"sync_id": syncID,
+	})
 }

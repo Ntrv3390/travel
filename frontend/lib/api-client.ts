@@ -73,6 +73,15 @@ async function doRefresh(): Promise<string | null> {
   }
 }
 
+export async function silentRefresh(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 async function ensureValidToken(): Promise<string | null> {
   const accessToken = getAccessToken();
   if (!accessToken) return null;

@@ -173,7 +173,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 
 func (h *SearchHandler) fetchProductsFromDB() []SearchProduct {
 	var dbProducts []models.Product
-	if err := h.db.Where("title != ''").Limit(500).Find(&dbProducts).Error; err != nil {
+	if err := h.db.Where("title != '' AND (is_available = ? OR is_available IS NULL)", true).Limit(500).Find(&dbProducts).Error; err != nil {
 		logger.Errorf("Failed to fetch products from DB for search: %v", err)
 		return nil
 	}
@@ -255,7 +255,7 @@ func (h *SearchHandler) searchProductsFallbackDB(query string) []SearchProduct {
 		return nil
 	}
 	var dbProducts []models.Product
-	if err := h.db.Where("LOWER(title) LIKE ?", "%"+query+"%").Limit(20).Find(&dbProducts).Error; err != nil {
+	if err := h.db.Where("LOWER(title) LIKE ? AND (is_available = ? OR is_available IS NULL)", "%"+query+"%", true).Limit(20).Find(&dbProducts).Error; err != nil {
 		logger.Errorf("Fallback DB search failed: %v", err)
 		return nil
 	}

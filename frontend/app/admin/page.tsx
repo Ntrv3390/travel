@@ -47,14 +47,16 @@ interface HealthInfo {
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<AdminStats>("/api/v1/admin/stats")
-      .then(setStats)
-      .catch(() => {})
+      .then((res) => { setStats(res); setStatsError(null); })
+      .catch(() => setStatsError("Failed to load stats"))
       .finally(() => setLoading(false));
 
     // Fetch system status
@@ -66,8 +68,9 @@ export default function AdminDashboardPage() {
         .then(([statusRes, healthRes]) => {
           setStatus(statusRes);
           setHealth(healthRes);
+          setStatusError(null);
         })
-        .catch(() => {})
+        .catch(() => setStatusError("Failed to load system status"))
         .finally(() => setStatusLoading(false));
     };
 
@@ -101,6 +104,12 @@ export default function AdminDashboardPage() {
           Live Updates
         </div>
       </div>
+
+      {(statsError || statusError) && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          {statsError || statusError}
+        </div>
+      )}
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {statCards.map((card, i) => {

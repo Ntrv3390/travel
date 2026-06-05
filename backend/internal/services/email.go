@@ -1,7 +1,9 @@
 package services
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/smtp"
 	"strings"
 
@@ -70,10 +72,15 @@ func (s *EmailService) SendBookingAdminNotification(data BookingAdminNotificatio
 	subject := fmt.Sprintf("New Booking: %s - %s", data.BookingID, data.CustomerName)
 	htmlBody := buildBookingAdminNotificationHTML(data)
 
-	if s.cfg.From == "" || s.cfg.Host == "" {
+	if !s.isConfigured() {
 		logger.Infof("ADMIN NOTIFICATION TO: %s | SUBJECT: %s (SMTP not configured)", s.cfg.AdminEmail, subject)
 		logger.Infof("HTML BODY:\n%s", htmlBody)
 		return nil
+	}
+
+	if s.cfg.AdminEmail == "" {
+		logger.Errorf("ADMIN NOTIFICATION SKIPPED: ADMIN_EMAIL env var is not set (booking %s)", data.BookingID)
+		return fmt.Errorf("admin email not configured")
 	}
 
 	return s.SendEmail(s.cfg.AdminEmail, subject, htmlBody)
@@ -133,13 +140,16 @@ func buildBookingAdminNotificationHTML(data BookingAdminNotificationData) string
 	)
 }
 
+func (s *EmailService) isConfigured() bool {
+	return s.cfg.Host != "" && s.cfg.Port != "" && s.cfg.User != "" && s.cfg.Pass != "" && s.cfg.From != ""
+}
+
 func (s *EmailService) SendBookingConfirmation(data BookingConfirmationData) error {
 	subject := fmt.Sprintf("Booking Confirmed - %s", data.BookingID)
 	htmlBody := buildBookingConfirmationHTML(data)
 
-	if s.cfg.From == "" || s.cfg.Host == "" {
+	if !s.isConfigured() {
 		logger.Infof("EMAIL TO: %s | SUBJECT: %s (SMTP not configured)", data.CustomerEmail, subject)
-		logger.Infof("HTML BODY:\n%s", htmlBody)
 		return nil
 	}
 
@@ -150,10 +160,15 @@ func (s *EmailService) SendHelpSubmissionNotification(data HelpSubmissionData) e
 	subject := fmt.Sprintf("New Help Submission: %s", data.Subject)
 	htmlBody := buildHelpNotificationHTML(data)
 
-	if s.cfg.From == "" || s.cfg.Host == "" {
-		logger.Infof("ADMIN NOTIFICATION TO: %s | SUBJECT: %s", s.cfg.AdminEmail, subject)
+	if !s.isConfigured() {
+		logger.Infof("ADMIN NOTIFICATION TO: %s | SUBJECT: %s (SMTP not configured)", s.cfg.AdminEmail, subject)
 		logger.Infof("HTML BODY:\n%s", htmlBody)
 		return nil
+	}
+
+	if s.cfg.AdminEmail == "" {
+		logger.Errorf("ADMIN NOTIFICATION SKIPPED: ADMIN_EMAIL env var is not set (help submission id=%d)", data.ID)
+		return fmt.Errorf("admin email not configured")
 	}
 
 	return s.SendEmail(s.cfg.AdminEmail, subject, htmlBody)
@@ -163,8 +178,8 @@ func (s *EmailService) SendHelpSubmissionAcknowledgment(data HelpSubmissionData)
 	subject := "We received your help request - Triipzy"
 	htmlBody := buildHelpAcknowledgmentHTML(data)
 
-	if s.cfg.From == "" || s.cfg.Host == "" {
-		logger.Infof("ACKNOWLEDGMENT TO: %s | SUBJECT: %s", data.Email, subject)
+	if !s.isConfigured() {
+		logger.Infof("ACKNOWLEDGMENT TO: %s | SUBJECT: %s (SMTP not configured)", data.Email, subject)
 		logger.Infof("HTML BODY:\n%s", htmlBody)
 		return nil
 	}
@@ -176,8 +191,11 @@ func (s *EmailService) SendEmail(to, subject, htmlBody string) error {
 	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
 
 	auth := smtp.PlainAuth("", s.cfg.User, s.cfg.Pass, s.cfg.Host)
-
 	msg := buildMIMEMessage(s.cfg.From, to, subject, htmlBody)
+
+	if s.cfg.Port == "465" {
+		return s.sendWithImplicitTLS(addr, auth, to, msg)
+	}
 
 	err := smtp.SendMail(addr, auth, s.cfg.From, []string{to}, []byte(msg))
 	if err != nil {
@@ -189,13 +207,74 @@ func (s *EmailService) SendEmail(to, subject, htmlBody string) error {
 	return nil
 }
 
+func (s *EmailService) sendWithImplicitTLS(addr string, auth smtp.Auth, to, msg string) error {
+	tlsConfig := &tls.Config{
+		ServerName: s.cfg.Host,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		logger.Errorf("TLS dial failed for %s: %v", addr, err)
+		return fmt.Errorf("tls dial: %w", err)
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, s.cfg.Host)
+	if err != nil {
+		logger.Errorf("SMTP client creation failed: %v", err)
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer client.Close()
+
+	if err = client.Auth(auth); err != nil {
+		logger.Errorf("SMTP auth failed: %v", err)
+		return fmt.Errorf("smtp auth: %w", err)
+	}
+
+	if err = client.Mail(s.cfg.From); err != nil {
+		logger.Errorf("SMTP MAIL FROM failed: %v", err)
+		return fmt.Errorf("smtp mail: %w", err)
+	}
+
+	if err = client.Rcpt(to); err != nil {
+		logger.Errorf("SMTP RCPT TO failed for %s: %v", to, err)
+		return fmt.Errorf("smtp rcpt: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		logger.Errorf("SMTP DATA failed: %v", err)
+		return fmt.Errorf("smtp data: %w", err)
+	}
+
+	if _, err = w.Write([]byte(msg)); err != nil {
+		logger.Errorf("SMTP write failed: %v", err)
+		return fmt.Errorf("smtp write: %w", err)
+	}
+
+	if err = w.Close(); err != nil {
+		logger.Errorf("SMTP close data failed: %v", err)
+		return fmt.Errorf("smtp close: %w", err)
+	}
+
+	logger.Infof("Email sent successfully to %s via implicit TLS", to)
+	return client.Quit()
+}
+
+func isTimeout(err error) bool {
+	if netErr, ok := err.(net.Error); ok {
+		return netErr.Timeout()
+	}
+	return false
+}
+
 func buildMIMEMessage(from, to, subject, htmlBody string) string {
 	displayName := "Triipzy"
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("From: %s <%s>\r\n", displayName, from))
 	b.WriteString(fmt.Sprintf("To: %s\r\n", to))
 	b.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
-	b.WriteString("Reply-To: noreply@triipzy.com\r\n")
+	b.WriteString(fmt.Sprintf("Reply-To: %s\r\n", from))
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 	b.WriteString("\r\n")
@@ -317,7 +396,7 @@ func (s *EmailService) SendPasswordResetEmail(email, name, resetLink string) err
 	subject := "Reset Your Password - Triipzy"
 	htmlBody := buildPasswordResetHTML(name, resetLink)
 
-	if s.cfg.From == "" || s.cfg.Host == "" {
+	if !s.isConfigured() {
 		logger.Infof("EMAIL TO: %s | SUBJECT: %s (SMTP not configured)", email, subject)
 		logger.Infof("HTML BODY:\n%s", htmlBody)
 		return nil
@@ -422,7 +501,7 @@ func (s *EmailService) SendBookingTicket(email, name, bookingID string, ticketDa
 	subject := fmt.Sprintf("Your Tickets - %s", bookingID)
 	htmlBody := buildTicketHTML(name, string(ticketData))
 
-	if s.cfg.From == "" || s.cfg.Host == "" {
+	if !s.isConfigured() {
 		logger.Infof("TICKET EMAIL TO: %s | BOOKING: %s | SIZE: %d bytes (SMTP not configured)", email, bookingID, len(ticketData))
 		logger.Infof("HTML BODY:\n%s", htmlBody)
 		return nil

@@ -60,11 +60,11 @@ func Load() *Config {
 		JWTSecret: getEnv("JWT_SECRET", "triipzy-jwt-secret-change-in-production"),
 
 		// SMTP
-		SMTPHost:    getEnv("SMTP_HOST", "smtp.gmail.com"),
-		SMTPPort:    getEnv("SMTP_PORT", "587"),
+		SMTPHost:    getEnv("SMTP_HOST", ""),
+		SMTPPort:    getEnv("SMTP_PORT", ""),
 		SMTPUser:    getEnv("SMTP_USER", ""),
 		SMTPPass:    getEnv("SMTP_PASS", ""),
-		SMTPFrom:    getEnv("SMTP_FROM", "noreply@triipzy.com"),
+		SMTPFrom:    getEnv("SMTP_FROM", ""),
 		AdminEmail: getEnv("ADMIN_EMAIL", ""),
 	}
 

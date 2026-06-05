@@ -183,7 +183,7 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
 	}
 	if h.emailSvc != nil {
-		h.emailSvc.SendBookingConfirmation(services.BookingConfirmationData{
+		if err := h.emailSvc.SendBookingConfirmation(services.BookingConfirmationData{
 			BookingID:        headoutResp.BookingID,
 			HeadoutReference: headoutResp.HeadoutReference,
 			CustomerName:     item.FirstName + " " + item.LastName,
@@ -195,8 +195,10 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			Quantity:         totalPax,
 			TicketURL:        headoutResp.VoucherURL,
 			TicketData:       ticketText,
-		})
-		h.emailSvc.SendBookingAdminNotification(services.BookingAdminNotificationData{
+		}); err != nil {
+			logger.Errorf("Failed to send booking confirmation to %s: %v", item.Email, err)
+		}
+		if err := h.emailSvc.SendBookingAdminNotification(services.BookingAdminNotificationData{
 			BookingID:        headoutResp.BookingID,
 			HeadoutReference: headoutResp.HeadoutReference,
 			CustomerName:     item.FirstName + " " + item.LastName,
@@ -206,9 +208,13 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			TotalAmount:      headoutResp.TotalAmount,
 			Currency:         headoutResp.Currency,
 			AdminURL:         fmt.Sprintf("http://localhost:3000/admin/bookings?highlight=%s", headoutResp.BookingID),
-		})
+		}); err != nil {
+			logger.Errorf("Failed to send admin booking notification for %s: %v", headoutResp.BookingID, err)
+		}
 		if len(headoutResp.TicketData) > 0 {
-			h.emailSvc.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData)
+			if err := h.emailSvc.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData); err != nil {
+				logger.Errorf("Failed to send ticket email to %s: %v", item.Email, err)
+			}
 		}
 	}
 

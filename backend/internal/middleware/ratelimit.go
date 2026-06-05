@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type visitor struct {
@@ -43,8 +46,52 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 	return rl
 }
 
+// isAdminToken checks if the request carries a valid admin/superadmin JWT token.
+func isAdminToken(c *gin.Context) bool {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return false
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return false
+	}
+
+	tokenString := parts[1]
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "triipzy-jwt-secret-change-in-production"
+	}
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(secret), nil
+	})
+
+	if err != nil || !token.Valid {
+		return false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false
+	}
+
+	role, _ := claims["role"].(string)
+	return role == "admin" || role == "superadmin"
+}
+
 func (rl *RateLimiter) RateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip rate limiting for admin/superadmin users
+		if isAdminToken(c) {
+			c.Next()
+			return
+		}
+
 		ip := c.ClientIP()
 
 		rl.mu.Lock()

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { api, setTokens, clearTokens, getAccessToken, decodeJWTPayload } from "@/lib/api-client";
+import { api, setTokens, clearTokens, getAccessToken, decodeJWTPayload, silentRefresh } from "@/lib/api-client";
 
 export interface User {
   id: string;
@@ -31,21 +31,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (initRef.current) return;
     initRef.current = true;
 
-    const accessToken = getAccessToken();
-    if (!accessToken || !decodeJWTPayload(accessToken)) {
-      clearTokens();
-      setLoading(false);
-      return;
-    }
+    const init = async () => {
+      const accessToken = getAccessToken();
+      const refreshToken = localStorage.getItem("triipzy_refresh_token");
 
-    api.get<User>("/api/v1/auth/profile")
-      .then((u) => {
+      // If no access token but refresh token exists, silently refresh
+      if ((!accessToken || !decodeJWTPayload(accessToken)) && refreshToken) {
+        const newToken = await silentRefresh();
+        if (!newToken) {
+          setLoading(false);
+          return;
+        }
+      } else if (!accessToken) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const u = await api.get<User>("/api/v1/auth/profile");
         setUser(u);
-      })
-      .catch(() => {
+      } catch {
         clearTokens();
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    init();
+  }, []);
+
+  // Background auto-refresh: check every 30s, refresh if token expires within 5 min
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const accessToken = getAccessToken();
+      if (!accessToken) return;
+
+      const payload = decodeJWTPayload(accessToken);
+      if (!payload || !payload.exp) return;
+
+      const expiresAt = payload.exp * 1000;
+      const fiveMinutes = 5 * 60 * 1000;
+      if (expiresAt - Date.now() < fiveMinutes) {
+        silentRefresh().catch(() => {});
+      }
+    }, 30_000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {

@@ -26,12 +26,9 @@ type HeadoutHandler struct {
 }
 
 func NewHeadoutHandler(cfg *config.Config, db *gorm.DB) *HeadoutHandler {
-	publicCfg := *cfg
-	publicCfg.HeadoutURL = cfg.HeadoutURL
-
 	return &HeadoutHandler{
 		service:       services.NewHeadoutProxyService(cfg),
-		publicService: services.NewHeadoutProxyService(&publicCfg),
+		publicService: services.NewHeadoutProxyService(cfg),
 		db:            db,
 	}
 }
@@ -391,6 +388,8 @@ func (h *HeadoutHandler) listProductsFromDB(c *gin.Context, q url.Values) {
 	if category != "" && category != "undefined" && category != "null" {
 		query = query.Where("category ILIKE ?", "%"+category+"%")
 	}
+	// Filter out unavailable products from user-facing listings
+	query = query.Where("is_available = ? OR is_available IS NULL", true)
 
 	var total int64
 	query.Count(&total)

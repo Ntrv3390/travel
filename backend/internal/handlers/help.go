@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
+	"github.com/travel/backend/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -43,21 +44,29 @@ func (h *HelpHandler) Submit(c *gin.Context) {
 	}
 
 	if h.emailService != nil {
-		go h.emailService.SendHelpSubmissionNotification(services.HelpSubmissionData{
-			Name:    submission.Name,
-			Email:   submission.Email,
-			Subject: submission.Subject,
-			Message: submission.Message,
-			ID:      submission.ID,
-		})
+		go func() {
+			if err := h.emailService.SendHelpSubmissionNotification(services.HelpSubmissionData{
+				Name:    submission.Name,
+				Email:   submission.Email,
+				Subject: submission.Subject,
+				Message: submission.Message,
+				ID:      submission.ID,
+			}); err != nil {
+				logger.Errorf("Failed to send help submission admin notification (id=%d): %v", submission.ID, err)
+			}
+		}()
 
-		go h.emailService.SendHelpSubmissionAcknowledgment(services.HelpSubmissionData{
-			Name:    submission.Name,
-			Email:   submission.Email,
-			Subject: submission.Subject,
-			Message: submission.Message,
-			ID:      submission.ID,
-		})
+		go func() {
+			if err := h.emailService.SendHelpSubmissionAcknowledgment(services.HelpSubmissionData{
+				Name:    submission.Name,
+				Email:   submission.Email,
+				Subject: submission.Subject,
+				Message: submission.Message,
+				ID:      submission.ID,
+			}); err != nil {
+				logger.Errorf("Failed to send help submission acknowledgment to %s: %v", submission.Email, err)
+			}
+		}()
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "help submission received", "id": submission.ID})

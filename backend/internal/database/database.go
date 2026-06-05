@@ -197,6 +197,14 @@ func Init(cfg *config.Config) error {
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_product_availabilities_product_id ON product_availabilities(product_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_product_availabilities_headout_product_id ON product_availabilities(headout_product_id)`)
 
+	// Add availability tracking columns to products
+	if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT TRUE`).Error; err != nil {
+		logger.Warnf("Could not add is_available column: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS last_availability_sync_at TIMESTAMP WITH TIME ZONE`).Error; err != nil {
+		logger.Warnf("Could not add last_availability_sync_at column: %v", err)
+	}
+
 	// Ensure api_cache table exists (for caching list endpoints like categories, collections, subcategories)
 	ensureTable("api_caches", `CREATE TABLE IF NOT EXISTS api_caches (
 		id SERIAL PRIMARY KEY,

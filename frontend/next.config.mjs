@@ -25,6 +25,10 @@ const nextConfig = {
     if (!process.env.API_URL) return [];
     return [
       {
+        source: "/health",
+        destination: `${process.env.API_URL}/health`,
+      },
+      {
         source: "/api/v1/:path*",
         destination: `${process.env.API_URL}/api/v1/:path*`,
       },

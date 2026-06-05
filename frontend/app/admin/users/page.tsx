@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { Search, Users, Pencil, X, Check } from "lucide-react";
 import { api } from "@/lib/api-client";
@@ -37,6 +37,8 @@ export default function AdminUsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ email: string; role: "user" | "admin" | "superadmin" }>({ email: "", role: "user" });
   const [saving, setSaving] = useState(false);
+  const editFormRef = useRef(editForm);
+  editFormRef.current = editForm;
 
   const isSuperadmin = currentUser?.role === "superadmin";
 
@@ -79,16 +81,17 @@ export default function AdminUsersPage() {
   const saveUser = useCallback(async (userId: string) => {
     setSaving(true);
     try {
-      await api.put<AdminUser>(`/api/v1/admin/users/${userId}`, editForm);
+      const form = editFormRef.current;
+      await api.put<AdminUser>(`/api/v1/admin/users/${userId}`, form);
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, email: editForm.email, role: editForm.role } : u)),
+        prev.map((u) => (u.id === userId ? { ...u, email: form.email, role: form.role } : u)),
       );
       cancelEditing();
     } catch {
     } finally {
       setSaving(false);
     }
-  }, [editForm, cancelEditing]);
+  }, [cancelEditing]);
 
   const statusColors: Record<string, string> = {
     admin: "bg-purple-100 text-purple-700",

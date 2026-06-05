@@ -369,11 +369,43 @@ export async function getHomeCollections() {
   }
 }
 
-export async function getCategories() {
+export async function getCategories(cityCode?: string) {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/headout/v2/categories`, {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/categories`);
+    if (cityCode) url.searchParams.set("cityCode", cityCode);
+    const res = await fetch(url.toString(), {
       next: { revalidate: 86400 },
     });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getSubcategories(cityCode: string, options?: { languageCode?: string }) {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/subcategories`);
+    url.searchParams.set("cityCode", cityCode);
+    if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    if (!res.ok) return { data: [], error: null };
+    const json = await res.json();
+    return { data: json.data ?? json, error: null };
+  } catch (error) {
+    return { data: [], error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+export async function getCollections(cityCode: string, options?: { languageCode?: string; limit?: number; offset?: number }) {
+  try {
+    const url = new URL(`${API_BASE}/api/v1/headout/v2/collections`);
+    url.searchParams.set("cityCode", cityCode);
+    if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
+    if (options?.limit !== undefined) url.searchParams.set("limit", String(options.limit));
+    if (options?.offset !== undefined) url.searchParams.set("offset", String(options.offset));
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) return { data: [], error: null };
     const json = await res.json();
     return { data: json.data ?? json, error: null };

@@ -143,7 +143,10 @@ func main() {
 		adminGroup.POST("/products/sync-all-individual", adminHandler.SyncAllIndividualProducts)
 		adminGroup.GET("/products/sync-status", adminHandler.GetSyncStatus)
 		adminGroup.POST("/products/:id/sync", adminHandler.SyncSingleProduct)
+		adminGroup.POST("/products/:id/sync-availability", adminHandler.SyncProductAvailability)
 		adminGroup.GET("/products/:id/availabilities", adminHandler.GetProductAvailabilities)
+		adminGroup.GET("/products/availability-insights", adminHandler.GetAvailabilityInsights)
+		adminGroup.POST("/products/sync-availability-all", adminHandler.SyncAllAvailability)
 		adminGroup.GET("/settings", adminHandler.GetSetting)
 		adminGroup.PUT("/settings", adminHandler.UpdateSetting)
 		adminGroup.GET("/status", adminHandler.GetStatus)
@@ -256,9 +259,7 @@ func main() {
 	}
 
 	// Setup cron jobs
-	if gttdServices != nil {
-		setupCronJobs(gttdServices.Worker)
-	}
+	setupCronJobs(cfg, gttdServices)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -390,28 +391,48 @@ func initGTTDServices() (*GTTDServices, error) {
 	}, nil
 }
 
-func setupCronJobs(worker *gttd.Worker) {
-	cronSchedule := os.Getenv("GTTD_CRON_SCHEDULE")
-	if cronSchedule == "" {
-		cronSchedule = "0 2 * * *" // Default: 2 AM UTC daily
+func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices) {
+	c := cron.New()
+
+	// GTTD feed upload cron job
+	if gttdServices != nil {
+		cronSchedule := os.Getenv("GTTD_CRON_SCHEDULE")
+		if cronSchedule == "" {
+			cronSchedule = "0 2 * * *" // Default: 2 AM UTC daily
+		}
+		_, err := c.AddFunc(cronSchedule, func() {
+			ctx := context.Background()
+			if err := gttdServices.Worker.RunFeedUpload(ctx); err != nil {
+				logger.Errorf("GTTD feed upload failed: %v", err)
+			}
+		})
+		if err != nil {
+			logger.Warnf("Failed to schedule GTTD cron job: %v", err)
+		} else {
+			logger.Infof("GTTD cron job scheduled: %s", cronSchedule)
+		}
 	}
 
-	c := cron.New()
-	
-	_, err := c.AddFunc(cronSchedule, func() {
+	// Availability sync cron job — every 5 hours
+	availabilitySyncSvc := services.NewAvailabilitySyncService(cfg)
+	_, err := c.AddFunc("0 */5 * * *", func() {
 		ctx := context.Background()
-		if err := worker.RunFeedUpload(ctx); err != nil {
-			logger.Errorf("GTTD feed upload failed: %v", err)
+		logger.Info("Starting scheduled availability sync...")
+		result, err := availabilitySyncSvc.SyncAllProductAvailability(ctx)
+		if err != nil {
+			logger.Errorf("Availability sync failed: %v", err)
+			return
 		}
+		logger.Infof("Availability sync completed: %d available, %d unavailable, %d failed out of %d total",
+			result.Available, result.Unavailable, result.Failed, result.TotalProducts)
 	})
-
 	if err != nil {
-		logger.Warnf("Failed to schedule GTTD cron job: %v", err)
-		return
+		logger.Warnf("Failed to schedule availability sync cron job: %v", err)
+	} else {
+		logger.Info("Availability sync cron job scheduled: every 5 hours")
 	}
 
 	c.Start()
-	logger.Infof("GTTD cron job scheduled: %s", cronSchedule)
 }
 
 func seedUsers(db *gorm.DB) {

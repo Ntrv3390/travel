@@ -30,6 +30,6 @@ func (h *HomeHandler) GetCollections(c *gin.Context) {
 
 func (h *HomeHandler) GetTestimonials(c *gin.Context) {
 	var testimonials []models.Testimonial
-	h.db.Where("is_active = ?", true).Order("sort_order asc").Find(&testimonials)
+	h.db.Where("is_active = ?", true).Order("sort_order desc").Find(&testimonials)
 	c.JSON(http.StatusOK, gin.H{"data": testimonials})
 }

@@ -69,12 +69,31 @@ export interface ProductSubCategory {
   id: string;
   name: string;
   categoryId: string;
+  canonicalUrl?: string;
+  localeSpecificUrls?: Record<string, string>;
 }
 
 export interface ProductCollection {
   id: string;
   name: string;
   cityCode: string;
+  content?: { description: string | null; subtext: string | null } | null;
+  localeSpecificUrls?: Record<string, string>;
+  canonicalUrl?: string;
+  heroImage?: { url: string; type: string } | null;
+  cardImage?: { url: string; type: string } | null;
+}
+
+export interface CollectionsResponse {
+  collections: ProductCollection[];
+  nextUrl: string | null;
+  prevUrl: string | null;
+  total: number;
+  nextOffset: number | null;
+}
+
+export interface SubcategoriesResponse {
+  subCategories: ProductSubCategory[];
 }
 
 export interface ProductVariant {

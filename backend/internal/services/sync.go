@@ -23,11 +23,8 @@ type SyncService struct {
 }
 
 func NewSyncService(cfg *config.Config) *SyncService {
-	publicCfg := *cfg
-	publicCfg.HeadoutURL = cfg.HeadoutProdBaseURL
-
 	return &SyncService{
-		publicProxy: NewHeadoutProxyService(&publicCfg),
+		publicProxy: NewHeadoutProxyService(cfg),
 		db:          database.GetDB(),
 	}
 }
