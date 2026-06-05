@@ -439,8 +439,8 @@ func (h *AdminHandler) SyncCities(c *gin.Context) {
 				result.Failed++
 			}
 
-			result.Total++
-		}
+		result.Total++
+	}
 
 		pageCount++
 		if body.NextOffset == nil || *body.NextOffset <= offset || pageCount >= maxPages {
@@ -691,7 +691,7 @@ func (h *AdminHandler) SyncProducts(c *gin.Context) {
 	syncMu.Unlock()
 
 	go func(id string) {
-		result := h.runSyncProducts()
+		result := h.runSyncAllIndividual()
 		syncMu.Lock()
 		syncProgress[id] = result
 		syncMu.Unlock()
@@ -1067,7 +1067,22 @@ func (h *AdminHandler) runSyncAllIndividual() map[string]interface{} {
 		return map[string]interface{}{"status": "failed", "error": err.Error()}
 	}
 
-	for _, prod := range products {
+	syncStart := time.Now()
+	workWindow := 5 * time.Minute
+	cooldownDuration := 1 * time.Minute
+	interRequestDelay := 3 * time.Second
+
+	for i, prod := range products {
+		// Rate limit: 3s between requests, 1min cooldown every 5min
+		if i > 0 {
+			time.Sleep(interRequestDelay)
+		}
+		if i > 0 && time.Since(syncStart) >= workWindow {
+			logger.Infof("Sync cooldown: pausing for %v after %v of work", cooldownDuration, workWindow)
+			time.Sleep(cooldownDuration)
+			syncStart = time.Now()
+		}
+
 		path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(prod.HeadoutID))
 		resp, err := h.headoutService.Get(context.Background(), path, nil, true)
 		if err != nil {

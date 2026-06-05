@@ -137,18 +137,6 @@ export default function AdminProductsPage() {
     }
   }, []);
 
-  const handleSyncAll = useCallback(async () => {
-    setSyncModal({ open: true, running: true, progress: null, error: null });
-    try {
-      const { sync_id } = await api.post<{ sync_id: string }>("/api/v1/admin/products/sync");
-      const res = await pollSyncStatus(sync_id);
-      setSyncModal({ open: true, running: false, progress: res, error: null });
-      fetchProducts(page, search);
-    } catch (err) {
-      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
-    }
-  }, [page, search, fetchProducts, pollSyncStatus]);
-
   const handleSyncAllIndividual = useCallback(async () => {
     setSyncModal({ open: true, running: true, progress: null, error: null });
     try {
@@ -324,18 +312,6 @@ export default function AdminProductsPage() {
             )}
             {syncModal.running ? "Syncing..." : "Sync All Individual Products"}
           </button>
-          <button
-            onClick={handleSyncAll}
-            disabled={syncModal.running}
-            className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncModal.running ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {syncModal.running ? "Syncing..." : "Sync All Products"}
-          </button>
         </div>
       </div>
 
@@ -452,7 +428,7 @@ export default function AdminProductsPage() {
           <Package className="h-12 w-12 text-slate-300" />
           <p className="mt-4 text-sm font-medium text-slate-500">No products found</p>
           <button
-            onClick={handleSyncAll}
+            onClick={handleSyncAllIndividual}
             disabled={syncModal.running}
             className="mt-4 flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50"
           >

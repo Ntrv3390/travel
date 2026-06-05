@@ -47,7 +47,22 @@ func (s *AvailabilitySyncService) SyncAllProductAvailability(ctx context.Context
 	result.TotalProducts = len(products)
 	logger.Infof("Starting availability sync for %d products", len(products))
 
-	for _, product := range products {
+	syncStart := time.Now()
+	workWindow := 5 * time.Minute
+	cooldownDuration := 1 * time.Minute
+	interRequestDelay := 3 * time.Second
+
+	for i, product := range products {
+		// Rate limit: 3s between requests, 1min cooldown every 5min
+		if i > 0 {
+			time.Sleep(interRequestDelay)
+		}
+		if i > 0 && time.Since(syncStart) >= workWindow {
+			logger.Infof("Availability sync cooldown: pausing for %v after %v of work", cooldownDuration, workWindow)
+			time.Sleep(cooldownDuration)
+			syncStart = time.Now()
+		}
+
 		available, err := s.syncProductAvailability(ctx, product)
 		if err != nil {
 			logger.Warnf("Failed to sync availability for product %s (%s): %v", product.Title, product.HeadoutID, err)
