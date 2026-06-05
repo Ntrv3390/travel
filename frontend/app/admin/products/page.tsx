@@ -89,6 +89,7 @@ export default function AdminProductsPage() {
   const [headoutModal, setHeadoutModal] = useState<{ data: Record<string, unknown> | null; loading: boolean; error: string } | null>(null);
   const [availabilityInsights, setAvailabilityInsights] = useState<AvailabilityInsights | null>(null);
   const [showUnavailableList, setShowUnavailableList] = useState(false);
+  const [syncingAvailability, setSyncingAvailability] = useState<Record<number, boolean>>({});
 
   const fetchProducts = useCallback((p: number, q: string) => {
     setLoading(true);
@@ -231,8 +232,8 @@ export default function AdminProductsPage() {
     }
   }, [page, search, fetchProducts]);
 
-  const loadAvailabilities = useCallback(async (prodId: number) => {
-    if (availabilities[prodId]) return;
+  const loadAvailabilities = useCallback(async (prodId: number, force = false) => {
+    if (!force && availabilities[prodId]) return;
     setLoadingAvail((prev) => ({ ...prev, [prodId]: true }));
     try {
       const res = await api.get<{ items: ProductAvailability[] }>(`/api/v1/admin/products/${prodId}/availabilities`);
@@ -243,6 +244,18 @@ export default function AdminProductsPage() {
       setLoadingAvail((prev) => ({ ...prev, [prodId]: false }));
     }
   }, [availabilities]);
+
+  const handleSyncAvailability = useCallback(async (headoutId: string, prodId: number) => {
+    setSyncingAvailability((prev) => ({ ...prev, [prodId]: true }));
+    try {
+      await api.post(`/api/v1/admin/products/${headoutId}/sync-availability`);
+      await loadAvailabilities(prodId, true);
+    } catch {
+      // silently fail
+    } finally {
+      setSyncingAvailability((prev) => ({ ...prev, [prodId]: false }));
+    }
+  }, [loadAvailabilities]);
 
   const loadProductDetail = useCallback(async (headoutId: string, prodId: number) => {
     if (productDetails[prodId]) return;
@@ -706,9 +719,23 @@ export default function AdminProductsPage() {
 
                               {/* Availabilities section */}
                               <div className="col-span-full rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                  Availabilities & Pricing
-                                </p>
+                                <div className="mb-3 flex items-center justify-between">
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    Availabilities & Pricing
+                                  </p>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleSyncAvailability(product.headout_id, product.id); }}
+                                    disabled={syncingAvailability[product.id]}
+                                    className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {syncingAvailability[product.id] ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-3 w-3" />
+                                    )}
+                                    {syncingAvailability[product.id] ? "Syncing..." : "Sync Availability"}
+                                  </button>
+                                </div>
                                 {loadingAvail[product.id] ? (
                                   <div className="flex items-center justify-center py-4">
                                     <Loader2 className="h-5 w-5 animate-spin text-slate-400" />

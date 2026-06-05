@@ -245,6 +245,17 @@ func (s *AvailabilitySyncService) upsertAvailabilityRecord(ctx context.Context, 
 
 	availableSlots := int(extractFloatFromMap(slotData, "availableSlots", "available_slots", "available", "remainingInventory", "remaining", "seatsAvailable"))
 
+	// If no numeric slot count found, derive from availability status
+	if availableSlots == 0 {
+		availStatus := extractStringFromMap(slotData, "availability", "status")
+		switch availStatus {
+		case "UNLIMITED":
+			availableSlots = 999
+		case "LIMITED":
+			availableSlots = 1
+		}
+	}
+
 	availRawJSON, _ := json.Marshal(slotData)
 
 	var existing models.ProductAvailability
