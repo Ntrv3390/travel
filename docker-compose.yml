@@ -65,6 +65,12 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@triipzy.com}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # Sync Worker Pool
+      SYNC_WORKER_COUNT: ${SYNC_WORKER_COUNT:-20}
+      SYNC_RATE_LIMIT_PER_SEC: ${SYNC_RATE_LIMIT_PER_SEC:-10}
+      SYNC_RATE_BURST: ${SYNC_RATE_BURST:-20}
+      SYNC_MAX_RETRIES: ${SYNC_MAX_RETRIES:-3}
+      SYNC_RETRY_BASE_DELAY_MS: ${SYNC_RETRY_BASE_DELAY_MS:-500}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
+	synclib "github.com/travel/backend/internal/sync"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
 	"gorm.io/gorm"
@@ -31,15 +32,17 @@ type AdminHandler struct {
 	emailService   *services.EmailService
 	headoutService *services.HeadoutProxyService
 	availSyncSvc   *services.AvailabilitySyncService
+	syncService    *synclib.Service
 }
 
-func NewAdminHandler(db *gorm.DB, emailService *services.EmailService, headoutService *services.HeadoutProxyService) *AdminHandler {
+func NewAdminHandler(db *gorm.DB, emailService *services.EmailService, headoutService *services.HeadoutProxyService, syncService *synclib.Service) *AdminHandler {
 	cfg := config.Load()
 	return &AdminHandler{
 		db:             db,
 		emailService:   emailService,
 		headoutService: headoutService,
 		availSyncSvc:   services.NewAvailabilitySyncService(cfg),
+		syncService:    syncService,
 	}
 }
 
@@ -682,6 +685,20 @@ func (h *AdminHandler) SyncProducts(c *gin.Context) {
 		return
 	}
 
+	if h.syncService != nil {
+		jobID, err := h.syncService.StartFullSync(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"status": "started",
+			"job_id": jobID,
+		})
+		return
+	}
+
+	// Fallback to legacy sync
 	syncID := fmt.Sprintf("list_%d", time.Now().UnixNano())
 
 	syncMu.Lock()
@@ -1401,6 +1418,20 @@ func (h *AdminHandler) SyncAllIndividualProducts(c *gin.Context) {
 		return
 	}
 
+	if h.syncService != nil {
+		jobID, err := h.syncService.StartFullSync(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"status": "started",
+			"job_id": jobID,
+		})
+		return
+	}
+
+	// Fallback to legacy sync
 	syncID := fmt.Sprintf("individual_%d", time.Now().UnixNano())
 
 	syncMu.Lock()
@@ -2200,6 +2231,20 @@ func (h *AdminHandler) SyncAllAvailability(c *gin.Context) {
 		return
 	}
 
+	if h.syncService != nil {
+		jobID, err := h.syncService.StartAvailabilitySync(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"status": "started",
+			"job_id": jobID,
+		})
+		return
+	}
+
+	// Fallback to legacy sync
 	syncID := fmt.Sprintf("avail_%d", time.Now().UnixNano())
 
 	syncMu.Lock()

@@ -197,12 +197,48 @@ func Init(cfg *config.Config) error {
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_product_availabilities_product_id ON product_availabilities(product_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_product_availabilities_headout_product_id ON product_availabilities(headout_product_id)`)
 
+	// Sync jobs table
+	ensureTable("sync_jobs", `CREATE TABLE IF NOT EXISTS sync_jobs (
+		id SERIAL PRIMARY KEY,
+		job_id VARCHAR(100) UNIQUE NOT NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		type VARCHAR(20) NOT NULL DEFAULT 'full',
+		total_products INTEGER DEFAULT 0,
+		processed_products INTEGER DEFAULT 0,
+		successful_products INTEGER DEFAULT 0,
+		failed_products INTEGER DEFAULT 0,
+		worker_count INTEGER DEFAULT 20,
+		error_message TEXT DEFAULT '',
+		started_at TIMESTAMP WITH TIME ZONE,
+		completed_at TIMESTAMP WITH TIME ZONE,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		deleted_at TIMESTAMP WITH TIME ZONE
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sync_jobs_status ON sync_jobs(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sync_jobs_job_id ON sync_jobs(job_id)`)
+
+	ensureTable("sync_job_failed_products", `CREATE TABLE IF NOT EXISTS sync_job_failed_products (
+		id SERIAL PRIMARY KEY,
+		sync_job_id INTEGER NOT NULL REFERENCES sync_jobs(id),
+		product_id INTEGER NOT NULL,
+		headout_id VARCHAR(100) NOT NULL,
+		product_name VARCHAR(500) DEFAULT '',
+		error_message TEXT DEFAULT '',
+		failure_type VARCHAR(50) DEFAULT '',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_sync_job_failed_products_job_id ON sync_job_failed_products(sync_job_id)`)
+
 	// Add availability tracking columns to products
 	if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT TRUE`).Error; err != nil {
 		logger.Warnf("Could not add is_available column: %v", err)
 	}
 	if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS last_availability_sync_at TIMESTAMP WITH TIME ZONE`).Error; err != nil {
 		logger.Warnf("Could not add last_availability_sync_at column: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS metadata_synced_at TIMESTAMP WITH TIME ZONE`).Error; err != nil {
+		logger.Warnf("Could not add metadata_synced_at column: %v", err)
 	}
 
 	// Ensure api_cache table exists (for caching list endpoints like categories, collections, subcategories)
@@ -381,6 +417,8 @@ func Migrate() error {
 		&models.Category{},
 		&models.Subcategory{},
 		&models.Collection{},
+		&models.SyncJob{},
+		&models.SyncJobFailedProduct{},
 	)
 }
 

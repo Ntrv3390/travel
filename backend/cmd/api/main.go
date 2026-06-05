@@ -20,6 +20,7 @@ import (
 	"github.com/travel/backend/internal/middleware"
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
+	synclib "github.com/travel/backend/internal/sync"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
 	"golang.org/x/crypto/bcrypt"
@@ -124,8 +125,11 @@ func main() {
 	// Headout proxy service (used by multiple handlers)
 	headoutProxy := services.NewHeadoutProxyService(cfg)
 
+	// Sync service with concurrent worker pool
+	syncService := synclib.NewService(cfg, database.GetDB(), headoutProxy)
+
 	// Admin routes (protected by JWT + admin role)
-	adminHandler := handlers.NewAdminHandler(database.GetDB(), emailSvc, headoutProxy)
+	adminHandler := handlers.NewAdminHandler(database.GetDB(), emailSvc, headoutProxy, syncService)
 	adminGroup := router.Group("/api/v1/admin")
 	adminGroup.Use(middleware.AdminAuthJWT())
 	{
@@ -160,6 +164,22 @@ func main() {
 		adminGroup.POST("/testimonials", adminHandler.CreateTestimonial)
 		adminGroup.PUT("/testimonials/:id", adminHandler.UpdateTestimonial)
 		adminGroup.PATCH("/testimonials/:id/toggle", adminHandler.ToggleTestimonial)
+	}
+
+	// Sync API routes (new concurrent worker-based system)
+	syncHandler := handlers.NewSyncHandler(syncService)
+	syncGroup := router.Group("/api/v1/admin/sync")
+	syncGroup.Use(middleware.AdminAuthJWT())
+	{
+		syncGroup.POST("/metadata", syncHandler.StartMetadataSync)
+		syncGroup.POST("/availability", syncHandler.StartAvailabilitySync)
+		syncGroup.POST("/full", syncHandler.StartFullSync)
+		syncGroup.GET("/jobs", syncHandler.ListJobs)
+		syncGroup.GET("/jobs/:job_id", syncHandler.GetJobStatus)
+		syncGroup.GET("/jobs/:job_id/progress", syncHandler.GetSyncProgress)
+		syncGroup.GET("/jobs/:job_id/failed", syncHandler.GetFailedProducts)
+		syncGroup.GET("/jobs/:job_id/metrics", syncHandler.GetMetrics)
+		syncGroup.POST("/jobs/:job_id/cancel", syncHandler.CancelJob)
 	}
 
 	// Admin sync routes (protected by admin key - keep for backwards compatibility)
@@ -259,7 +279,7 @@ func main() {
 	}
 
 	// Setup cron jobs
-	setupCronJobs(cfg, gttdServices)
+	setupCronJobs(cfg, gttdServices, syncService)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -391,7 +411,7 @@ func initGTTDServices() (*GTTDServices, error) {
 	}, nil
 }
 
-func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices) {
+func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *synclib.Service) {
 	c := cron.New()
 
 	// GTTD feed upload cron job
@@ -414,18 +434,18 @@ func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices) {
 	}
 
 	// Availability sync cron job — every 5 hours
-	availabilitySyncSvc := services.NewAvailabilitySyncService(cfg)
-	_, err := c.AddFunc("0 */5 * * *", func() {
+	// Uses the new concurrent worker-based sync service
+	availabilitySyncCronFn := func() {
 		ctx := context.Background()
 		logger.Info("Starting scheduled availability sync...")
-		result, err := availabilitySyncSvc.SyncAllProductAvailability(ctx)
+		jobID, err := syncService.StartAvailabilitySync(ctx)
 		if err != nil {
-			logger.Errorf("Availability sync failed: %v", err)
+			logger.Errorf("Failed to start scheduled availability sync: %v", err)
 			return
 		}
-		logger.Infof("Availability sync completed: %d available, %d unavailable, %d failed out of %d total",
-			result.Available, result.Unavailable, result.Failed, result.TotalProducts)
-	})
+		logger.Infof("Scheduled availability sync started as job %s", jobID)
+	}
+	_, err := c.AddFunc("0 */5 * * *", availabilitySyncCronFn)
 	if err != nil {
 		logger.Warnf("Failed to schedule availability sync cron job: %v", err)
 	} else {

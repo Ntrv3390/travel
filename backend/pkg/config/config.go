@@ -37,6 +37,13 @@ type Config struct {
 	SMTPPass    string
 	SMTPFrom    string
 	AdminEmail string
+
+	// Sync Worker Pool
+	SyncWorkerCount      int
+	SyncRateLimitPerSec  float64
+	SyncRateBurst        int
+	SyncMaxRetries       int
+	SyncRetryBaseDelayMs int
 }
 
 func Load() *Config {
@@ -69,6 +76,14 @@ func Load() *Config {
 	}
 
 	cfg.HeadoutURL = resolveHeadoutURL(cfg)
+
+	// Sync worker pool config
+	cfg.SyncWorkerCount = getEnvInt("SYNC_WORKER_COUNT", 20)
+	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 10)
+	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 20)
+	cfg.SyncMaxRetries = getEnvInt("SYNC_MAX_RETRIES", 3)
+	cfg.SyncRetryBaseDelayMs = getEnvInt("SYNC_RETRY_BASE_DELAY_MS", 500)
+
 	return cfg
 }
 
@@ -118,4 +133,16 @@ func getEnvInt(key string, defaultVal int) int {
 		return defaultVal
 	}
 	return intVal
+}
+
+func getEnvFloat(key string, defaultVal float64) float64 {
+	val := getEnv(key, "")
+	if val == "" {
+		return defaultVal
+	}
+	floatVal, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return defaultVal
+	}
+	return floatVal
 }
