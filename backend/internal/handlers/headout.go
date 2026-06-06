@@ -915,16 +915,19 @@ func (h *HeadoutHandler) syncAvailabilitiesToDB(productID, variantID string, bod
 	}
 
 	var variantTitle string
-	if vmap, ok := product.RawHeadoutData["variants"].([]interface{}); ok {
-		for _, v := range vmap {
-			if vm, ok := v.(map[string]interface{}); ok {
-				if vid, _ := vm["id"].(string); vid == variantID {
-					if t, ok := vm["title"].(string); ok {
-						variantTitle = t
-					} else if t, ok := vm["name"].(string); ok {
-						variantTitle = t
+	var rawMap map[string]interface{}
+	if err := json.Unmarshal(product.RawHeadoutData, &rawMap); err == nil {
+		if vmap, ok := rawMap["variants"].([]interface{}); ok {
+			for _, v := range vmap {
+				if vm, ok := v.(map[string]interface{}); ok {
+					if vid, _ := vm["id"].(string); vid == variantID {
+						if t, ok := vm["title"].(string); ok {
+							variantTitle = t
+						} else if t, ok := vm["name"].(string); ok {
+							variantTitle = t
+						}
+						break
 					}
-					break
 				}
 			}
 		}
