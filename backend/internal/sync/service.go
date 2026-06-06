@@ -26,8 +26,6 @@ const (
 type Service struct {
 	db             *gorm.DB
 	headoutProxy   *services.HeadoutProxyService
-	rateLimiter    *RateLimiter
-	retryCfg       RetryConfig
 	workerCount    int
 	jobService     *JobService
 
@@ -36,13 +34,11 @@ type Service struct {
 	activeJobsMu stdsync.RWMutex
 }
 
-// NewService creates a new sync service with configured worker pool and rate limiter.
+// NewService creates a new sync service with configured worker pool.
 func NewService(cfg *config.Config, db *gorm.DB, headoutProxy *services.HeadoutProxyService) *Service {
 	return &Service{
 		db:           db,
 		headoutProxy: headoutProxy,
-		rateLimiter:  NewRateLimiter(cfg.SyncRateLimitPerSec, cfg.SyncRateBurst),
-		retryCfg:     DefaultRetryConfig(cfg.SyncMaxRetries, cfg.SyncRetryBaseDelayMs),
 		workerCount:  cfg.SyncWorkerCount,
 		jobService:   NewJobService(db),
 		activeJobs:   make(map[string]context.CancelFunc),
@@ -231,58 +227,46 @@ func (s *Service) runSyncJob(jobID string, jobs []Job, handler func(ctx context.
 }
 
 func (s *Service) processMetadata(ctx context.Context, job Job) error {
-	return Retry(ctx, s.retryCfg, fmt.Sprintf("metadata-sync/%s", job.HeadoutID), func(ctx context.Context) error {
-		if err := s.rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
+	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(job.HeadoutID))
+	resp, err := s.headoutProxy.Get(ctx, path, nil, true)
+	if err != nil {
+		return fmt.Errorf("fetch product %s: %w", job.HeadoutID, err)
+	}
 
-		path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(job.HeadoutID))
-		resp, err := s.headoutProxy.Get(ctx, path, nil, true)
-		if err != nil {
-			return fmt.Errorf("fetch product %s: %w", job.HeadoutID, err)
-		}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("headout returned status %d for product %s", resp.StatusCode, job.HeadoutID)
+	}
 
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("headout returned status %d for product %s", resp.StatusCode, job.HeadoutID)
-		}
+	var pData map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &pData); err != nil {
+		return fmt.Errorf("parse response for %s: %w", job.HeadoutID, err)
+	}
 
-		var pData map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &pData); err != nil {
-			return fmt.Errorf("parse response for %s: %w", job.HeadoutID, err)
-		}
+	productData, err := ExtractProductData(pData)
+	if err != nil {
+		return fmt.Errorf("extract data for %s: %w", job.HeadoutID, err)
+	}
 
-		productData, err := ExtractProductData(pData)
-		if err != nil {
-			return fmt.Errorf("extract data for %s: %w", job.HeadoutID, err)
-		}
-
-		return s.upsertProduct(ctx, productData)
-	})
+	return s.upsertProduct(ctx, productData)
 }
 
 func (s *Service) processAvailability(ctx context.Context, job Job) error {
-	return Retry(ctx, s.retryCfg, fmt.Sprintf("avail-sync/%s", job.HeadoutID), func(ctx context.Context) error {
-		if err := s.rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
+	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(job.HeadoutID))
+	resp, err := s.headoutProxy.Get(ctx, path, nil, true)
+	if err != nil {
+		return fmt.Errorf("fetch product %s: %w", job.HeadoutID, err)
+	}
 
-		path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(job.HeadoutID))
-		resp, err := s.headoutProxy.Get(ctx, path, nil, true)
-		if err != nil {
-			return fmt.Errorf("fetch product %s: %w", job.HeadoutID, err)
-		}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("headout returned status %d for product %s", resp.StatusCode, job.HeadoutID)
+	}
 
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("headout returned status %d for product %s", resp.StatusCode, job.HeadoutID)
-		}
+	var pData map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &pData); err != nil {
+		return fmt.Errorf("parse response for %s: %w", job.HeadoutID, err)
+	}
 
-		var pData map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &pData); err != nil {
-			return fmt.Errorf("parse response for %s: %w", job.HeadoutID, err)
-		}
-
-		return s.syncProductAvailabilities(ctx, job, pData)
-	})
+	return s.syncProductAvailabilities(ctx, job, pData)
 }
 
 func (s *Service) processFullProduct(ctx context.Context, job Job) error {
@@ -329,10 +313,6 @@ func (s *Service) syncProductAvailabilities(ctx context.Context, job Job, pData 
 		variantTitle := ExtractString(variant, "title")
 		if variantTitle == "" {
 			variantTitle = ExtractString(variant, "name")
-		}
-
-		if err := s.rateLimiter.Wait(ctx); err != nil {
-			return err
 		}
 
 		availPath := fmt.Sprintf("/v2/products/%s/variants/%s/availabilities/", url.PathEscape(headoutID), url.PathEscape(variantID))

@@ -539,28 +539,8 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		return
 	}
 
-	if !h.isFetchFresh() {
-		var product models.Product
-		err := h.db.Where("headout_id = ?", productID).First(&product).Error
-		if err == nil {
-			if len(product.RawHeadoutData) > 0 && string(product.RawHeadoutData) != "{}" {
-				h.writeRawJSON(c, product.RawHeadoutData)
-				return
-			}
-			h.writeProductFromDB(c, &product)
-			return
-		}
-
-		if err != gorm.ErrRecordNotFound {
-			logger.Errorf("DB error fetching product %s: %v", productID, err)
-		}
-
-		h.syncProductToDB(c, productID)
-		return
-	}
-
-	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(productID))
-	h.proxyGet(c, path, true)
+	// Always fetch fresh from Headout and update local DB
+	h.syncProductToDB(c, productID)
 }
 
 func (h *HeadoutHandler) ListNormalAvailabilities(c *gin.Context) {
@@ -570,8 +550,18 @@ func (h *HeadoutHandler) ListNormalAvailabilities(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "productId and variantId are required"})
 		return
 	}
+
 	path := fmt.Sprintf("/v2/products/%s/variants/%s/availabilities/", url.PathEscape(productID), url.PathEscape(variantID))
-	h.proxyGet(c, path, true)
+	upstream, err := h.service.Get(c.Request.Context(), path, c.Request.URL.Query(), true)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+
+	// Sync availability records to DB in background
+	go h.syncAvailabilitiesToDB(productID, variantID, upstream.Body)
+
+	h.writeUpstreamResponse(c, upstream)
 }
 
 func (h *HeadoutHandler) ListNormalInventory(c *gin.Context) {
@@ -769,25 +759,28 @@ func (h *HeadoutHandler) saveProductToDB(headoutID string, pData map[string]inte
 
 	rawJSON, _ := json.Marshal(pData)
 
+	now := time.Now()
+
 	var existing models.Product
 	err := h.db.Where("headout_id = ?", headoutID).First(&existing).Error
 
 	if err == gorm.ErrRecordNotFound {
 		product := models.Product{
-			HeadoutID:      headoutID,
-			Title:          title,
-			Description:    description,
-			CityCode:       rawCityCode,
-			CityName:       cityName,
-			Category:       category,
-			ImageURL:       imageURL,
-			Currency:       currency,
-			PriceFrom:      priceFrom,
-			Rating:         rating,
-			ReviewCount:    reviewCount,
-			Duration:       duration,
-			RawHeadoutData: rawJSON,
-			LastSyncedAt:   time.Now(),
+			HeadoutID:        headoutID,
+			Title:            title,
+			Description:      description,
+			CityCode:         rawCityCode,
+			CityName:         cityName,
+			Category:         category,
+			ImageURL:         imageURL,
+			Currency:         currency,
+			PriceFrom:        priceFrom,
+			Rating:           rating,
+			ReviewCount:      reviewCount,
+			Duration:         duration,
+			RawHeadoutData:   rawJSON,
+			LastSyncedAt:     now,
+			MetadataSyncedAt: &now,
 		}
 		if createErr := h.db.Create(&product).Error; createErr != nil {
 			logger.Errorf("Failed to save product %s to DB: %v", headoutID, createErr)
@@ -805,7 +798,8 @@ func (h *HeadoutHandler) saveProductToDB(headoutID string, pData map[string]inte
 		existing.ReviewCount = reviewCount
 		existing.Duration = duration
 		existing.RawHeadoutData = rawJSON
-		existing.LastSyncedAt = time.Now()
+		existing.LastSyncedAt = now
+		existing.MetadataSyncedAt = &now
 		if saveErr := h.db.Save(&existing).Error; saveErr != nil {
 			logger.Errorf("Failed to update product %s in DB: %v", headoutID, saveErr)
 		}
@@ -912,4 +906,167 @@ func (h *HeadoutHandler) writeUpstreamResponse(c *gin.Context, upstream *service
 	}
 
 	c.Data(upstream.StatusCode, contentType, upstream.Body)
+}
+
+func (h *HeadoutHandler) syncAvailabilitiesToDB(productID, variantID string, body []byte) {
+	var product models.Product
+	if err := h.db.Where("headout_id = ?", productID).First(&product).Error; err != nil {
+		return
+	}
+
+	var variantTitle string
+	if vmap, ok := product.RawHeadoutData["variants"].([]interface{}); ok {
+		for _, v := range vmap {
+			if vm, ok := v.(map[string]interface{}); ok {
+				if vid, _ := vm["id"].(string); vid == variantID {
+					if t, ok := vm["title"].(string); ok {
+						variantTitle = t
+					} else if t, ok := vm["name"].(string); ok {
+						variantTitle = t
+					}
+					break
+				}
+			}
+		}
+	}
+
+	var resp struct {
+		Availabilities []map[string]interface{} `json:"availabilities"`
+		Slots          []map[string]interface{} `json:"slots"`
+		Items          []map[string]interface{} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return
+	}
+
+	slots := resp.Availabilities
+	if len(slots) == 0 {
+		slots = resp.Slots
+	}
+	if len(slots) == 0 {
+		slots = resp.Items
+	}
+
+	startDate := time.Now().UTC().Format("2006-01-02")
+	endDate := time.Now().UTC().AddDate(0, 0, 30).Format("2006-01-02")
+
+	for _, slotData := range slots {
+		slotDate := extractStringFromMap(slotData, "date")
+		if slotDate == "" {
+			startDT := extractStringFromMap(slotData, "startDateTime", "start_time")
+			if len(startDT) >= 10 {
+				slotDate = startDT[:10]
+			}
+		}
+		if slotDate == "" || slotDate < startDate || slotDate > endDate {
+			continue
+		}
+
+		startTime := extractStringFromMap(slotData, "startTime", "start_time")
+		if startTime == "" {
+			startDT := extractStringFromMap(slotData, "startDateTime")
+			if len(startDT) >= 16 {
+				startTime = startDT[11:16]
+			}
+		}
+		endTime := extractStringFromMap(slotData, "endTime", "end_time")
+		inventoryID := extractStringFromMap(slotData, "inventoryId", "inventory_id")
+		inventoryType := extractStringFromMap(slotData, "inventoryType", "inventory_type")
+
+		var priceAmount float64
+		if pricing, ok := slotData["pricing"].(map[string]interface{}); ok {
+			priceAmount = extractFloatFromMap(pricing, "amount", "price", "headoutSellingPrice", "netPrice")
+		}
+
+		slotCurrency := product.Currency
+		if pricing, ok := slotData["pricing"].(map[string]interface{}); ok {
+			if c := extractStringFromMap(pricing, "currency", "currencyCode"); c != "" {
+				slotCurrency = c
+			}
+		}
+
+		availableSlots := int(extractFloatFromMap(slotData, "availableSlots", "available_slots", "available", "remainingInventory", "remaining", "seatsAvailable"))
+		if availableSlots == 0 {
+			availStatus := extractStringFromMap(slotData, "availability", "status")
+			switch availStatus {
+			case "UNLIMITED":
+				availableSlots = 999
+			case "LIMITED":
+				availableSlots = 1
+			}
+		}
+
+		rawJSON, _ := json.Marshal(slotData)
+
+		var existing models.ProductAvailability
+		availErr := h.db.Where("product_id = ? AND variant_id = ? AND date = ? AND start_time = ?",
+			product.ID, variantID, slotDate, startTime).First(&existing).Error
+
+		if availErr == gorm.ErrRecordNotFound {
+			avail := models.ProductAvailability{
+				ProductID:        product.ID,
+				HeadoutProductID: product.HeadoutID,
+				VariantID:        variantID,
+				VariantTitle:     variantTitle,
+				Date:             slotDate,
+				StartTime:        startTime,
+				EndTime:          endTime,
+				InventoryID:      inventoryID,
+				InventoryType:    inventoryType,
+				PriceAmount:      priceAmount,
+				Currency:         slotCurrency,
+				AvailableSlots:   availableSlots,
+				RawHeadoutData:   rawJSON,
+			}
+			h.db.Create(&avail)
+		} else if availErr == nil {
+			existing.HeadoutProductID = product.HeadoutID
+			existing.VariantTitle = variantTitle
+			existing.EndTime = endTime
+			existing.InventoryID = inventoryID
+			existing.InventoryType = inventoryType
+			existing.PriceAmount = priceAmount
+			existing.Currency = slotCurrency
+			existing.AvailableSlots = availableSlots
+			existing.RawHeadoutData = rawJSON
+			h.db.Save(&existing)
+		}
+	}
+
+	now := time.Now()
+	h.db.Model(&models.Product{}).Where("id = ?", product.ID).Updates(map[string]interface{}{
+		"last_availability_sync_at": now,
+	})
+}
+
+func extractStringFromMap(data map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if v, ok := data[key]; ok {
+			switch val := v.(type) {
+			case string:
+				return val
+			case float64:
+				return strconv.FormatFloat(val, 'f', -1, 64)
+			}
+		}
+	}
+	return ""
+}
+
+func extractFloatFromMap(data map[string]interface{}, keys ...string) float64 {
+	for _, key := range keys {
+		if v, ok := data[key]; ok {
+			switch val := v.(type) {
+			case float64:
+				return val
+			case json.Number:
+				f, _ := val.Float64()
+				return f
+			case string:
+				f, _ := strconv.ParseFloat(val, 64)
+				return f
+			}
+		}
+	}
+	return 0
 }

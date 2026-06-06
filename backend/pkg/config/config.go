@@ -78,11 +78,11 @@ func Load() *Config {
 	cfg.HeadoutURL = resolveHeadoutURL(cfg)
 
 	// Sync worker pool config
-	cfg.SyncWorkerCount = getEnvInt("SYNC_WORKER_COUNT", 20)
-	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 10)
-	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 20)
-	cfg.SyncMaxRetries = getEnvInt("SYNC_MAX_RETRIES", 3)
-	cfg.SyncRetryBaseDelayMs = getEnvInt("SYNC_RETRY_BASE_DELAY_MS", 500)
+	cfg.SyncWorkerCount = getEnvInt("SYNC_WORKER_COUNT", 30)
+	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 0)
+	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 0)
+	cfg.SyncMaxRetries = getEnvInt("SYNC_MAX_RETRIES", 0)
+	cfg.SyncRetryBaseDelayMs = getEnvInt("SYNC_RETRY_BASE_DELAY_MS", 0)
 
 	return cfg
 }

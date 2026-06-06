@@ -433,7 +433,7 @@ func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *
 		}
 	}
 
-	// Availability sync cron job — every 5 hours
+	// Availability sync cron job — configurable via AVAILABILITY_SYNC_CRON_SCHEDULE env
 	// Uses the new concurrent worker-based sync service
 	availabilitySyncCronFn := func() {
 		ctx := context.Background()
@@ -445,11 +445,15 @@ func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *
 		}
 		logger.Infof("Scheduled availability sync started as job %s", jobID)
 	}
-	_, err := c.AddFunc("0 */5 * * *", availabilitySyncCronFn)
+	availabilityCronSchedule := os.Getenv("AVAILABILITY_SYNC_CRON_SCHEDULE")
+	if availabilityCronSchedule == "" {
+		availabilityCronSchedule = "0 * * * *" // Default: every hour
+	}
+	_, err := c.AddFunc(availabilityCronSchedule, availabilitySyncCronFn)
 	if err != nil {
 		logger.Warnf("Failed to schedule availability sync cron job: %v", err)
 	} else {
-		logger.Info("Availability sync cron job scheduled: every 5 hours")
+		logger.Infof("Availability sync cron job scheduled: %s", availabilityCronSchedule)
 	}
 
 	c.Start()

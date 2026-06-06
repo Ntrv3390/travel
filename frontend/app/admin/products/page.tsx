@@ -137,58 +137,103 @@ export default function AdminProductsPage() {
     }
   }, []);
 
+  const pollJobStatus = useCallback(async (jobId: string, interval = 2000): Promise<Record<string, unknown>> => {
+    while (true) {
+      const job = await api.get<Record<string, unknown>>(`/api/v1/admin/sync/jobs/${jobId}`);
+      if (job.status !== "running" && job.status !== "pending") return job;
+      await new Promise((r) => setTimeout(r, interval));
+    }
+  }, []);
+
   const handleSyncAllIndividual = useCallback(async () => {
     setSyncModal({ open: true, running: true, progress: null, error: null });
     try {
-      const { sync_id } = await api.post<{ sync_id: string }>("/api/v1/admin/products/sync-all-individual");
-      const res = await pollSyncStatus(sync_id);
-      setSyncModal({
-        open: true,
-        running: false,
-        progress: {
-          total: (res.product_added as number || 0) + (res.product_updated as number || 0) + (res.product_failed as number || 0) + (res.avail_added as number || 0) + (res.avail_updated as number || 0) + (res.avail_failed as number || 0),
-          added: (res.product_added as number || 0) + (res.avail_added as number || 0),
-          updated: (res.product_updated as number || 0) + (res.avail_updated as number || 0),
-          failed: (res.product_failed as number || 0) + (res.avail_failed as number || 0),
-          product_added: res.product_added,
-          product_updated: res.product_updated,
-          product_failed: res.product_failed,
-          avail_added: res.avail_added,
-          avail_updated: res.avail_updated,
-          avail_failed: res.avail_failed,
-        },
-        error: null,
-      });
+      const res = await api.post<{ sync_id?: string; job_id?: string; status?: string }>("/api/v1/admin/products/sync-all-individual");
+      let result: Record<string, unknown>;
+      if (res.job_id) {
+        result = await pollJobStatus(res.job_id);
+        setSyncModal({
+          open: true,
+          running: false,
+          progress: {
+            total: (result.total_products as number) || 0,
+            added: (result.successful_products as number) || 0,
+            updated: 0,
+            failed: (result.failed_products as number) || 0,
+            product_added: result.successful_products,
+            product_failed: result.failed_products,
+          },
+          error: result.status === "failed" ? (result.error_message as string) || "Sync failed" : null,
+        });
+      } else {
+        const syncId = res.sync_id;
+        if (!syncId) throw new Error("No sync identifier returned");
+        result = await pollSyncStatus(syncId);
+        setSyncModal({
+          open: true,
+          running: false,
+          progress: {
+            total: (result.product_added as number || 0) + (result.product_updated as number || 0) + (result.product_failed as number || 0) + (result.avail_added as number || 0) + (result.avail_updated as number || 0) + (result.avail_failed as number || 0),
+            added: (result.product_added as number || 0) + (result.avail_added as number || 0),
+            updated: (result.product_updated as number || 0) + (result.avail_updated as number || 0),
+            failed: (result.product_failed as number || 0) + (result.avail_failed as number || 0),
+            product_added: result.product_added,
+            product_updated: result.product_updated,
+            product_failed: result.product_failed,
+            avail_added: result.avail_added,
+            avail_updated: result.avail_updated,
+            avail_failed: result.avail_failed,
+          },
+          error: null,
+        });
+      }
       fetchProducts(page, search);
     } catch (err) {
       setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
     }
-  }, [page, search, fetchProducts, pollSyncStatus]);
+  }, [page, search, fetchProducts, pollSyncStatus, pollJobStatus]);
 
   const handleSyncAllAvailability = useCallback(async () => {
     setSyncModal({ open: true, running: true, progress: null, error: null });
     try {
-      const { sync_id } = await api.post<{ sync_id: string }>("/api/v1/admin/products/sync-availability-all");
-      const res = await pollSyncStatus(sync_id);
-      setSyncModal({
-        open: true,
-        running: false,
-        progress: {
-          total: (res.total_products as number) || 0,
-          added: (res.availabilities_added as number) || 0,
-          updated: 0,
-          failed: (res.failed as number) || 0,
-          available: res.available,
-          unavailable: res.unavailable,
-        },
-        error: null,
-      });
+      const res = await api.post<{ sync_id?: string; job_id?: string; status?: string }>("/api/v1/admin/products/sync-availability-all");
+      if (res.job_id) {
+        const result = await pollJobStatus(res.job_id);
+        setSyncModal({
+          open: true,
+          running: false,
+          progress: {
+            total: (result.total_products as number) || 0,
+            added: (result.successful_products as number) || 0,
+            updated: 0,
+            failed: (result.failed_products as number) || 0,
+          },
+          error: result.status === "failed" ? (result.error_message as string) || "Availability sync failed" : null,
+        });
+      } else {
+        const syncId = res.sync_id;
+        if (!syncId) throw new Error("No sync identifier returned");
+        const result = await pollSyncStatus(syncId);
+        setSyncModal({
+          open: true,
+          running: false,
+          progress: {
+            total: (result.total_products as number) || 0,
+            added: (result.availabilities_added as number) || 0,
+            updated: 0,
+            failed: (result.failed as number) || 0,
+            available: result.available,
+            unavailable: result.unavailable,
+          },
+          error: null,
+        });
+      }
       fetchProducts(page, search);
       fetchAvailabilityInsights();
     } catch (err) {
       setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Availability sync failed" });
     }
-  }, [page, search, fetchProducts, fetchAvailabilityInsights, pollSyncStatus]);
+  }, [page, search, fetchProducts, fetchAvailabilityInsights, pollSyncStatus, pollJobStatus]);
 
   const handleSyncSingle = useCallback(async (headoutId: string) => {
     setSyncModal({ open: true, running: true, progress: null, error: null });
