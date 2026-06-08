@@ -9,10 +9,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface StickyBookingCardProps {
   price: number | undefined;
-  symbol: string;
   productName: string;
   hasFreeCancellation?: boolean;
   hasInstantConfirmation?: boolean;
@@ -32,7 +32,6 @@ function formatDuration(ms: number | null): string {
 
 export function StickyBookingCard({
   price,
-  symbol,
   productName,
   hasFreeCancellation,
   hasInstantConfirmation,
@@ -40,6 +39,7 @@ export function StickyBookingCard({
   duration,
   onCheckAvailability,
 }: StickyBookingCardProps) {
+  const { formatPrice } = useCurrency();
   return (
     <div className="sticky top-24">
       <div className="glass-strong overflow-hidden rounded-2xl shadow-glass-lg">
@@ -58,8 +58,7 @@ export function StickyBookingCard({
               </p>
               <div className="mt-1 flex items-baseline gap-1.5">
                 <span className="text-3xl font-bold tracking-tight">
-                  {symbol}
-                  {price.toFixed(2)}
+                  {formatPrice(price)}
                 </span>
                 <span className="text-sm text-muted-foreground">
                   /person

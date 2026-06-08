@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -19,12 +19,15 @@ export function ProductDetailClient() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchIdRef = useRef(0);
 
   const fetchProduct = useCallback(async () => {
     if (!id) return;
+    const fetchId = ++fetchIdRef.current;
     setLoading(true);
     setError(null);
     const result = await getProductById(id, { currencyCode: currency });
+    if (fetchId !== fetchIdRef.current) return;
     if (result.error) {
       setError(result.error);
     } else if (result.data) {
@@ -37,7 +40,7 @@ export function ProductDetailClient() {
 
   useEffect(() => {
     fetchProduct();
-  }, [fetchProduct]);
+  }, [id, currency]);
 
   if (loading) {
     return (

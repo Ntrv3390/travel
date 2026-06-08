@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/types/product";
+import { useCurrency } from "@/hooks/useCurrency";
 import { ReviewsSection } from "./ReviewsSection";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -255,7 +256,7 @@ export function ProductHero({ product }: ProductHeroProps) {
   const images = product.media?.filter((m) => m.type === "IMAGE") ?? [];
   const typeStyle = productTypeColors[product.productType] ?? { bg: "bg-slate-700", text: "text-white" };
 
-  const symbol = product.currency?.localSymbol ?? "$";
+  const { formatPrice } = useCurrency();
   const discount = product.listingPrice?.bestDiscount ?? 0;
   const originalPrice = product.listingPrice?.minimumPrice?.originalPrice;
   const finalPrice =
@@ -456,11 +457,11 @@ export function ProductHero({ product }: ProductHeroProps) {
                   </p>
                   <div className="mt-0.5 flex items-baseline gap-2">
                     <span className="text-2xl font-bold tracking-tight">
-                      {symbol}{finalPrice.toFixed(2)}
+                      {formatPrice(finalPrice)}
                     </span>
                     {discount > 0 && originalPrice && (
                       <span className="text-sm text-muted-foreground line-through">
-                        {symbol}{originalPrice.toFixed(2)}
+                        {formatPrice(originalPrice)}
                       </span>
                     )}
                   </div>
@@ -621,11 +622,11 @@ export function ProductHero({ product }: ProductHeroProps) {
                     <div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-[1.75rem] font-bold tracking-tight leading-none">
-                          {symbol}{finalPrice.toFixed(2)}
+                          {formatPrice(finalPrice)}
                         </span>
                         {discount > 0 && originalPrice && (
                           <span className="text-sm text-muted-foreground line-through">
-                            {symbol}{originalPrice.toFixed(2)}
+                            {formatPrice(originalPrice)}
                           </span>
                         )}
                       </div>

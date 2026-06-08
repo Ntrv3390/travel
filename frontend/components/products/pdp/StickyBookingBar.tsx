@@ -2,18 +2,24 @@
 
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface StickyBookingBarProps {
   price: number | undefined;
-  symbol: string;
   onCheckAvailability: () => void;
 }
 
 export function StickyBookingBar({
   price,
-  symbol,
   onCheckAvailability,
 }: StickyBookingBarProps) {
+  const { supportedCurrencies, currency } = useCurrency();
+  const symbol = supportedCurrencies.find(c => c.code === currency)?.symbol
+    ?? (() => {
+      try {
+        return (0).toLocaleString("en-US", { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).replace(/[\d.,\s]/g, "").trim();
+      } catch { return currency; }
+    })();
   return (
     <div
       className={cn(

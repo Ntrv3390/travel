@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useCurrency } from "@/hooks/useCurrency";
 import type { ProductVariant } from "@/types/product";
 
 function formatDuration(ms: number | null): string {
@@ -47,7 +48,6 @@ interface PackageCardsProps {
   selectedVariantId: string | number | null;
   onSelectVariant: (id: string | number) => void;
   inCartVariantId?: string | number | null;
-  symbol?: string;
 }
 
 export function PackageCards({
@@ -55,8 +55,8 @@ export function PackageCards({
   selectedVariantId,
   onSelectVariant,
   inCartVariantId,
-  symbol = "$",
 }: PackageCardsProps) {
+  const { formatPrice } = useCurrency();
   if (!variants || variants.length === 0) return null;
 
   return (
@@ -207,15 +207,13 @@ export function PackageCards({
                         )}
 
                         <div className="text-2xl font-bold tracking-tight sm:text-3xl">
-                          {symbol}
-                          {netPrice.toFixed(2)}
+                          {formatPrice(netPrice)}
                         </div>
 
                         {displayPrice !== undefined &&
                           displayPrice > netPrice && (
                             <div className="text-xs text-muted-foreground line-through">
-                              {symbol}
-                              {displayPrice.toFixed(2)}
+                              {formatPrice(displayPrice)}
                             </div>
                           )}
 

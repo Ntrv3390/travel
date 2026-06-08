@@ -38,7 +38,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
     string | number | null
   >(cartItem?.variantId ?? product.variants?.[0]?.id ?? null);
 
-  const symbol = product.currency?.localSymbol ?? "$";
   const finalPrice =
     product.listingPrice?.minimumPrice?.finalPrice ??
     product.pricing.headoutSellingPrice;
@@ -133,7 +132,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 selectedVariantId={selectedVariantId}
                 onSelectVariant={handleSelectVariant}
                 inCartVariantId={cartItem?.variantId}
-                symbol={symbol}
               />
             </motion.div>
 
@@ -220,7 +218,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
           <div className="hidden min-w-0 lg:block">
             <StickyBookingCard
               price={finalPrice}
-              symbol={symbol}
               productName={product.name}
               hasFreeCancellation={product.cancellationPolicy?.cancellable}
               hasInstantConfirmation={product.hasInstantConfirmation}
@@ -235,7 +232,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
       {/* Mobile sticky bottom CTA */}
       <StickyBookingBar
         price={finalPrice}
-        symbol={symbol}
         onCheckAvailability={scrollToAvailability}
       />
     </div>
