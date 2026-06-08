@@ -86,6 +86,31 @@ const config: Config = {
       boxShadow: {
         "card-hover": "0 8px 30px -4px rgba(0,0,0,0.12), 0 4px 8px -2px rgba(0,0,0,0.08)",
         "pricing-box": "0 4px 24px -2px rgba(0,0,0,0.15), 0 2px 8px -2px rgba(0,0,0,0.1)",
+        "glass": "0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)",
+        "glass-lg": "0 16px 48px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06)",
+        "sticky": "0 -4px 24px rgba(0,0,0,0.08)",
+        "package": "0 2px 12px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
+        "package-hover": "0 8px 28px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
+        "package-selected": "0 0 0 2px hsl(var(--primary)), 0 8px 28px rgba(14,165,233,0.15)",
+      },
+      keyframes: {
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(12px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-in": {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "slide-in-bottom": {
+          "0%": { transform: "translateY(100%)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+      },
+      animation: {
+        "fade-in-up": "fade-in-up 0.5s ease-out both",
+        "scale-in": "scale-in 0.4s ease-out both",
+        "slide-in-bottom": "slide-in-bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },

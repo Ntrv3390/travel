@@ -1,187 +1,20 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { motion } from "framer-motion";
 import { ProductDetailProvider } from "@/context/ProductDetailContext";
 import { useCartContext } from "@/context/CartContext";
-import { AvailabilityCalendar } from "@/components/products/AvailabilityCalendar";
-import {
-  Star,
-  MapPin,
-  Clock,
-  Users,
-  XCircle,
-  RefreshCw,
-  Zap,
-  ClipboardCheck,
-  Tag,
-  ShoppingCart,
-  ChevronDown,
-  ChevronUp,
-  Ticket,
-  DollarSign,
-  Calendar,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import type { Product, ProductVariant } from "@/types/product";
-
-const productTypeColors: Record<string, string> = {
-  ATTRACTION: "bg-purple-100 text-purple-700 border-purple-200",
-  TOUR: "bg-blue-100 text-blue-700 border-blue-200",
-  ACTIVITY: "bg-green-100 text-green-700 border-green-200",
-  EVENT: "bg-amber-100 text-amber-700 border-amber-200",
-  TRANSFER: "bg-slate-100 text-slate-700 border-slate-200",
-  AIRPORT_TRANSFER: "bg-slate-100 text-slate-700 border-slate-200",
-  ADD_ON: "bg-pink-100 text-pink-700 border-pink-200",
-};
-
-function formatDuration(ms: number | null): string {
-  if (!ms) return "Flexible";
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h`;
-  return `${minutes}m`;
-}
-
-function Section({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="rounded-lg border">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold hover:bg-muted/50 sm:px-5 sm:py-3.5"
-      >
-        {title}
-        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-      {open && <div className="border-t px-4 pb-4 pt-3 sm:px-5">{children}</div>}
-    </div>
-  );
-}
-
-function VariantCard({ variant, inCart }: { variant: ProductVariant; inCart?: boolean }) {
-  const pricing = (variant as { pricing?: { headoutSellingPrice?: number; netPrice?: number; currency?: string } }).pricing;
-  const vp = (variant as { startingHeadoutSellingPrice?: { amount?: number; currencyCode?: string } }).startingHeadoutSellingPrice;
-  const displayPrice = pricing?.headoutSellingPrice ?? vp?.amount;
-  const currencySymbol = pricing?.currency ?? vp?.currencyCode ?? "$";
-
-  return (
-    <Card className="overflow-hidden transition-all hover:shadow-md">
-      <CardContent className="p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm font-semibold">{variant.name ?? "Default"}</h4>
-              {inCart && (
-                <Badge className="border-brand-200 bg-brand-50 text-[10px] text-brand-700 shrink-0">
-                  <ShoppingCart className="mr-0.5 h-2.5 w-2.5" />
-                  In Cart
-                </Badge>
-              )}
-              <Badge className="shrink-0 border-slate-200 bg-slate-50 text-[10px] text-slate-600">
-                {variant.inventoryType
-                  ?.replace(/_/g, " ")
-                  .replace(/\b\w/g, (c) => c.toUpperCase())}
-              </Badge>
-            </div>
-            {variant.description && (
-              <p className="mt-1 text-xs text-muted-foreground">{variant.description}</p>
-            )}
-          </div>
-          {pricing?.netPrice !== undefined && (
-            <div className="shrink-0 text-left sm:text-right">
-              <p className="text-lg font-bold">
-                {typeof currencySymbol === "string" && currencySymbol.length <= 3
-                  ? `${currencySymbol}${pricing.netPrice.toFixed(2)}`
-                  : `${currencySymbol} ${pricing.netPrice.toFixed(2)}`}
-              </p>
-
-              {displayPrice !== undefined && displayPrice > pricing.netPrice && (
-                <p className="text-xs text-muted-foreground line-through">
-                  {typeof currencySymbol === "string" && currencySymbol.length <= 3
-                    ? `${currencySymbol}${displayPrice.toFixed(2)}`
-                    : `${currencySymbol} ${displayPrice.toFixed(2)}`}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {variant.duration !== null && (
-            <Badge className="border-orange-200 bg-orange-50 text-[10px] text-orange-700">
-              <Clock className="mr-0.5 h-2.5 w-2.5" />
-              {formatDuration(variant.duration)}
-            </Badge>
-          )}
-          <Badge className="border-slate-200 bg-slate-50 text-[10px] text-slate-600">
-            <Users className="mr-0.5 h-2.5 w-2.5" />
-            {variant.pax.min}–{variant.pax.max ?? "∞"} pax
-          </Badge>
-          {variant.cashback && variant.cashback.value > 0 && (
-            <Badge className="border-green-200 bg-green-50 text-[10px] text-green-700">
-              <DollarSign className="mr-0.5 h-2.5 w-2.5" />
-              {variant.cashback.value}{variant.cashback.type === "PERCENTAGE" ? "%" : "$"} cashback
-            </Badge>
-          )}
-          {variant.cancellationPolicy?.cancellable && (
-            <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">
-              <XCircle className="mr-0.5 h-2.5 w-2.5" />
-              Free Cancel
-            </Badge>
-          )}
-        </div>
-
-        {variant.inputFields && variant.inputFields.length > 0 && (
-          <div className="mt-3 border-t pt-3">
-            <p className="mb-1 text-[10px] font-medium text-muted-foreground">Required info:</p>
-            <div className="flex flex-wrap gap-1">
-              {variant.inputFields.map((f, i) => (
-                <Badge key={i} className="border-gray-200 bg-gray-50 text-[10px] text-gray-600">
-                  {f.name}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function OperatingScheduleTable({ schedules }: { schedules: Array<{ dayOfWeek: string; openingTime: string | null; closingTime: string | null; lastEntryTime: string | null; closed: boolean }> }) {
-  const dayOrder: Record<string, number> = {
-    MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6, SUNDAY: 7,
-  };
-  const sorted = [...schedules].sort((a, b) => (dayOrder[a.dayOfWeek] ?? 99) - (dayOrder[b.dayOfWeek] ?? 99));
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b text-muted-foreground">
-            <th className="py-1.5 pr-2 text-left font-medium">Day</th>
-            <th className="py-1.5 px-2 text-left font-medium">Open</th>
-            <th className="py-1.5 px-2 text-left font-medium">Close</th>
-            <th className="py-1.5 pl-2 text-left font-medium">Last Entry</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s, i) => (
-            <tr key={i} className={cn("border-b last:border-0", s.closed && "text-muted-foreground")}>
-              <td className="py-1.5 pr-2 font-medium">{s.dayOfWeek.charAt(0) + s.dayOfWeek.slice(1).toLowerCase()}</td>
-              <td className="py-1.5 px-2">{s.closed ? "—" : s.openingTime ?? "—"}</td>
-              <td className="py-1.5 px-2">{s.closed ? "—" : s.closingTime ?? "—"}</td>
-              <td className="py-1.5 pl-2">{s.closed ? "Closed" : s.lastEntryTime ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+import { ProductHero } from "./pdp/ProductHero";
+import { PackageCards } from "./pdp/PackageCards";
+import { AvailabilitySection } from "./pdp/AvailabilitySection";
+import { HighlightsSection } from "./pdp/HighlightsSection";
+import { AboutSection } from "./pdp/AboutSection";
+import { FaqSection } from "./pdp/FaqSection";
+import { MeetingPointSection } from "./pdp/MeetingPointSection";
+import { PoliciesSection } from "./pdp/PoliciesSection";
+import { StickyBookingBar } from "./pdp/StickyBookingBar";
+import { StickyBookingCard } from "./pdp/StickyBookingCard";
+import type { Product } from "@/types/product";
 
 interface ProductDetailProps {
   product: Product;
@@ -189,348 +22,222 @@ interface ProductDetailProps {
 
 export function ProductDetail({ product }: ProductDetailProps) {
   const { cart } = useCartContext();
-  const [selectedImage, setSelectedImage] = useState(0);
+  const availabilityRef = useRef<HTMLDivElement>(null);
 
   const cartItem = useMemo(() => {
     if (!cart?.items) return null;
     const pid = String(product.id);
-    return cart.items.find((i) => i.experienceId === pid || i.productId === pid) ?? null;
+    return (
+      cart.items.find(
+        (i) => i.experienceId === pid || i.productId === pid
+      ) ?? null
+    );
   }, [cart, product.id]);
 
-  const [selectedVariantId, setSelectedVariantId] = useState<string | number | null>(
-    cartItem?.variantId ?? product.variants?.[0]?.id ?? null
+  const [selectedVariantId, setSelectedVariantId] = useState<
+    string | number | null
+  >(cartItem?.variantId ?? product.variants?.[0]?.id ?? null);
+
+  const symbol = product.currency?.localSymbol ?? "$";
+  const finalPrice =
+    product.listingPrice?.minimumPrice?.finalPrice ??
+    product.pricing.headoutSellingPrice;
+
+  const address = (
+    product as {
+      address?:
+      | {
+        address?: string;
+        city?: string;
+        postalCode?: string;
+        country?: string;
+      }
+      | null;
+    }
+  ).address;
+
+  const cutoffTime = (
+    product as { cutoffTimeInMinutes?: number | null }
+  ).cutoffTimeInMinutes;
+
+  const scrollToAvailability = useCallback(() => {
+    setTimeout(() => {
+      const el = document.getElementById("packages");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+  }, []);
+
+  const handleSelectVariant = useCallback(
+    (id: string | number) => {
+      setSelectedVariantId(id);
+      scrollToAvailability();
+    },
+    [scrollToAvailability]
   );
 
-  const images = product.media?.filter((m) => m.type === "IMAGE") ?? [];
-  const typeColor = productTypeColors[product.productType] ?? "bg-gray-100 text-gray-700 border-gray-200";
-  const symbol = product.currency?.localSymbol ?? "$";
-  const discount = product.listingPrice?.bestDiscount ?? 0;
-  const originalPrice = product.listingPrice?.minimumPrice?.originalPrice;
-  const finalPrice = product.listingPrice?.minimumPrice?.finalPrice ?? product.pricing.headoutSellingPrice;
-  const hasPricing = finalPrice !== undefined;
-  const poi = (product as { pois?: Array<{ name: string; operatingSchedules?: Array<{ startDate: string; endDate: string; scheduleName: string; operatingDaySchedules: Array<{ dayOfWeek: string; openingTime: string | null; closingTime: string | null; lastEntryTime: string | null; closed: boolean }> }>; holidays?: string[]; freeEntryDays?: string[] }> }).pois;
-  const address = (product as { address?: { address?: string; city?: string; postalCode?: string; country?: string } | null }).address;
-  const cutoffTime = (product as { cutoffTimeInMinutes?: number | null }).cutoffTimeInMinutes;
+  const selectedVariant = product.variants?.find(
+    (v) => v.id === selectedVariantId
+  );
+
+  // Derive pax from the selected variant (falls back to first variant)
+  const pax = selectedVariant?.pax ?? product.variants?.[0]?.pax ?? null;
+
+  const imageUrl =
+    product.media?.find((m) => m.type === "IMAGE")?.url?.replace(/^\/\//, "https://") ?? "";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 sm:space-y-10">
-
-      {/* ── 1. Hero Section ── */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Image Gallery */}
-        <div>
-          <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
-            {images.length > 0 ? (
-              <img
-                src={images[selectedImage]?.url?.startsWith("//") ? `https:${images[selectedImage].url}` : images[selectedImage]?.url}
-                alt={product.name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-slate-300">
-                <Ticket className="h-16 w-16" />
-              </div>
-            )}
-            <Badge className={`absolute right-3 top-3 border text-xs font-medium shadow-sm ${typeColor}`}>
-              {product.productType === "AIRPORT_TRANSFER"
-                ? "Airport Transfer"
-                : product.productType.charAt(0) + product.productType.slice(1).toLowerCase()}
-            </Badge>
-          </div>
-          {images.length > 1 && (
-            <div className="mt-2 flex flex-wrap gap-2 sm:flex-nowrap sm:overflow-x-auto sm:scrollbar-hide">
-              {images.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedImage(i)}
-                  className={cn(
-                    "h-14 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:h-16 sm:w-20",
-                    i === selectedImage ? "border-brand-600 ring-1 ring-brand-600" : "border-transparent opacity-70 hover:opacity-100",
-                  )}
-                >
-                  <img
-                    src={img.url?.startsWith("//") ? `https:${img.url}` : img.url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Title & Meta */}
-        <div className="flex flex-col justify-center space-y-3 sm:space-y-4">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-3xl">{product.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <MapPin className="h-3.5 w-3.5" />
-                {product.city?.name}
-              </span>
-              {product.reviewsSummary && (
-                <span className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                  {product.reviewsSummary.averageRating.toFixed(1)}
-                  <span className="text-xs">({product.reviewsSummary.ratingsCount?.toLocaleString()})</span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Quick info badges */}
-          <div className="flex flex-wrap gap-1.5">
-            {product.cancellationPolicy?.cancellable && (
-              <Badge className="border-emerald-200 bg-emerald-50 text-xs text-emerald-700">
-                <XCircle className="mr-1 h-3 w-3" />
-                Free Cancellation
-              </Badge>
-            )}
-            {product.reschedulePolicy?.reschedulable && (
-              <Badge className="border-blue-200 bg-blue-50 text-xs text-blue-700">
-                <RefreshCw className="mr-1 h-3 w-3" />
-                Reschedulable
-              </Badge>
-            )}
-            {product.hasInstantConfirmation && (
-              <Badge className="border-cyan-200 bg-cyan-50 text-xs text-cyan-700">
-                <Zap className="mr-1 h-3 w-3" />
-                Instant Confirmation
-              </Badge>
-            )}
-            {product.hasMobileTicket && (
-              <Badge className="border-indigo-200 bg-indigo-50 text-xs text-indigo-700">
-                <ClipboardCheck className="mr-1 h-3 w-3" />
-                Mobile Ticket
-              </Badge>
-            )}
-          </div>
-
-          {/* Categories */}
-          <div className="flex flex-wrap gap-2 text-xs">
-            {product.primaryCategory && (
-              <Badge className="border-slate-200 bg-slate-50 text-slate-600">
-                <Tag className="mr-0.5 h-3 w-3" />
-                {product.primaryCategory.name}
-              </Badge>
-            )}
-            {product.primarySubCategory && (
-              <Badge className="border-slate-200 bg-slate-50 text-slate-600">{product.primarySubCategory.name}</Badge>
-            )}
-            {product.primaryCollection && (
-              <Badge className="border-slate-200 bg-slate-50 text-slate-600">{product.primaryCollection.name}</Badge>
-            )}
-          </div>
-
-          {cutoffTime != null && (
-            <p className="text-xs text-muted-foreground">
-              <Calendar className="mr-1 inline h-3 w-3" />
-              Book at least {cutoffTime} minutes before your visit
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── 2. Pricing Panel ── */}
-      {hasPricing && (
-        <div className="rounded-xl border bg-gradient-to-r from-brand-50 to-white p-4 shadow-sm sm:p-6">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Starting from</p>
-          <div className="mt-1 flex flex-wrap items-baseline gap-2 sm:gap-3">
-            <span className="text-3xl font-bold tracking-tight sm:text-4xl">{symbol}{finalPrice.toFixed(2)}</span>
-            {discount > 0 && originalPrice && (
-              <>
-                <span className="text-base text-muted-foreground line-through sm:text-xl">{symbol}{originalPrice.toFixed(2)}</span>
-                <Badge className="bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{discount}% OFF</Badge>
-              </>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            per person &middot; {product.pricing.profileType === "PER_GROUP" ? "per group" : "per person"} pricing
-          </p>
-        </div>
-      )}
-
-      {/* ── 3. Content Sections ── */}
-      <div className="space-y-3">
-        {product.content?.highlights && (
-          <Section title="Highlights">
-            <div
-              className="text-sm leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mt-1"
-              dangerouslySetInnerHTML={{ __html: product.content.highlightsHtml ?? product.content.highlights }}
-            />
-          </Section>
-        )}
-        {product.content?.shortSummary && (
-          <Section title="About">
-            <div
-              className="text-sm leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: product.content.summaryHtml ?? product.content.shortSummary }}
-            />
-          </Section>
-        )}
-        {product.content?.inclusions && (
-          <Section title="What's Included">
-            <div
-              className="text-sm leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mt-1"
-              dangerouslySetInnerHTML={{ __html: product.content.inclusionsHtml ?? product.content.inclusions }}
-            />
-          </Section>
-        )}
-        {product.content?.exclusions && (
-          <Section title="What's Not Included">
-            <div
-              className="text-sm leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mt-1"
-              dangerouslySetInnerHTML={{ __html: product.content.exclusionsHtml ?? product.content.exclusions }}
-            />
-          </Section>
-        )}
-        {product.content?.faqHtml && (
-          <Section title="FAQ" defaultOpen={false}>
-            <div
-              className="text-sm leading-relaxed [&_h3]:mt-3 [&_h3]:font-semibold [&_h3:first-child]:mt-0"
-              dangerouslySetInnerHTML={{ __html: product.content.faqHtml }}
-            />
-          </Section>
-        )}
-      </div>
-
-      {/* ── 4. Location ── */}
-      {(address || product.startLocation || product.endLocation) && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-bold">Location</h2>
-          {address && (
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <p className="text-sm">
-                {[address.address, address.city, address.postalCode, address.country].filter(Boolean).join(", ")}
-              </p>
-            </div>
-          )}
-          {(product.startLocation || product.endLocation) && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {product.startLocation && (
-                <div className="rounded-lg border bg-muted/20 p-4">
-                  <p className="mb-1 text-xs font-semibold text-muted-foreground">Meeting Point</p>
-                  <p className="text-sm">
-                    {[product.startLocation.address, product.startLocation.city, product.startLocation.country].filter(Boolean).join(", ")}
-                  </p>
-                </div>
-              )}
-              {product.endLocation && product.endLocation.address && (
-                <div className="rounded-lg border bg-muted/20 p-4">
-                  <p className="mb-1 text-xs font-semibold text-muted-foreground">End Point</p>
-                  <p className="text-sm">
-                    {[product.endLocation.address, product.endLocation.city, product.endLocation.country].filter(Boolean).join(", ")}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── 5. Variants ── */}
-      {(product.variants?.length ?? 0) > 0 && (
-        <div>
-          <h2 className="mb-3 text-lg font-bold sm:mb-4">
-            Available Options
-            <span className="ml-2 text-sm font-normal text-muted-foreground">({product.variants?.length})</span>
-          </h2>
-          <div className="space-y-3">
-            {product.variants?.map((variant) => (
-              <div
-                key={String(variant.id)}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedVariantId(variant.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedVariantId(variant.id) }}
-                className={`cursor-pointer rounded-lg transition-all ${selectedVariantId === variant.id ? "ring-2 ring-brand-500" : "hover:ring-1 hover:ring-brand-300"
-                  }`}
-              >
-                <VariantCard variant={variant} inCart={!!cartItem && String(cartItem.variantId) === String(variant.id)} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── 6. Availability + Slots (Normal inventory only) ── */}
-      {product.inventorySelectionType === "NORMAL" && selectedVariantId != null && product.id && (
-        <ProductDetailProvider
-          productId={String(product.id)}
-          productName={product.name}
-          variantId={selectedVariantId!}
-          variantName={product.variants?.find(v => v.id === selectedVariantId)?.name ?? ""}
-          imageUrl={
-            product.media?.find((m) => m.type === "IMAGE")?.url
-              ?.replace(/^\/\//, "https://") ?? ""
-          }
-          cartItemId={cartItem?.id ?? null}
-          initialDate={cartItem?.date ?? null}
-          initialGuests={cartItem?.guestCounts ?? null}
+    <div className="relative">
+      <div className="space-y-3 sm:space-y-4 lg:space-y-6 pb-[72px] lg:pb-0">
+        {/* Hero */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4 }}
         >
-          <AvailabilityCalendar />
-        </ProductDetailProvider>
-      )}
+          <ProductHero product={product} />
+        </motion.div>
 
-      {/* ── 7. POI Schedules ── */}
-      {poi && poi.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-lg font-bold sm:mb-4">
-            Points of Interest
-            <span className="ml-2 text-sm font-normal text-muted-foreground">({poi.length})</span>
-          </h2>
-          <div className="space-y-4">
-            {poi.map((point, idx) => (
-              <Card key={idx}>
-                <CardContent className="p-4">
-                  <h3 className="mb-2 text-sm font-semibold">{point.name}</h3>
-                  {point.operatingSchedules?.map((schedule, si) => (
-                    <div key={si} className="mb-3 last:mb-0">
-                      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium">{schedule.scheduleName}</span>
-                        <span>({schedule.startDate} – {schedule.endDate})</span>
-                      </div>
-                      <OperatingScheduleTable schedules={schedule.operatingDaySchedules} />
-                    </div>
-                  ))}
-                  {point.holidays && point.holidays.length > 0 && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Closed on: {point.holidays.join(", ")}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+        {/* Desktop two-column layout for packages + booking */}
+        <div className="lg:grid lg:grid-cols-[1fr,380px] lg:gap-8">
+          <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+            {/* Highlights */}
+            {(product.content?.highlights ||
+              product.content?.inclusions ||
+              product.content?.exclusions) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1, duration: 0.35 }}
+                >
+                  <HighlightsSection
+                    highlightsHtml={product.content.highlightsHtml}
+                    highlights={product.content.highlights}
+                    inclusionsHtml={product.content.inclusionsHtml}
+                    inclusions={product.content.inclusions}
+                    exclusionsHtml={product.content.exclusionsHtml}
+                    exclusions={product.content.exclusions}
+                  />
+                </motion.div>
+              )}
+
+            {/* Packages */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.35 }}
+            >
+              <PackageCards
+                variants={product.variants ?? []}
+                selectedVariantId={selectedVariantId}
+                onSelectVariant={handleSelectVariant}
+                inCartVariantId={cartItem?.variantId}
+                symbol={symbol}
+              />
+            </motion.div>
+
+            {/* Full Availability Calendar */}
+            {product.inventorySelectionType === "NORMAL" &&
+              selectedVariantId != null &&
+              product.id && (
+                <div ref={availabilityRef}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.35 }}
+                  >
+                    <ProductDetailProvider
+                      productId={String(product.id)}
+                      productName={product.name}
+                      variantId={selectedVariantId}
+                      variantName={selectedVariant?.name ?? ""}
+                      imageUrl={imageUrl}
+                      cartItemId={cartItem?.id ?? null}
+                      initialDate={cartItem?.date ?? null}
+                      initialGuests={cartItem?.guestCounts ?? null}
+                      pax={pax}
+                    >
+                      <AvailabilitySection />
+                    </ProductDetailProvider>
+                  </motion.div>
+                </div>
+              )}
+
+            {/* About */}
+            {product.content?.shortSummary && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.35 }}
+              >
+                <AboutSection
+                  shortSummary={product.content.shortSummary}
+                  summaryHtml={product.content.summaryHtml}
+                />
+              </motion.div>
+            )}
+
+            {/* FAQ */}
+            {product.content?.faqHtml && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35, duration: 0.35 }}
+              >
+                <FaqSection faqHtml={product.content.faqHtml} />
+              </motion.div>
+            )}
+
+            {/* Meeting Point */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.35 }}
+            >
+              <MeetingPointSection
+                address={product.startLocation}
+                endLocation={product.endLocation}
+                mainAddress={address}
+              />
+            </motion.div>
+
+            {/* Policies */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.45, duration: 0.35 }}
+            >
+              <PoliciesSection
+                cancellationPolicy={product.cancellationPolicy}
+                reschedulePolicy={product.reschedulePolicy}
+                cutoffTimeInMinutes={cutoffTime}
+              />
+            </motion.div>
           </div>
-        </div>
-      )}
 
-      {/* ── 8. Policies ── */}
-      <Separator />
-      <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
-        <div>
-          <h3 className="text-sm font-semibold">Cancellation Policy</h3>
-          {product.cancellationPolicy?.cancellable ? (
-            <p className="mt-1 text-sm text-green-600">
-              Free cancellation up to {product.cancellationPolicy.cancellableUpToInMinutes} minutes before the experience.
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-muted-foreground">This experience is non-cancellable.</p>
-          )}
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold">Reschedule Policy</h3>
-          {product.reschedulePolicy?.reschedulable ? (
-            <p className="mt-1 text-sm text-blue-600">
-              Free reschedule up to {product.reschedulePolicy.reschedulableUpToInMinutes} minutes before the experience.
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-muted-foreground">This experience is non-reschedulable.</p>
-          )}
+          {/* Desktop sticky booking card */}
+          <div className="hidden min-w-0 lg:block">
+            <StickyBookingCard
+              price={finalPrice}
+              symbol={symbol}
+              productName={product.name}
+              hasFreeCancellation={product.cancellationPolicy?.cancellable}
+              hasInstantConfirmation={product.hasInstantConfirmation}
+              hasMobileTicket={product.hasMobileTicket}
+              duration={product.variants?.[0]?.duration}
+              onCheckAvailability={scrollToAvailability}
+            />
+          </div>
         </div>
       </div>
 
+      {/* Mobile sticky bottom CTA */}
+      <StickyBookingBar
+        price={finalPrice}
+        symbol={symbol}
+        onCheckAvailability={scrollToAvailability}
+      />
     </div>
   );
 }

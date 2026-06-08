@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ProductDetailClient } from "./ProductDetailClient";
 import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
+import { MaxWidthWrapper } from "@/components/ui/MaxWidthWrapper";
 
 type Props = { params: { slug: string } };
 
@@ -29,11 +30,12 @@ export default function ProductDetailPage({ params }: Props) {
   const title = params.slug.replace(/-\d+$/, "").replace(/-/g, " ");
   return (
     <>
-      <BreadcrumbJsonLd items={[{ label: "Experiences", href: "/products" }, { label: title || "Experience" }]} />
-      <Breadcrumb
-        items={[{ label: "Experiences", href: "/products" }, { label: title || "Experience" }]}
-        className="container pt-6"
-      />
+      <BreadcrumbJsonLd items={[{ label: "Products", href: "/products" }, { label: title || "Products" }]} />
+      <MaxWidthWrapper className="pt-4 lg:pt-5">
+        <Breadcrumb
+          items={[{ label: "Products", href: "/products" }, { label: title || "Products" }]}
+        />
+      </MaxWidthWrapper>
       <ProductDetailClient />
     </>
   );

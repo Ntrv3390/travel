@@ -7,8 +7,8 @@ import { Separator } from "@/components/ui/separator";
 export function Footer() {
   return (
     <footer className="border-t border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100">
-      <div className="container py-10">
-        <Card className="rounded-3xl border-slate-200/90 bg-white/90 p-6 shadow-[0_14px_36px_rgba(15,23,42,0.08)] backdrop-blur md:p-8">
+      <div className="container py-8">
+        <Card className="rounded-3xl border-slate-200/90 bg-white/90 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.08)] backdrop-blur md:p-6">
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             <div>
               <h3 className="text-3xl font-black tracking-tight text-slate-900">Triipzy</h3>
@@ -89,7 +89,7 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6 text-sm">
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-5 text-sm">
             <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
               Legal
             </h4>
@@ -101,8 +101,8 @@ export function Footer() {
             </Link>
           </div>
 
-          <Separator className="mt-7" />
-          <div className="pt-5 text-sm text-slate-500">Copyright 2026 Triipzy. All rights reserved.</div>
+          <Separator className="mt-5" />
+          <div className="pt-4 text-sm text-slate-500">Copyright 2026 Triipzy. All rights reserved.</div>
         </Card>
       </div>
     </footer>
