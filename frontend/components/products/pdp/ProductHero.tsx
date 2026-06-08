@@ -297,7 +297,10 @@ export function ProductHero({ product }: ProductHeroProps) {
             onTouchEnd={(e) => {
               if (touchStart === null) return;
               const diff = touchStart - e.changedTouches[0].clientX;
-              if (Math.abs(diff) > 48) diff > 0 ? nextImage() : prevImage();
+              if (Math.abs(diff) > 48) {
+                if (diff > 0) nextImage();
+                else prevImage();
+              }
               setTouchStart(null);
             }}
           >

@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 
-const ACCENTS = ["#1a9de0", "#1a9de0", "#1a9de0", "#1a9de0"];
-
 interface AboutSectionProps {
   shortSummary: string;
   summaryHtml: string | null;

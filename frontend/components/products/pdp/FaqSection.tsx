@@ -50,13 +50,11 @@ function parseFaq(html: string): FaqItem[] {
 export function FaqSection({
   faqHtml,
 }: FaqSectionProps) {
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+
   if (!faqHtml) return null;
 
   const items = parseFaq(faqHtml);
-
-  const [openIndex, setOpenIndex] = useState(
-    items.length > 0 ? 0 : null
-  );
 
   if (items.length === 0) {
     return (
