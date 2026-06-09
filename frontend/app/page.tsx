@@ -86,16 +86,18 @@ export default async function HomePage() {
       {/* Platform trust indicators */}
       {/* <Partners /> */}
 
-      {/* Animated counters */}
-      <TrustSection
-        stats={{ totalExperiences: 0, totalDestinations, avgRating: 0, totalReviews: 0 }}
-      />
+
 
       {/* Recently viewed — client-side, renders from localStorage or API */}
       <RecentlyViewedExperiences />
 
       {/* Client-side, reacts to currency changes */}
       <TrendingExperiences />
+
+            {/* Animated counters */}
+      <TrustSection
+        stats={{ totalExperiences: 0, totalDestinations, avgRating: 0, totalReviews: 0 }}
+      />
 
       {/* Destination photo grid */}
       <Destinations cities={cities} />
