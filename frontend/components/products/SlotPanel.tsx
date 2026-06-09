@@ -112,7 +112,7 @@ export function SlotPanel({
 }: SlotPanelProps) {
   const { formatPrice, currency } = useCurrency()
   const { cart, addItem, updateCartItem } = useCartContext()
-  const { productId, productName, variantId, variantName, imageUrl, initialGuests } = useProductDetail()
+  const { productId, productName, variantId, variantName, imageUrl, initialGuests, inputFields } = useProductDetail()
   const { toast } = useToast()
   const router = useRouter()
 
@@ -233,6 +233,7 @@ export function SlotPanel({
       bookingPrice: String(totalBookingPrice),
       currency: currency ?? "USD",
       title: variantName ?? productName ?? "Experience",
+      inputFields: inputFields ? JSON.stringify(inputFields) : "",
     })
     router.push(`/checkout?${params.toString()}`)
   }

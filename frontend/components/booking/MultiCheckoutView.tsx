@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { createBooking, getCartSessionId } from "@/lib/api";
+import { removeFromRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import { useCart } from "@/hooks/useCart";
 import { useCartContext } from "@/context/CartContext";
 
@@ -36,7 +37,7 @@ export function MultiCheckoutView() {
     return Array.from(unique);
   }, [items]);
 
-  const onSubmit = async (values: { firstName: string; lastName: string; email: string; phone: string; specialRequests?: string }) => {
+  const onSubmit = async (values: Record<string, unknown>) => {
     if (submitting) return;
     setSubmitting(true);
     const sessionId = getCartSessionId();
@@ -56,19 +57,20 @@ export function MultiCheckoutView() {
         endDateTime: item.endDateTime,
         adults: item.adults,
         children: item.children,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-        phone: values.phone,
+        firstName: String(values.firstName ?? ""),
+        lastName: String(values.lastName ?? ""),
+        email: String(values.email ?? ""),
+        phone: String(values.phone ?? ""),
         currencyCode: item.currency,
         priceAmount: item.priceAmount,
-        specialRequests: values.specialRequests,
+        specialRequests: String(values.specialRequests ?? ""),
       }, sessionId, idempotencyKey);
 
       if (result.error) {
         bookingResults.push({ title: item.title, status: "FAILED", error: result.error });
       } else if (result.data) {
         bookingResults.push({ bookingId: result.data.bookingId, title: item.title, status: result.data.status });
+        removeFromRecentlyViewed(item.productId || item.experienceId);
         removeItem(item.id).catch(() => {});
       }
     }
@@ -126,7 +128,7 @@ export function MultiCheckoutView() {
               <a href="/cart">Back to Cart</a>
             </Button>
             <Button asChild>
-              <a href="/">Explore more</a>
+              <a href="/products">Explore more</a>
             </Button>
           </div>
         </div>
@@ -164,6 +166,7 @@ export function MultiCheckoutView() {
             <CustomerDetailsForm
               submitLabel={`Confirm & Book All (${items.length})`}
               submitting={submitting}
+              inputFields={[]}
               onSubmit={onSubmit}
             />
           </div>

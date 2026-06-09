@@ -295,7 +295,6 @@ func (s *Service) syncProductAvailabilities(ctx context.Context, job Job, pData 
 	}
 
 	startDate := time.Now().UTC().Format("2006-01-02")
-	endDate := time.Now().UTC().AddDate(0, 0, 30).Format("2006-01-02")
 
 	productAvailable := false
 
@@ -341,13 +340,13 @@ func (s *Service) syncProductAvailabilities(ctx context.Context, job Job, pData 
 				continue
 			}
 
-			if slotDate >= startDate && slotDate <= endDate {
+			if slotDate >= startDate {
+				s.upsertAvailabilityRecord(ctx, product, variantID, variantTitle, slotData)
+
 				availableSlots := int(ExtractFloat(slotData, "availableSlots", "available_slots", "available", "remainingInventory", "remaining", "seatsAvailable", "availableCapacity"))
 				availStatus := ExtractString(slotData, "availability", "status")
-
 				if availableSlots > 0 || (availStatus != "CLOSED" && availStatus != "SOLD_OUT" && availStatus != "UNAVAILABLE") {
 					productAvailable = true
-					s.upsertAvailabilityRecord(ctx, product, variantID, variantTitle, slotData)
 				}
 			}
 		}
@@ -427,7 +426,7 @@ func (s *Service) upsertAvailabilityRecord(ctx context.Context, product models.P
 
 	var priceAmount float64
 	if pricing, ok := slotData["pricing"].(map[string]interface{}); ok {
-		priceAmount = ExtractFloat(pricing, "amount", "price", "headoutSellingPrice", "netPrice")
+		priceAmount = ExtractFloat(pricing, "amount", "price", "headoutSellingPrice")
 	}
 
 	slotCurrency := product.Currency

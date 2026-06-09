@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { CitiesGrid } from "@/components/cities/CitiesGrid";
-import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 import { getCities } from "@/lib/api";
+import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 import type { CitiesResponse } from "@/types/api";
 
 export const metadata: Metadata = {
@@ -35,8 +35,8 @@ export default async function CitiesPage() {
 
   return (
     <section className="container py-section">
-      <BreadcrumbJsonLd items={[{ label: "Destinations" }]} />
-      <Breadcrumb items={[{ label: "Destinations" }]} className="mb-6" />
+      <BreadcrumbJsonLd items={[{ label: "Cities" }]} />
+      <Breadcrumb items={[{ label: "Cities" }]} className="mb-6" />
       <div className="mb-8">
         <h1 className="text-display-sm font-bold">Cities</h1>
         <p className="mt-2 text-muted-foreground">

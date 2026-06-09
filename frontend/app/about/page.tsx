@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { AboutPage } from "@/components/about/AboutPage";
-import { BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 
 export const metadata: Metadata = {
   title: "About Us | Triipzy",
@@ -23,7 +22,6 @@ export const metadata: Metadata = {
 export default function AboutRoute() {
   return (
     <>
-      <BreadcrumbJsonLd items={[{ label: "About Us" }]} />
       <AboutPage />
     </>
   );

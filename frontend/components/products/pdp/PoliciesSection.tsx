@@ -214,7 +214,9 @@ export function PoliciesSection({
                 <p className="mt-1 text-sm text-muted-foreground">
                   Reservations must be made at least{" "}
                   <span className="font-semibold text-foreground">
-                    {cutoffTimeInMinutes} minutes
+                    {cutoffTimeInMinutes % 60 === 0
+                      ? `${cutoffTimeInMinutes / 60} ${cutoffTimeInMinutes / 60 === 1 ? "hour" : "hours"}`
+                      : `${(cutoffTimeInMinutes / 60).toFixed(1)} hours`}
                   </span>{" "}
                   before your visit.
                 </p>

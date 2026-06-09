@@ -431,6 +431,25 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	inventoryID := strings.TrimSpace(req.InventoryID)
 
+	if strings.HasPrefix(inventoryID, "slot_") {
+		resolvedID, err := h.resolveInventoryIDFromDB(req.VariantID, req.Date, req.StartDateTime, req.EndDateTime)
+		if err != nil {
+			logger.Warnf("Failed to resolve synthetic inventory ID from DB: %v, falling back to live fetch", err)
+		}
+		if resolvedID == "" || strings.HasPrefix(resolvedID, "slot_") {
+			liveID, liveErr := h.resolveInventoryID(c, req.VariantID, req.Date)
+			if liveErr == nil && liveID != "" {
+				logger.Infof("Resolved synthetic inventory ID %s -> live ID %s for variant %s on %s", inventoryID, liveID, req.VariantID, req.Date)
+				inventoryID = liveID
+			} else {
+				logger.Warnf("Failed to resolve synthetic inventory ID %s via live fetch for variant %s on %s: %v", inventoryID, req.VariantID, req.Date, liveErr)
+			}
+		} else {
+			logger.Infof("Resolved synthetic inventory ID %s -> DB ID %s for variant %s on %s", inventoryID, resolvedID, req.VariantID, req.Date)
+			inventoryID = resolvedID
+		}
+	}
+
 	totalPax := 0
 	if req.GuestCounts != nil && len(req.GuestCounts) > 0 {
 		for _, count := range req.GuestCounts {
@@ -906,7 +925,7 @@ func pickItemPrice(item inventoryItem) *float64 {
 	}
 
 	p := item.Pricing.Persons[0]
-	for _, value := range []*float64{p.Price, p.NetPrice, p.HeadoutSellingPrice, p.OriginalPrice} {
+	for _, value := range []*float64{p.HeadoutSellingPrice, p.Price, p.OriginalPrice, p.NetPrice} {
 		if value != nil {
 			copyVal := *value
 			return &copyVal
@@ -1122,6 +1141,48 @@ func (h *BookingFlowHandler) resolveInventoryID(c *gin.Context, variantID string
 	}
 
 	return "", fmt.Errorf("no available inventory for variant %s on %s", variantID, dateStr)
+}
+
+func (h *BookingFlowHandler) resolveInventoryIDFromDB(variantID, date, startDateTime, endDateTime string) (string, error) {
+	db := database.GetDB()
+
+	var records []models.ProductAvailability
+	query := db.Where("variant_id = ? AND date = ?", variantID, date)
+
+	if startDateTime != "" && len(startDateTime) >= 16 {
+		startTime := startDateTime[11:16]
+		query = query.Where("start_time = ?", startTime)
+	}
+
+	if err := query.Order("start_time asc").Limit(5).Find(&records).Error; err != nil {
+		return "", fmt.Errorf("query product_availabilities: %w", err)
+	}
+
+	for _, r := range records {
+		if r.InventoryID != "" && !strings.HasPrefix(r.InventoryID, "slot_") {
+			return r.InventoryID, nil
+		}
+	}
+
+	for _, r := range records {
+		if r.RawHeadoutData != nil {
+			var rawData map[string]interface{}
+			if err := json.Unmarshal(r.RawHeadoutData, &rawData); err == nil {
+				for _, key := range []string{"inventoryId", "inventory_id", "id"} {
+					if val, ok := rawData[key]; ok {
+						switch v := val.(type) {
+						case string:
+							if v != "" && !strings.HasPrefix(v, "slot_") {
+								return v, nil
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no real inventory ID found in DB for variant %s on %s", variantID, date)
 }
 
 func parseHeadoutBookingResponse(body []byte) headoutBookingResponse {

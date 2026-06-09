@@ -49,7 +49,10 @@ export function SearchModal({
   useEffect(() => {
     if (open && inputRef.current) {
       inputRef.current.focus();
-      document.body.style.overflow = "hidden";
+      const isMobile = window.matchMedia("(max-width: 767px)").matches;
+      if (isMobile) {
+        document.body.style.overflow = "hidden";
+      }
     }
     return () => {
       document.body.style.overflow = "";

@@ -9,6 +9,7 @@ import { MaxWidthWrapper } from "@/components/ui/MaxWidthWrapper";
 import { ProductDetail } from "@/components/products/ProductDetail";
 import { getProductById } from "@/lib/api";
 import { useCurrency } from "@/hooks/useCurrency";
+import { useTrackRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import type { Product } from "@/types/product";
 
 export function ProductDetailClient() {
@@ -20,6 +21,7 @@ export function ProductDetailClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
+  const { track } = useTrackRecentlyViewed();
 
   const fetchProduct = useCallback(async () => {
     if (!id) return;
@@ -32,6 +34,20 @@ export function ProductDetailClient() {
       setError(result.error);
     } else if (result.data) {
       setProduct(result.data);
+      const p = result.data;
+      track({
+        headoutId: p.id,
+        title: p.name || p.title || "",
+        imageUrl: p.media?.[0]?.url || p.imageUrl || "",
+        price: p.listingPrice?.minimumPrice?.finalPrice || p.fromPrice || 0,
+        currency: p.listingPrice?.currencyCode || p.currency?.code || "USD",
+        rating: p.reviewsSummary?.averageRating || 0,
+        reviewCount: p.reviewsSummary?.ratingsCount || 0,
+        city: p.city?.name || p.cityName || "",
+        category: p.primaryCategory?.name || "",
+        slug: (p.title || p.name || "").toLowerCase().replace(/\s+/g, "-"),
+        duration: "",
+      });
     } else {
       setError("Product not found");
     }

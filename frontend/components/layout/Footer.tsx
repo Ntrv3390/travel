@@ -11,7 +11,7 @@ export function Footer() {
         <Card className="rounded-3xl border-slate-200/90 bg-white/90 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.08)] backdrop-blur md:p-6">
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             <div>
-              <h3 className="text-3xl font-black tracking-tight text-slate-900">Triipzy</h3>
+              <h3 className="text-3xl font-black tracking-tight bg-gradient-to-r from-blue-700 to-blue-500 bg-clip-text text-transparent">Triipzy</h3>
               <p className="mt-3 max-w-sm text-sm leading-6 text-slate-600">
                 Curated premium experiences in 211+ destinations with trusted local operators.
               </p>

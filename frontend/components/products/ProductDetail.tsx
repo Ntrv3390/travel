@@ -115,8 +115,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
                     highlights={product.content.highlights}
                     inclusionsHtml={product.content.inclusionsHtml}
                     inclusions={product.content.inclusions}
-                    exclusionsHtml={product.content.exclusionsHtml}
-                    exclusions={product.content.exclusions}
                   />
                 </motion.div>
               )}
@@ -132,6 +130,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 selectedVariantId={selectedVariantId}
                 onSelectVariant={handleSelectVariant}
                 inCartVariantId={cartItem?.variantId}
+                listingPrice={product.listingPrice}
               />
             </motion.div>
 
@@ -155,6 +154,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                       initialDate={cartItem?.date ?? null}
                       initialGuests={cartItem?.guestCounts ?? null}
                       pax={pax}
+                      inputFields={selectedVariant?.inputFields}
                     >
                       <AvailabilitySection />
                     </ProductDetailProvider>

@@ -122,6 +122,19 @@ func main() {
 	visitorHandler := handlers.NewVisitorHandler(database.GetDB())
 	router.POST("/api/v1/track/visit", visitorHandler.TrackVisit)
 
+	// Recently viewed (protected — JWT required)
+	rvHandler := handlers.NewRecentlyViewedHandler(database.GetDB())
+	rvProtected := router.Group("/api/v1/recently-viewed")
+	rvProtected.Use(middleware.JWTAuth())
+	{
+		rvProtected.POST("", rvHandler.TrackView)
+		rvProtected.GET("", rvHandler.GetRecentlyViewed)
+		rvProtected.POST("/remove", rvHandler.RemoveView)
+	}
+
+	// Recently viewed batch lookup (public — for anonymous users)
+	router.POST("/api/v1/recently-viewed/batch", rvHandler.BatchLookup)
+
 	// Headout proxy service (used by multiple handlers)
 	headoutProxy := services.NewHeadoutProxyService(cfg)
 
@@ -164,7 +177,11 @@ func main() {
 		adminGroup.POST("/testimonials", adminHandler.CreateTestimonial)
 		adminGroup.PUT("/testimonials/:id", adminHandler.UpdateTestimonial)
 		adminGroup.PATCH("/testimonials/:id/toggle", adminHandler.ToggleTestimonial)
+		adminGroup.GET("/logs", adminHandler.GetDockerLogs)
 	}
+
+	// Docker logs SSE stream (outside middleware — uses query-param token auth)
+	router.GET("/api/v1/admin/logs/stream", adminHandler.StreamDockerLogs)
 
 	// Sync API routes (new concurrent worker-based system)
 	syncHandler := handlers.NewSyncHandler(syncService)

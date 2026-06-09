@@ -419,6 +419,7 @@ func Migrate() error {
 		&models.Collection{},
 		&models.SyncJob{},
 		&models.SyncJobFailedProduct{},
+		&models.RecentlyViewed{},
 	)
 }
 

@@ -24,8 +24,8 @@ export const metadata: Metadata = {
 export default function ProductsPage() {
   return (
     <main className="container py-8">
-      <BreadcrumbJsonLd items={[{ label: "Experiences" }]} />
-      <Breadcrumb items={[{ label: "Experiences" }]} className="mb-6" />
+      <BreadcrumbJsonLd items={[{ label: "Products" }]} />
+      <Breadcrumb items={[{ label: "Products" }]} className="mb-6" />
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Explore Products</h1>
         <p className="mt-1 text-sm text-muted-foreground">Discover experiences from cities around the world</p>

@@ -17,84 +17,109 @@ export function Testimonials({ testimonials }: TestimonialsProps) {
     if (isPaused || testimonials.length === 0) return;
     const timer = setInterval(() => {
       setCurrent((prev) => (prev + 1) % testimonials.length);
-    }, 4000);
+    }, 4500);
     return () => clearInterval(timer);
   }, [isPaused, testimonials.length]);
 
   if (testimonials.length === 0) return null;
 
   const next = () => setCurrent((prev) => (prev + 1) % testimonials.length);
-  const prev = () => setCurrent((prev) => (prev - 1 + testimonials.length) % testimonials.length);
+  const prev = () =>
+    setCurrent((prev) => (prev - 1 + testimonials.length) % testimonials.length);
 
   return (
-    <section className="bg-slate-900 py-section">
-      <div className="container">
-        <div className="mb-10 text-center">
-          <span className="text-xs font-semibold uppercase tracking-widest text-sky-400">Testimonials</span>
-          <h2 className="mt-2 text-display-sm font-bold text-white">What Travelers Say</h2>
-          <p className="mt-1 text-sm text-white/50">Real reviews from real adventurers</p>
+    <section className="bg-slate-50 py-10 sm:py-14">
+      <div className="container px-4">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-sky-500">
+            Testimonials
+          </p>
+          <h2 className="mt-1 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+            What Travelers Say
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-400">Real reviews from real adventurers</p>
         </div>
 
-        <div className="relative mx-auto max-w-3xl" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
-          <div className="min-h-[260px]">
+        <div
+          className="relative mx-auto max-w-2xl"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+        >
+          {/* Card */}
+          <div className="min-h-[220px]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={current}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.4 }}
-                className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl sm:p-10"
+                exit={{ opacity: 0, y: -14 }}
+                transition={{ duration: 0.35 }}
+                className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8"
               >
-                <div className="mb-4 flex gap-1">
+                {/* Stars */}
+                <div className="mb-3 flex gap-0.5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star
                       key={i}
-                      className={`h-5 w-5 ${
-                        i < testimonials[current].rating
+                      className={`h-4 w-4 ${i < testimonials[current].rating
                           ? "fill-amber-400 text-amber-400"
-                          : "fill-white/10 text-white/20"
-                      }`}
+                          : "fill-slate-100 text-slate-200"
+                        }`}
                     />
                   ))}
                 </div>
-                <p className="text-base leading-relaxed text-white/80 sm:text-lg">&ldquo;{testimonials[current].text}&rdquo;</p>
-                <div className="mt-6 flex items-center gap-4">
+
+                {/* Quote */}
+                <p className="text-sm leading-relaxed text-slate-600 sm:text-[15px]">
+                  &ldquo;{testimonials[current].text}&rdquo;
+                </p>
+
+                {/* Author */}
+                <div className="mt-5 flex items-center gap-3">
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br ${testimonials[current].color} text-sm font-bold text-white shadow-lg`}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${testimonials[current].color} text-xs font-bold text-white`}
                   >
                     {testimonials[current].avatar}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-white">{testimonials[current].name}</p>
-                    <p className="text-xs text-white/50">{testimonials[current].location}</p>
+                    <p className="text-xs font-bold text-slate-800">
+                      {testimonials[current].name}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {testimonials[current].location}
+                    </p>
                   </div>
                 </div>
               </motion.div>
             </AnimatePresence>
           </div>
 
-          <div className="mt-6 flex items-center justify-center gap-3">
+          {/* Controls */}
+          <div className="mt-5 flex items-center justify-center gap-3">
             <button
               onClick={prev}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-white/60 transition-all hover:border-white/40 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition-all hover:border-slate-300 hover:text-slate-600"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="flex gap-2">
+
+            <div className="flex gap-1.5">
               {testimonials.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setCurrent(i)}
-                  className={`h-2 rounded-full transition-all ${
-                    i === current ? "w-8 bg-sky-400" : "w-2 bg-white/20 hover:bg-white/40"
-                  }`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${i === current
+                      ? "w-6 bg-sky-500"
+                      : "w-1.5 bg-slate-300 hover:bg-slate-400"
+                    }`}
                 />
               ))}
             </div>
+
             <button
               onClick={next}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-white/60 transition-all hover:border-white/40 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition-all hover:border-slate-300 hover:text-slate-600"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

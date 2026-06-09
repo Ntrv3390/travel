@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/hooks/useCurrency";
-import type { ProductVariant } from "@/types/product";
+import type { ProductListingPrice, ProductVariant } from "@/types/product";
 
 function formatDuration(ms: number | null): string {
   if (!ms) return "Flexible";
@@ -48,6 +48,7 @@ interface PackageCardsProps {
   selectedVariantId: string | number | null;
   onSelectVariant: (id: string | number) => void;
   inCartVariantId?: string | number | null;
+  listingPrice?: ProductListingPrice;
 }
 
 export function PackageCards({
@@ -55,6 +56,7 @@ export function PackageCards({
   selectedVariantId,
   onSelectVariant,
   inCartVariantId,
+  listingPrice,
 }: PackageCardsProps) {
   const { formatPrice } = useCurrency();
   if (!variants || variants.length === 0) return null;
@@ -82,7 +84,6 @@ export function PackageCards({
             variant as {
               pricing?: {
                 headoutSellingPrice?: number;
-                netPrice?: number;
                 currency?: string;
               };
             }
@@ -100,8 +101,6 @@ export function PackageCards({
           const displayPrice =
             pricing?.headoutSellingPrice ?? vp?.amount;
 
-          const netPrice = pricing?.netPrice;
-
           const isSelected = selectedVariantId === variant.id;
 
           const isInCart =
@@ -110,14 +109,9 @@ export function PackageCards({
 
           const badge = getVariantBadge(index, variants.length);
 
-          const discount =
-            displayPrice &&
-              netPrice &&
-              displayPrice > netPrice
-              ? Math.round(
-                ((displayPrice - netPrice) / displayPrice) * 100
-              )
-              : 0;
+          const discount = listingPrice?.bestDiscount ?? 0;
+          const hasDiscount = discount > 0;
+          const originalPrice = listingPrice?.minimumPrice?.originalPrice;
 
           return (
             <motion.div
@@ -198,24 +192,23 @@ export function PackageCards({
                       )}
                     </div>
 
-                    {netPrice !== undefined && (
+                    {displayPrice !== undefined && (
                       <div className="text-right">
-                        {discount > 0 && (
+                        {hasDiscount && (
                           <div className="mb-1 inline-flex rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
                             Save {discount}%
                           </div>
                         )}
 
                         <div className="text-2xl font-bold tracking-tight sm:text-3xl">
-                          {formatPrice(netPrice)}
+                          {formatPrice(displayPrice)}
                         </div>
 
-                        {displayPrice !== undefined &&
-                          displayPrice > netPrice && (
-                            <div className="text-xs text-muted-foreground line-through">
-                              {formatPrice(displayPrice)}
-                            </div>
-                          )}
+                        {hasDiscount && originalPrice && (
+                          <div className="text-xs text-muted-foreground line-through">
+                            {formatPrice(originalPrice)}
+                          </div>
+                        )}
 
                         <div className="mt-1 text-[11px] text-muted-foreground">
                           per person

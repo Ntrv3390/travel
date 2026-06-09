@@ -4,9 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState, useRef } from "react";
 import { CustomerDetailsForm } from "@/components/booking/CustomerDetailsForm";
 import { createBooking, getCartSessionId } from "@/lib/api";
+import { removeFromRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import { useCheckout } from "@/context/CheckoutContext";
 import { useCartContext } from "@/context/CartContext";
 import { useToast } from "@/components/ui/toaster";
+
+const STANDARD_CUSTOMER_FIELDS = new Set(["NAME", "EMAIL", "PHONE"]);
 
 export function CheckoutForm() {
   const router = useRouter();
@@ -16,7 +19,7 @@ export function CheckoutForm() {
   const [submitting, setSubmitting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const onSubmit = async (values: { firstName: string; lastName: string; email: string; phone: string; specialRequests?: string }) => {
+  const onSubmit = async (values: Record<string, unknown>) => {
     if (submitting) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -24,6 +27,32 @@ export function CheckoutForm() {
     setSubmitting(true);
     const idempotencyKey = crypto.randomUUID?.() ?? `bk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const sessionId = getCartSessionId();
+
+    const isDynamic = info.inputFields.length > 0;
+
+    const variantInputFields = isDynamic
+      ? info.inputFields
+          .filter((f) => !STANDARD_CUSTOMER_FIELDS.has(f.id))
+          .map((f) => ({
+            id: f.id,
+            value: String(values[f.id] ?? ""),
+          }))
+      : undefined;
+
+    const firstName = isDynamic
+      ? String(values.NAME ?? values.firstName ?? "").split(" ")[0] || ""
+      : String(values.firstName ?? "");
+    const lastName = isDynamic
+      ? String(values.NAME ?? "").includes(" ")
+        ? String(values.NAME ?? "").split(" ").slice(1).join(" ")
+        : ""
+      : String(values.lastName ?? "");
+    const email = isDynamic
+      ? String(values.EMAIL ?? values.email ?? "")
+      : String(values.email ?? "");
+    const phone = isDynamic
+      ? String(values.PHONE ?? values.phone ?? "")
+      : String(values.phone ?? "");
 
     const result = await createBooking({
       productId: info.productId,
@@ -38,13 +67,14 @@ export function CheckoutForm() {
       adults: info.guestCounts?.ADULT || 1,
       children: info.guestCounts?.CHILD || 0,
       guestCounts: info.guestCounts,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      email: values.email,
-      phone: values.phone,
+      firstName,
+      lastName,
+      email,
+      phone,
       currencyCode: info.currency,
       priceAmount: info.bookingPrice,
-      specialRequests: values.specialRequests,
+      specialRequests: isDynamic ? undefined : String(values.specialRequests ?? ""),
+      variantInputFields,
     }, sessionId, idempotencyKey);
 
     if (result.error) {
@@ -55,6 +85,7 @@ export function CheckoutForm() {
 
     toast({ title: "Booking confirmed", description: "Your booking has been confirmed.", variant: "success" });
     const booking = result.data;
+    removeFromRecentlyViewed(info.productId || info.experienceId);
     if (info.cartItemId) {
       removeItem(info.cartItemId).catch(() => {});
     }
@@ -66,9 +97,19 @@ export function CheckoutForm() {
       params.set("status", booking.status);
       params.set("emailSent", String(booking.confirmationEmailSent));
     }
-    params.set("firstName", values.firstName);
+    const displayName = isDynamic
+      ? String(values.NAME ?? firstName ?? "")
+      : String(values.firstName ?? "");
+    params.set("firstName", displayName);
     router.push(`/checkout/confirmation?${params.toString()}`);
   };
 
-  return <CustomerDetailsForm submitLabel="Confirm & Book" submitting={submitting} onSubmit={onSubmit} />;
+  return (
+    <CustomerDetailsForm
+      submitLabel="Confirm & Book"
+      submitting={submitting}
+      inputFields={info.inputFields}
+      onSubmit={onSubmit}
+    />
+  );
 }

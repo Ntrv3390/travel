@@ -665,7 +665,7 @@ func searchExtractPriceInfo(item map[string]interface{}, requestedCurrency strin
 		if value := getString(pricing, "currency", "currencyCode"); value != "" {
 			currency = value
 		}
-		price = getFloat(pricing, "headoutSellingPrice", "netPrice", "price", "amount")
+		price = getFloat(pricing, "headoutSellingPrice", "price", "amount")
 	}
 
 	if listingPrice, ok := item["listingPrice"].(map[string]interface{}); ok {

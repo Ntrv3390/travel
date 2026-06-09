@@ -356,6 +356,32 @@ export async function getHomeTestimonials() {
   }
 }
 
+export async function batchLookupRecentlyViewed(
+  headoutIds: string[],
+): Promise<ApiResult<{ experiences: Experience[]; count: number }>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/recently-viewed/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ headout_ids: headoutIds }),
+      cache: "no-store",
+    });
+    const payload = await readJson<BackendListResponse>(res);
+    if (payload.error) return { data: null, error: payload.error };
+    const backendExperiences = payload.data?.data ?? [];
+    const experiences = backendExperiences.map(normalizeExperience);
+    return {
+      data: {
+        experiences,
+        count: payload.data?.count ?? experiences.length,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
 export async function getHomeCollections() {
   try {
     const res = await fetch(`${API_BASE}/api/v1/home/collections`, {

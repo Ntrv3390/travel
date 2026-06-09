@@ -56,10 +56,11 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
   const href = `/products/${slug}-${headoutId || id}`;
 
   return (
-    <Link href={href} className="group block">
-      <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
-        {/* Image */}
-        <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+    <Link href={href} className="group block h-full">
+      <Card className="flex h-full flex-col overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
+
+        {/* Image — fixed height so all cards have identical image zones */}
+        <div className="relative h-[155px] w-full flex-shrink-0 overflow-hidden bg-slate-100">
           <Image
             src={imageUrl.startsWith("//") ? `https:${imageUrl}` : imageUrl}
             alt={title}
@@ -81,45 +82,55 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
         </div>
 
         {/* Content */}
-        <div className="space-y-2 p-3">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3" />
-            <span>{city || "Unknown"}</span>
-          </div>
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{title}</h3>
-          {rating > 0 && (
-            <div className="flex items-center gap-1">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-              <span className="text-sm font-medium">{rating.toFixed(1)}</span>
-              {reviewCount > 0 && (
-                <span className="text-xs text-muted-foreground">({reviewCount.toLocaleString()})</span>
-              )}
+        <div className="flex flex-1 flex-col p-3">
+
+          {/* Top zone — fixed height so price always starts at the same Y.
+              h-[100px] fits: city line (16px) + 2-line title (40px) + rating (20px) + gaps */}
+          <div className="h-[100px] overflow-hidden">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{city || "Unknown"}</span>
             </div>
-          )}
-          {price > 0 && (
-            <div className="flex items-baseline gap-1.5">
+            <h3 className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug">{title}</h3>
+            {rating > 0 && (
+              <div className="mt-1.5 flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                <span className="text-sm font-medium">{rating.toFixed(1)}</span>
+                {reviewCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({reviewCount.toLocaleString()})
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom zone — price + badges, always flush to bottom */}
+          <div className="mt-auto flex flex-col gap-1.5 pt-1">
+            {price > 0 && (
               <PriceDisplay
                 amount={price}
                 currency={currency}
                 className="text-lg font-bold"
                 showSkeleton={isChanging}
               />
+            )}
+            <div className="flex items-center gap-1.5 overflow-hidden">
+              {hasFreeCancel && (
+                <Badge className="flex-shrink-0 border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">
+                  <XCircle className="mr-0.5 h-2.5 w-2.5" />
+                  Free Cancel
+                </Badge>
+              )}
+              {hasMobile && (
+                <Badge className="flex-shrink-0 border-cyan-200 bg-cyan-50 text-[10px] text-cyan-700">
+                  <Zap className="mr-0.5 h-2.5 w-2.5" />
+                  Mobile Ticket
+                </Badge>
+              )}
             </div>
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            {hasFreeCancel && (
-              <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">
-                <XCircle className="mr-0.5 h-2.5 w-2.5" />
-                Free Cancel
-              </Badge>
-            )}
-            {hasMobile && (
-              <Badge className="border-cyan-200 bg-cyan-50 text-[10px] text-cyan-700">
-                <Zap className="mr-0.5 h-2.5 w-2.5" />
-                Mobile Ticket
-              </Badge>
-            )}
           </div>
+
         </div>
       </Card>
     </Link>

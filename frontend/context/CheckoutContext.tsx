@@ -2,6 +2,9 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react"
 import { useSearchParams } from "next/navigation"
+import type { ProductVariant } from "@/types/product"
+
+export type InputField = NonNullable<ProductVariant["inputFields"]>[number]
 
 export interface CheckoutInfo {
   experienceId: string
@@ -22,6 +25,7 @@ export interface CheckoutInfo {
   bookingPrice: number
   guests: number
   cartItemId: string
+  inputFields: InputField[]
 }
 
 const defaultCheckout: CheckoutInfo = {
@@ -43,6 +47,7 @@ const defaultCheckout: CheckoutInfo = {
   bookingPrice: 0,
   guests: 1,
   cartItemId: "",
+  inputFields: [],
 }
 
 interface CheckoutContextValue {
@@ -69,6 +74,16 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     const bookingPrice = parseFloat(search.get("bookingPrice") ?? String(price))
     const experienceId = search.get("experienceId") ?? ""
     const productId = search.get("productId") ?? experienceId
+
+    let inputFields: InputField[] = []
+    try {
+      const raw = search.get("inputFields")
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) inputFields = parsed
+      }
+    } catch {}
+
     return {
       experienceId,
       productId,
@@ -88,6 +103,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       bookingPrice,
       guests: Object.values(guestCounts).reduce((a, b) => a + b, 0),
       cartItemId: search.get("cartItemId") ?? "",
+      inputFields,
     }
   }, [search])
 

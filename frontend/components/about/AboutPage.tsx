@@ -18,7 +18,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
 
 function useCountUp(value: number, suffix = "", decimal = false) {
   const ref = useRef<HTMLDivElement>(null);
@@ -234,11 +233,7 @@ export function AboutPage() {
           />
         </div>
         <div className="relative z-10 flex min-h-[85vh] flex-col items-center justify-center px-4 text-center">
-          <div className="absolute left-0 top-0 w-full pt-4">
-            <div className="container">
-              <Breadcrumb items={[{ label: "About Us" }]} className="text-white/60 [&_span]:text-white/80 [&_a]:text-white/60 [&_a:hover]:text-sky-300" />
-            </div>
-          </div>
+
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}

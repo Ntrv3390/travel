@@ -21,11 +21,19 @@ import {
   Layers,
   BookOpen,
   MessageSquare,
+  ScrollText,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
-const sidebarLinks = [
+interface SidebarLink {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  superadminOnly?: boolean;
+}
+
+const sidebarLinks: SidebarLink[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
 
   // A-Z sorted
@@ -35,6 +43,7 @@ const sidebarLinks = [
   { href: "/admin/collections", label: "Collections", icon: BookOpen },
   { href: "/admin/cities", label: "Cities", icon: MapPin },
   { href: "/admin/help-submissions", label: "Help", icon: HelpCircle },
+  { href: "/admin/logs", label: "Logs", icon: ScrollText, superadminOnly: true },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/settings", label: "Settings", icon: Settings },
   { href: "/admin/testimonials", label: "Testimonials", icon: MessageSquare },
@@ -57,7 +66,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const el = document.createElement("style");
     el.id = "admin-hide-default";
-    el.textContent = "body > div.flex.min-h-screen.flex-col > header,body > div.flex.min-h-screen.flex-col > footer{display:none!important}";
+    el.textContent = "body > div.flex.min-h-screen.flex-col > header,body > div.flex.min-h-screen.flex-col > footer{display:none!important}body > div.flex.min-h-screen.flex-col > main{padding-top:0!important}";
     document.head.appendChild(el);
     return () => el.remove();
   }, []);
@@ -107,7 +116,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-          {sidebarLinks.map((link) => {
+          {sidebarLinks
+            .filter((link) => !link.superadminOnly || user?.role === "superadmin")
+            .map((link) => {
             const isActive = pathname === link.href;
             const isDashboard = link.href === "/admin";
             const Icon = link.icon;

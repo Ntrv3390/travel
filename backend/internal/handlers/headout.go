@@ -539,7 +539,20 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		return
 	}
 
-	// Always fetch fresh from Headout and update local DB
+	// if !h.isFetchFresh() {
+	// 	var product models.Product
+	// 	if err := h.db.Where("headout_id = ?", productID).First(&product).Error; err == nil {
+	// 		if len(product.RawHeadoutData) > 0 {
+	// 			h.writeRawJSON(c, product.RawHeadoutData)
+	// 		} else {
+	// 			h.writeProductFromDB(c, &product)
+	// 		}
+	// 		return
+	// 	}
+	// 	c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+	// 	return
+	// }
+
 	h.syncProductToDB(c, productID)
 }
 
@@ -550,6 +563,11 @@ func (h *HeadoutHandler) ListNormalAvailabilities(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "productId and variantId are required"})
 		return
 	}
+
+	// if !h.isFetchFresh() {
+	// 	h.listAvailabilitiesFromDB(c, productID, variantID)
+	// 	return
+	// }
 
 	path := fmt.Sprintf("/v2/products/%s/variants/%s/availabilities/", url.PathEscape(productID), url.PathEscape(variantID))
 	upstream, err := h.service.Get(c.Request.Context(), path, c.Request.URL.Query(), true)
@@ -573,6 +591,11 @@ func (h *HeadoutHandler) ListNormalInventory(c *gin.Context) {
 
 	if tourID == "" || startDT == "" || endDT == "" || currencyCode == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "tourId, startDateTime, endDateTime, and currencyCode are required"})
+		return
+	}
+
+	if !h.isFetchFresh() {
+		h.listInventoryFromDB(c)
 		return
 	}
 
@@ -978,7 +1001,7 @@ func (h *HeadoutHandler) syncAvailabilitiesToDB(productID, variantID string, bod
 
 		var priceAmount float64
 		if pricing, ok := slotData["pricing"].(map[string]interface{}); ok {
-			priceAmount = extractFloatFromMap(pricing, "amount", "price", "headoutSellingPrice", "netPrice")
+			priceAmount = extractFloatFromMap(pricing, "amount", "price", "headoutSellingPrice")
 		}
 
 		slotCurrency := product.Currency
@@ -1039,6 +1062,199 @@ func (h *HeadoutHandler) syncAvailabilitiesToDB(productID, variantID string, bod
 	now := time.Now()
 	h.db.Model(&models.Product{}).Where("id = ?", product.ID).Updates(map[string]interface{}{
 		"last_availability_sync_at": now,
+	})
+}
+
+func (h *HeadoutHandler) listAvailabilitiesFromDB(c *gin.Context, productID, variantID string) {
+	var product models.Product
+	if err := h.db.Where("headout_id = ?", productID).First(&product).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+
+	startDate := c.Query("startDate")
+	endDate := c.Query("endDate")
+
+	if startDate == "" {
+		startDate = time.Now().UTC().Format("2006-01-02")
+	}
+	if endDate == "" {
+		endDate = time.Now().UTC().AddDate(0, 1, 0).Format("2006-01-02")
+	}
+
+	var records []models.ProductAvailability
+	h.db.Where("product_id = ? AND variant_id = ? AND date >= ? AND date <= ?",
+		product.ID, variantID, startDate, endDate).
+		Order("date asc, start_time asc").
+		Find(&records)
+
+	type availEntry struct {
+		Date         string
+		Currency     string
+		SellingPrice float64
+		NetPrice     float64
+		Remaining    int
+		Availability string
+	}
+
+	dateMap := make(map[string]*availEntry)
+	dateKeys := make([]string, 0)
+
+	for _, r := range records {
+		e, ok := dateMap[r.Date]
+		if !ok {
+			e = &availEntry{
+				Date:         r.Date,
+				Currency:     product.Currency,
+				Availability: "CLOSED",
+			}
+			dateMap[r.Date] = e
+			dateKeys = append(dateKeys, r.Date)
+		}
+
+		e.Remaining += r.AvailableSlots
+
+		if e.SellingPrice == 0 || r.PriceAmount < e.SellingPrice {
+			e.SellingPrice = r.PriceAmount
+			e.NetPrice = r.PriceAmount
+		}
+
+		if r.AvailableSlots > 0 {
+			var slotData map[string]interface{}
+			if len(r.RawHeadoutData) > 0 && json.Unmarshal(r.RawHeadoutData, &slotData) == nil {
+				status := extractStringFromMap(slotData, "availability", "status")
+				switch status {
+				case "UNLIMITED":
+					e.Availability = "UNLIMITED"
+				default:
+					if e.Availability != "UNLIMITED" {
+						e.Availability = "LIMITED"
+					}
+				}
+			} else {
+				if e.Availability != "UNLIMITED" {
+					e.Availability = "LIMITED"
+				}
+			}
+		}
+	}
+
+	availabilities := make([]map[string]interface{}, 0, len(dateKeys))
+	for _, date := range dateKeys {
+		e := dateMap[date]
+		availabilities = append(availabilities, map[string]interface{}{
+			"date": e.Date,
+			"pricing": map[string]interface{}{
+				"currency":            e.Currency,
+				"profileType":         "PER_PERSON",
+				"headoutSellingPrice": e.SellingPrice,
+				"netPrice":            e.NetPrice,
+			},
+			"availability": e.Availability,
+			"remaining":    e.Remaining,
+		})
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"productId":     product.ID,
+		"variantId":     variantID,
+		"currencyCode":  product.Currency,
+		"availabilities": availabilities,
+	})
+}
+
+func (h *HeadoutHandler) listInventoryFromDB(c *gin.Context) {
+	q := c.Request.URL.Query()
+	tourID := strings.TrimSpace(q.Get("tourId"))
+	startDT := strings.TrimSpace(q.Get("startDateTime"))
+	endDT := strings.TrimSpace(q.Get("endDateTime"))
+
+	if tourID == "" || startDT == "" || endDT == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tourId, startDateTime, endDateTime are required"})
+		return
+	}
+
+	startDate := startDT
+	if len(startDT) >= 10 {
+		startDate = startDT[:10]
+	}
+	endDate := endDT
+	if len(endDT) >= 10 {
+		endDate = endDT[:10]
+	}
+
+	var records []models.ProductAvailability
+	h.db.Where("variant_id = ? AND date >= ? AND date <= ?",
+		tourID, startDate, endDate).
+		Order("date asc, start_time asc").
+		Find(&records)
+
+	items := make([]map[string]interface{}, 0, len(records))
+	for _, r := range records {
+		availability := "CLOSED"
+		remaining := r.AvailableSlots
+		if remaining > 0 {
+			availability = "LIMITED"
+		}
+
+		var slotData map[string]interface{}
+		_ = json.Unmarshal(r.RawHeadoutData, &slotData)
+
+		var status string
+		if slotData != nil {
+			status = extractStringFromMap(slotData, "availability", "status")
+		}
+		if status == "UNLIMITED" {
+			availability = "UNLIMITED"
+		}
+
+		pricing := map[string]interface{}{
+			"persons": []map[string]interface{}{
+				{
+					"type":                "ADULT",
+					"name":                "Adult",
+					"description":         nil,
+					"ageFrom":             0,
+					"ageTo":               nil,
+					"price":               r.PriceAmount,
+					"originalPrice":       r.PriceAmount,
+					"netPrice":            r.PriceAmount,
+					"headoutSellingPrice": r.PriceAmount,
+					"remaining":           remaining,
+					"availability":        availability,
+					"paxRange":            map[string]interface{}{"min": nil, "max": nil},
+				},
+			},
+			"groups": []interface{}{},
+		}
+
+		slotID := r.InventoryID
+		if slotID == "" && slotData != nil {
+			slotID = extractStringFromMap(slotData, "inventoryId", "inventory_id", "id")
+		}
+		if slotID == "" {
+			slotID = fmt.Sprintf("slot_%d", r.ID)
+		}
+
+		startDateTime := r.Date + "T" + r.StartTime
+		endDateTime := r.Date + "T" + r.EndTime
+
+		items = append(items, map[string]interface{}{
+			"id":             slotID,
+			"startDateTime":  startDateTime,
+			"endDateTime":    endDateTime,
+			"availability":   availability,
+			"remaining":      remaining,
+			"pricing":        pricing,
+		})
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"items":       items,
+		"total":       len(items),
+		"nextUrl":     nil,
+		"prevUrl":     nil,
+		"nextOffset":  nil,
 	})
 }
 

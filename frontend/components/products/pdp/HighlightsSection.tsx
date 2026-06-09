@@ -1,16 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { XCircle, Sparkles, Check } from "lucide-react";
+import { Sparkles, Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface HighlightsSectionProps {
   highlightsHtml: string | null;
   highlights: string;
   inclusionsHtml: string | null;
   inclusions: string;
-  exclusionsHtml: string | null;
-  exclusions: string;
 }
 
 function parseListItems(html: string | null, fallback: string): string[] {
@@ -53,126 +52,147 @@ export function HighlightsSection({
   highlights,
   inclusionsHtml,
   inclusions,
-  exclusionsHtml,
-  exclusions,
 }: HighlightsSectionProps) {
   const highlightItems = parseListItems(highlightsHtml, highlights);
   const inclusionItems = parseListItems(inclusionsHtml, inclusions);
-  const exclusionItems = parseListItems(exclusionsHtml, exclusions);
-
-  const hasIncEx = inclusionItems.length > 0 || exclusionItems.length > 0;
-
+  const [showAllInclusions, setShowAllInclusions] = useState(false);
   return (
     <div className="space-y-8">
 
       {/* ── Highlights ─────────────────────────────────────────────── */}
       {highlightItems.length > 0 && (
         <section id="highlights" className="scroll-mt-20">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
-              <Sparkles className="h-3.5 w-3.5 text-brand-500" />
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-950/40">
+              <Sparkles className="h-4 w-4 text-brand-500" />
             </span>
-            <h2 className="text-base font-bold tracking-tight sm:text-lg">
-              Highlights
-            </h2>
+
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">
+                Highlights
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Key experiences included in this activity
+              </p>
+            </div>
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {highlightItems.map((item, i) => (
-              <FadeItem
-                key={i}
-                index={i}
-                className={cn(
-                  "group flex items-start gap-3 rounded-xl border border-border/50",
-                  "bg-background px-4 py-3.5 transition-colors duration-200",
-                  "hover:border-brand-200 hover:bg-brand-50/40",
-                  "dark:hover:border-brand-800/50 dark:hover:bg-brand-950/20"
-                )}
-              >
-                <span className="mt-[3px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-900/50 transition-colors duration-200 group-hover:bg-brand-200 dark:group-hover:bg-brand-800/60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                </span>
-                <span className="text-sm leading-[1.55] text-foreground/90">
-                  {item}
-                </span>
+              <FadeItem key={i} index={i}>
+                <div
+                  className={cn(
+                    "group h-full rounded-2xl border",
+                    "border-border/60 bg-background",
+                    "p-4 transition-all duration-200",
+                    "hover:border-brand-200",
+                    "hover:bg-brand-50/40",
+                    "hover:shadow-sm",
+                    "dark:hover:border-brand-800/50",
+                    "dark:hover:bg-brand-950/20"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center",
+                        "rounded-xl bg-brand-100",
+                        "dark:bg-brand-900/40"
+                      )}
+                    >
+                      <Sparkles className="h-4 w-4 text-brand-500" />
+                    </div>
+
+                    <p className="text-sm leading-relaxed text-foreground/90">
+                      {item}
+                    </p>
+                  </div>
+                </div>
               </FadeItem>
             ))}
           </div>
         </section>
       )}
 
-      {/* ── Inclusions + Exclusions ─────────────────────────────────── */}
-      {hasIncEx && (
-        <section id="included" className="scroll-mt-20">
-          <h2 className="mb-4 text-base font-bold tracking-tight sm:text-lg">
-            What&apos;s Included
-          </h2>
+      {inclusionItems.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+          {/* Header */}
+          <div className="flex items-center gap-3 border-b border-emerald-100 dark:border-emerald-900/40 px-5 py-4">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 shadow-sm">
+              <Check className="h-4 w-4 text-white stroke-[2.5]" />
+            </span>
 
-          <div
-            className={cn(
-              "grid gap-3",
-              inclusionItems.length > 0 && exclusionItems.length > 0
-                ? "md:grid-cols-2"
-                : "grid-cols-1"
-            )}
-          >
-            {/* Inclusions */}
-            {inclusionItems.length > 0 && (
-              <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                <div className="flex items-center gap-2 border-b border-emerald-100 dark:border-emerald-900/40 px-4 py-2.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500">
-                    <Check className="h-3 w-3 text-white stroke-[2.5]" />
-                  </span>
-                  <span className="text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
-                    Included
-                  </span>
-                </div>
-                <ul className="divide-y divide-emerald-100/70 dark:divide-emerald-900/30">
-                  {inclusionItems.map((item, i) => (
-                    <FadeItem
-                      key={i}
-                      index={i}
-                      className="flex items-start gap-2.5 px-4 py-2.5"
-                    >
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500 stroke-[2.5]" />
-                      <span className="text-sm leading-snug text-foreground/80">
-                        {item}
-                      </span>
-                    </FadeItem>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Exclusions */}
-            {exclusionItems.length > 0 && (
-              <div className="overflow-hidden rounded-2xl border border-rose-100 bg-rose-50/30 dark:border-rose-900/40 dark:bg-rose-950/15">
-                <div className="flex items-center gap-2 border-b border-rose-100 dark:border-rose-900/40 px-4 py-2.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-400/80">
-                    <XCircle className="h-3.5 w-3.5 text-white" />
-                  </span>
-                  <span className="text-xs font-semibold uppercase tracking-widest text-rose-600 dark:text-rose-400">
-                    Not included
-                  </span>
-                </div>
-                <ul className="divide-y divide-rose-100/60 dark:divide-rose-900/30">
-                  {exclusionItems.map((item, i) => (
-                    <FadeItem
-                      key={i}
-                      index={i}
-                      className="flex items-start gap-2.5 px-4 py-2.5"
-                    >
-                      <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400/80" />
-                      <span className="text-sm leading-snug text-foreground/60">
-                        {item}
-                      </span>
-                    </FadeItem>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="flex-1">
+              <h3 className="font-semibold text-emerald-800 dark:text-emerald-300">
+                Included
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Everything covered in this experience
+              </p>
+            </div>
           </div>
-        </section>
+
+          {/* Items */}
+          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            {inclusionItems.map((item, i) => (
+              <FadeItem
+                key={i}
+                index={i}
+                className={cn(
+                  !showAllInclusions && i >= 4 && "hidden sm:block"
+                )}
+              >
+                <motion.div
+                  whileHover={{ y: -2, scale: 1.01 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 25,
+                  }}
+                  className={cn(
+                    "group flex h-full items-start gap-3 rounded-xl border",
+                    "border-emerald-100 bg-white/80 px-4 py-3",
+                    "transition-all duration-300",
+                    "hover:border-emerald-300",
+                    "hover:shadow-md hover:shadow-emerald-100/60",
+                    "dark:border-emerald-900/40",
+                    "dark:bg-background/40",
+                    "dark:hover:border-emerald-700/60"
+                  )}
+                >
+                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 transition-all duration-300 group-hover:bg-emerald-500">
+                    <Check className="h-3 w-3 text-emerald-600 transition-colors duration-300 group-hover:text-white" />
+                  </div>
+
+                  <span className="text-sm leading-relaxed text-foreground/80">
+                    {item}
+                  </span>
+                </motion.div>
+              </FadeItem>
+            ))}
+          </div>
+
+          {/* Mobile Expand / Collapse */}
+          {inclusionItems.length > 4 && (
+            <div className="border-t border-emerald-100 px-4 py-4 sm:hidden dark:border-emerald-900/40">
+              <button
+                onClick={() => setShowAllInclusions(!showAllInclusions)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/80 px-4 py-3 text-sm font-medium text-emerald-700 transition-all hover:bg-white dark:bg-background/40"
+              >
+                {showAllInclusions
+                  ? "Show less"
+                  : `View all included items (${inclusionItems.length})`}
+
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 transition-transform duration-300",
+                    showAllInclusions && "rotate-180"
+                  )}
+                />
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

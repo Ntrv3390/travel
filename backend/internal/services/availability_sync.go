@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/travel/backend/internal/database"
@@ -126,7 +127,6 @@ func (s *AvailabilitySyncService) syncProductAvailability(ctx context.Context, p
 
 	// Check each variant for upcoming availability
 	startDate := time.Now().UTC().Format("2006-01-02")
-	endDate := time.Now().UTC().AddDate(0, 0, 30).Format("2006-01-02") // Check next 30 days
 
 	productAvailable := false
 
@@ -186,6 +186,10 @@ func (s *AvailabilitySyncService) syncProductAvailability(ctx context.Context, p
 			availBody.Availabilities = availBody.Data.Availabilities
 		}
 
+		// Fetch real inventory IDs from Headout's inventory endpoint so we
+		// can store them and avoid synthetic slot_ IDs later.
+		inventoryMap := s.fetchInventoryIDMap(ctx, variantID)
+
 		variantHasAvailability := false
 
 		for _, rawSlot := range availBody.Availabilities {
@@ -194,10 +198,8 @@ func (s *AvailabilitySyncService) syncProductAvailability(ctx context.Context, p
 				continue
 			}
 
-			// Check if this slot has availability in the upcoming period
 			slotDate := extractStringFromMap(slotData, "date")
 			if slotDate == "" {
-				// Try extracting from startDateTime
 				startDT := extractStringFromMap(slotData, "startDateTime", "start_time")
 				if len(startDT) >= 10 {
 					slotDate = startDT[:10]
@@ -208,18 +210,24 @@ func (s *AvailabilitySyncService) syncProductAvailability(ctx context.Context, p
 				continue
 			}
 
-			// Check if the date is in the future and within our window
-			if slotDate >= startDate && slotDate <= endDate {
-				// Check if there are available slots
+			if slotDate >= startDate {
+				// Derive startTime from slotData the same way upsertAvailabilityRecord does
+				slotStartTime := extractStringFromMap(slotData, "startTime", "start_time")
+				if slotStartTime == "" {
+					startDT := extractStringFromMap(slotData, "startDateTime")
+					if len(startDT) >= 16 {
+						slotStartTime = startDT[11:16]
+					}
+				}
+				slotKey := slotDate + "_" + slotStartTime
+				realInventoryID := inventoryMap[slotKey]
+
+				s.upsertAvailabilityRecord(ctx, product, variantID, variantTitle, slotData, realInventoryID)
+
 				availableSlots := extractFloatFromMap(slotData, "availableSlots", "available_slots", "available", "remainingInventory", "remaining", "seatsAvailable", "availableCapacity")
 				availabilityStatus := extractStringFromMap(slotData, "availability", "status")
-
-				// Consider available if slots > 0 or status is not CLOSED/SOLD_OUT
 				if availableSlots > 0 || (availabilityStatus != "CLOSED" && availabilityStatus != "SOLD_OUT" && availabilityStatus != "UNAVAILABLE") {
 					variantHasAvailability = true
-
-					// Sync all available slots locally (not just the first one)
-					s.upsertAvailabilityRecord(ctx, product, variantID, variantTitle, slotData)
 				}
 			}
 		}
@@ -232,8 +240,9 @@ func (s *AvailabilitySyncService) syncProductAvailability(ctx context.Context, p
 	return productAvailable, nil
 }
 
-// upsertAvailabilityRecord saves or updates a single availability record in the local DB
-func (s *AvailabilitySyncService) upsertAvailabilityRecord(ctx context.Context, product models.Product, variantID, variantTitle string, slotData map[string]interface{}) {
+// upsertAvailabilityRecord saves or updates a single availability record in the local DB.
+// realInventoryID, if non-empty, overrides the inventoryId extracted from slotData.
+func (s *AvailabilitySyncService) upsertAvailabilityRecord(ctx context.Context, product models.Product, variantID, variantTitle string, slotData map[string]interface{}, realInventoryID string) {
 	date := extractStringFromMap(slotData, "date")
 	startTime := extractStringFromMap(slotData, "startTime", "start_time")
 	if startTime == "" {
@@ -243,12 +252,15 @@ func (s *AvailabilitySyncService) upsertAvailabilityRecord(ctx context.Context, 
 		}
 	}
 	endTime := extractStringFromMap(slotData, "endTime", "end_time")
-	inventoryID := extractStringFromMap(slotData, "inventoryId", "inventory_id")
+	inventoryID := realInventoryID
+	if inventoryID == "" {
+		inventoryID = extractStringFromMap(slotData, "inventoryId", "inventory_id", "id", "slotId", "slot_id")
+	}
 	inventoryType := extractStringFromMap(slotData, "inventoryType", "inventory_type")
 
 	var priceAmount float64
 	if pricing, ok := slotData["pricing"].(map[string]interface{}); ok {
-		priceAmount = extractFloatFromMap(pricing, "amount", "price", "headoutSellingPrice", "netPrice")
+		priceAmount = extractFloatFromMap(pricing, "amount", "price", "headoutSellingPrice")
 	}
 
 	slotCurrency := product.Currency
@@ -306,6 +318,115 @@ func (s *AvailabilitySyncService) upsertAvailabilityRecord(ctx context.Context, 
 		existing.RawHeadoutData = availRawJSON
 		s.db.WithContext(ctx).Save(&existing)
 	}
+}
+
+// fetchInventoryIDMap fetches the real Headout inventory IDs for a variant and
+// returns a map of "date_startTime" (e.g. "2026-06-19_10:00") -> inventoryId.
+func (s *AvailabilitySyncService) fetchInventoryIDMap(ctx context.Context, variantID string) map[string]string {
+	result := make(map[string]string)
+
+	now := time.Now().UTC()
+	startDate := now.Format("2006-01-02")
+	endDate := now.AddDate(0, 0, 30).Format("2006-01-02")
+
+	// Try v1 endpoint with variantId param
+	query := url.Values{}
+	query.Set("variantId", variantID)
+	query.Set("startDateTime", startDate+"T00:00")
+	query.Set("endDateTime", endDate+"T23:59")
+
+	resp, err := s.headoutProxy.Get(ctx, "/v1/inventory/list-by/variant", query, true)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Non-fatal: fall through to try v2 endpoint
+	} else {
+		result = parseInventoryItems(resp.Body, result)
+		if len(result) > 0 {
+			return result
+		}
+	}
+
+	// Fallback: try v2 endpoint with tourId param
+	query2 := url.Values{}
+	query2.Set("tourId", variantID)
+	query2.Set("startDateTime", startDate+"T00:00")
+	query2.Set("endDateTime", endDate+"T23:59")
+
+	resp2, err2 := s.headoutProxy.Get(ctx, "/v2/inventory/list-by/tour/", query2, true)
+	if err2 != nil || resp2.StatusCode < 200 || resp2.StatusCode >= 300 {
+		return result
+	}
+
+	result = parseInventoryV2Items(resp2.Body, result)
+	return result
+}
+
+func parseInventoryItems(body []byte, result map[string]string) map[string]string {
+	var payload struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return result
+	}
+
+	for _, raw := range payload.Items {
+		var item struct {
+			InventoryID   string `json:"inventoryId"`
+			ID            string `json:"id"`
+			StartDateTime string `json:"startDateTime"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			continue
+		}
+		id := firstNonEmptyString(item.InventoryID, item.ID)
+		if id == "" || item.StartDateTime == "" {
+			continue
+		}
+		if len(item.StartDateTime) >= 16 {
+			date := item.StartDateTime[:10]
+			time := item.StartDateTime[11:16]
+			result[date+"_"+time] = id
+		}
+	}
+
+	return result
+}
+
+func parseInventoryV2Items(body []byte, result map[string]string) map[string]string {
+	var payload struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return result
+	}
+
+	for _, raw := range payload.Items {
+		var item struct {
+			ID            string `json:"id"`
+			StartDateTime string `json:"startDateTime"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			continue
+		}
+		if item.ID == "" || item.StartDateTime == "" {
+			continue
+		}
+		if len(item.StartDateTime) >= 16 {
+			date := item.StartDateTime[:10]
+			time := item.StartDateTime[11:16]
+			result[date+"_"+time] = item.ID
+		}
+	}
+
+	return result
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // extractStringFromMap extracts a string value from a map using multiple possible keys

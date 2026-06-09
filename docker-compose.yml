@@ -76,6 +76,8 @@ services:
     depends_on:
       db-master:
         condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     secrets:
       - gttd_dev_ssh_key
       - gttd_prod_ssh_key

@@ -62,7 +62,7 @@ export default function ConfirmationPage({
 
         <div className="flex gap-3">
           <Button asChild>
-            <Link href="/search">Explore more</Link>
+            <Link href="/products">Explore more</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/">Back home</Link>

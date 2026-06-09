@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, type ReactNode } from "react"
+import type { ProductVariant } from "@/types/product"
 
 interface Pax {
   min: number
@@ -17,6 +18,7 @@ interface ProductDetailContextValue {
   initialDate: string | null
   initialGuests: Record<string, number> | null
   pax?: Pax | null
+  inputFields?: ProductVariant["inputFields"]
 }
 
 const ProductDetailContext = createContext<ProductDetailContextValue | undefined>(undefined)
@@ -32,6 +34,7 @@ export function ProductDetailProvider({
   initialDate = null,
   initialGuests = null,
   pax = null,
+  inputFields,
 }: ProductDetailContextValue & { children: ReactNode }) {
   return (
     <ProductDetailContext.Provider
@@ -45,6 +48,7 @@ export function ProductDetailProvider({
         initialDate,
         initialGuests,
         pax,
+        inputFields,
       }}
     >
       {children}
