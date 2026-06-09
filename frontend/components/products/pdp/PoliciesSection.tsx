@@ -99,10 +99,10 @@ export function PoliciesSection({
                 <p className="mt-1 text-sm text-muted-foreground">
                   Cancel up to{" "}
                   <span className="font-semibold text-foreground">
-                    {
-                      cancellationPolicy.cancellableUpToInMinutes
-                    }{" "}
-                    minutes
+                    {cancellationPolicy.cancellableUpToInMinutes != null
+                      ? (cancellationPolicy.cancellableUpToInMinutes / 60).toFixed(1)
+                      : "N/A"}{" "}
+                    hours
                   </span>{" "}
                   before the experience starts.
                 </p>
@@ -180,10 +180,10 @@ export function PoliciesSection({
                 <p className="mt-1 text-sm text-muted-foreground">
                   Modify your booking up to{" "}
                   <span className="font-semibold text-foreground">
-                    {
-                      reschedulePolicy.reschedulableUpToInMinutes
-                    }{" "}
-                    minutes
+                    {reschedulePolicy.reschedulableUpToInMinutes != null
+                      ? (reschedulePolicy.reschedulableUpToInMinutes / 60).toFixed(1)
+                      : "N/A"}{" "}
+                    hours
                   </span>{" "}
                   before departure.
                 </p>
