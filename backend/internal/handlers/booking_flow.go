@@ -389,26 +389,26 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
 		return
 	}
-	if req.Email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
-		return
-	}
-	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
-		return
-	}
-	if req.FirstName == "" || req.LastName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "firstName and lastName are required"})
-		return
-	}
-	if req.Adults < 0 || req.Children < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "adults and children must be non-negative"})
-		return
-	}
-	if req.Phone != "" && len(req.Phone) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid phone number"})
-		return
-	}
+	// if req.Email == "" {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+	// 	return
+	// }
+	// if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
+	// 	return
+	// }
+	// if req.FirstName == "" || req.LastName == "" {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "firstName and lastName are required"})
+	// 	return
+	// }
+	// if req.Adults < 0 || req.Children < 0 {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "adults and children must be non-negative"})
+	// 	return
+	// }
+	// if req.Phone != "" && len(req.Phone) < 6 {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid phone number"})
+	// 	return
+	// }
 
 	if idempotencyKey != "" {
 		var existing models.Booking
