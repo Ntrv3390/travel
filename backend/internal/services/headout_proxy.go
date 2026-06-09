@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	headoutDefaultTimeout = 20 * time.Second
-	headoutAuthHeaderName = "Headout-Auth"
+    headoutDefaultTimeout = 60 * time.Second
+    headoutAuthHeaderName = "Headout-Auth"
 )
 
 var ErrMissingHeadoutAPIKey = errors.New("headout api key is not configured")
