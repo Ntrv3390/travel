@@ -1,6 +1,6 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { Star, ClipboardCheck, XCircle, RefreshCw, MapPin, Zap, Ticket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,15 @@ import { Card } from "@/components/ui/card";
 import { useCurrency } from "@/hooks/useCurrency";
 import { toSlug } from "@/lib/utils";
 import type { Product } from "@/types/product";
+
+function optimizeImageUrl(url: string, width: number): string {
+  if (url.startsWith("//")) url = `https:${url}`;
+  if (url.includes("cdn-imgix.headout.com")) {
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}w=${width}&q=75&auto=format`;
+  }
+  return url;
+}
 
 const productTypeColors: Record<string, string> = {
   ATTRACTION: "bg-purple-100 text-purple-700 border-purple-200",
@@ -33,8 +42,11 @@ export function ProductCard({ product }: { product: Product }) {
     cancellationPolicy,
     reschedulePolicy,
     imageUrl,
+    media,
     currency,
   } = product as Product;
+
+  const imgSrc = imageUrl ?? (media?.find(m => m.type === "IMAGE")?.url) ?? null;
 
   const discount = listingPrice?.bestDiscount ?? 0;
   const hasDiscount = discount > 0;
@@ -56,12 +68,13 @@ export function ProductCard({ product }: { product: Product }) {
     <Link href={`/products/${slug}-${id}`} className="group block">
       <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5">
         <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
-          {imageUrl ? (
-            <img
-              src={imageUrl.startsWith("//") ? `https:${imageUrl}` : imageUrl}
+          {imgSrc ? (
+            <Image
+              src={optimizeImageUrl(imgSrc, 400)}
               alt={productName}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-300">
@@ -86,7 +99,7 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="space-y-2 p-3">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3" />
-            <span>{cityName ?? "Unknown"}</span>
+            <span>{cityName ?? product?.city?.name ?? "Unknown"}</span>
           </div>
 
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{productName}</h3>
