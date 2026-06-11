@@ -52,7 +52,7 @@ func Load() *Config {
 		DBHost:         getEnv("DB_HOST", "db-master"),
 		DBPort:         getEnv("DB_PORT", "5432"),
 		DBUser:         getEnv("DB_USER", "postgres"),
-		DBPassword:     getEnv("DB_PASSWORD", "postgres"),
+		DBPassword:     getEnv("DB_PASSWORD", ""),
 		DBName:         getEnv("DB_NAME", "travel_db"),
 		DBSSLMode:      getEnv("DB_SSLMODE", "disable"),
 		HeadoutAPIKey:         getEnv("HEADOUT_API_KEY", ""),
@@ -64,7 +64,7 @@ func Load() *Config {
 		Environment:           getEnv("ENV", "development"),
 
 		// JWT
-		JWTSecret: getEnv("JWT_SECRET", "triipzy-jwt-secret-change-in-production"),
+		JWTSecret: getEnv("JWT_SECRET", ""),
 
 		// SMTP
 		SMTPHost:    getEnv("SMTP_HOST", ""),
@@ -75,12 +75,19 @@ func Load() *Config {
 		AdminEmail: getEnv("ADMIN_EMAIL", ""),
 	}
 
+	if cfg.JWTSecret == "" {
+		panic("JWT_SECRET environment variable must be set")
+	}
+	if cfg.DBPassword == "" {
+		panic("DB_PASSWORD environment variable must be set")
+	}
+
 	cfg.HeadoutURL = resolveHeadoutURL(cfg)
 
 	// Sync worker pool config
 	cfg.SyncWorkerCount = getEnvInt("SYNC_WORKER_COUNT", 30)
-	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 0)
-	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 0)
+	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 10)
+	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 20)
 	cfg.SyncMaxRetries = getEnvInt("SYNC_MAX_RETRIES", 0)
 	cfg.SyncRetryBaseDelayMs = getEnvInt("SYNC_RETRY_BASE_DELAY_MS", 0)
 

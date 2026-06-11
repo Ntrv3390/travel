@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/pkg/config"
@@ -30,12 +31,18 @@ func Init(cfg *config.Config) error {
 		return err
 	}
 
+	if sqlDB, sqlErr := db.DB(); sqlErr == nil {
+		sqlDB.SetMaxOpenConns(25)
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetConnMaxLifetime(5 * time.Minute)
+		sqlDB.SetConnMaxIdleTime(1 * time.Minute)
+	}
+
 	logger.Info("Database connection established")
 
 	// Run migrations
-	err = Migrate()
-	if err != nil {
-		logger.Warnf("Migration failed, continuing without migrations: %v", err)
+	if err = Migrate(); err != nil {
+		return fmt.Errorf("database migration failed: %w", err)
 	}
 
 	// Add unique index on visitors.ip
@@ -74,9 +81,40 @@ func Init(cfg *config.Config) error {
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_page_visits_pathname ON page_visits(pathname)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_page_visits_visitor_id ON page_visits(visitor_id)`)
 
-	// Ensure cart_items has the guest_counts column (GORM AutoMigrate sometimes misses jsonb columns)
+	// Ensure carts table has all required columns (AutoMigrate may miss them)
+	if err := db.Exec(`ALTER TABLE carts ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT '';`).Error; err != nil {
+		logger.Warnf("Could not add currency column to carts: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE carts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;`).Error; err != nil {
+		logger.Warnf("Could not add expires_at column to carts: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE carts ADD COLUMN IF NOT EXISTS auth_type VARCHAR(50) DEFAULT 'anonymous';`).Error; err != nil {
+		logger.Warnf("Could not add auth_type column to carts: %v", err)
+	}
+	if db.Migrator().HasColumn("carts", "user_id") {
+		db.Exec(`ALTER TABLE carts ALTER COLUMN user_id DROP DEFAULT`)
+		db.Exec(`UPDATE carts SET user_id = 0 WHERE user_id IS NULL`)
+		db.Exec(`ALTER TABLE carts ALTER COLUMN user_id SET DEFAULT 0`)
+	}
+
+	// Ensure cart_items has all required columns (AutoMigrate may miss them)
 	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS guest_counts jsonb DEFAULT '{}';`).Error; err != nil {
 		logger.Warnf("Could not add guest_counts column to cart_items (may not exist yet): %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS input_fields jsonb DEFAULT '[]';`).Error; err != nil {
+		logger.Warnf("Could not add input_fields column to cart_items: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS pax_min INTEGER DEFAULT 0;`).Error; err != nil {
+		logger.Warnf("Could not add pax_min column to cart_items: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS pax_max INTEGER DEFAULT 0;`).Error; err != nil {
+		logger.Warnf("Could not add pax_max column to cart_items: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS original_price_amount NUMERIC(12,4) DEFAULT 0;`).Error; err != nil {
+		logger.Warnf("Could not add original_price_amount column to cart_items: %v", err)
+	}
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS original_currency VARCHAR(10) DEFAULT '';`).Error; err != nil {
+		logger.Warnf("Could not add original_currency column to cart_items: %v", err)
 	}
 	if err := db.Exec(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_counts jsonb DEFAULT '{}';`).Error; err != nil {
 		logger.Warnf("Could not add guest_counts column to bookings: %v", err)
@@ -110,6 +148,25 @@ func Init(cfg *config.Config) error {
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_help_submissions_email ON help_submissions(email)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_help_submissions_name ON help_submissions(name)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_help_submissions_subject ON help_submissions(subject)`)
+
+	// Idempotency key: clear empty strings, drop old non-partial index, create partial unique index
+	db.Exec("UPDATE bookings SET idempotency_key = NULL WHERE idempotency_key = ''")
+	db.Exec("DROP INDEX IF EXISTS idx_bookings_idempotency_key")
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_idem_partial ON bookings(idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key != ''")
+
+	// Performance indexes
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status) WHERE deleted_at IS NULL")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_bookings_session_id ON bookings(session_id) WHERE deleted_at IS NULL")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_bookings_product_id ON bookings(product_id) WHERE deleted_at IS NULL")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_pav_variant_date ON product_availabilities(variant_id, date)")
+
+	// Missing schema columns
+	db.Exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancellation_policy jsonb DEFAULT '{}'")
+	db.Exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancellation_deadline TIMESTAMPTZ")
+	db.Exec("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pax_pricing jsonb DEFAULT '{}'")
+	db.Exec("ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS pax_pricing jsonb DEFAULT '{}'")
+	db.Exec("ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS max_bookable_quantity INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS min_bookable_quantity INTEGER DEFAULT 1")
 
 	ensureTable("password_reset_tokens", `CREATE TABLE IF NOT EXISTS password_reset_tokens (
 		id SERIAL PRIMARY KEY,
@@ -420,6 +477,8 @@ func Migrate() error {
 		&models.SyncJob{},
 		&models.SyncJobFailedProduct{},
 		&models.RecentlyViewed{},
+		&models.Product{},
+		&models.ProductAvailability{},
 	)
 }
 

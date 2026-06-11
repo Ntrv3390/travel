@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "@/lib/env";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,8 +10,7 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "127.0.0.1";
 
-    const backendURL = process.env.API_URL || "http://api-gateway:8080";
-    const res = await fetch(`${backendURL}/api/v1/track/visit`, {
+    const res = await fetch(`${env.API_URL}/api/v1/track/visit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

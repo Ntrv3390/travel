@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 export interface Slot {
   inventoryId: string;
   startDateTime: string;
+  endDateTime?: string;
   slot?: string;
   availability: string;
   price?: number;

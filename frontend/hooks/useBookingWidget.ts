@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/components/ui/toaster";
@@ -13,6 +13,12 @@ interface BookingWidgetOptions {
   price: number;
   currency: string;
   imageUrl: string;
+  date?: string;
+  setDate?: (date: string) => void;
+  inventoryId?: string;
+  setInventoryId?: (inventoryId: string) => void;
+  startDateTime?: string;
+  endDateTime?: string;
 }
 
 export function useBookingWidget(options: BookingWidgetOptions) {
@@ -20,8 +26,14 @@ export function useBookingWidget(options: BookingWidgetOptions) {
   const { addItem, cart, updateCartItem } = useCart();
   const { toast } = useToast();
 
-  const [date, setDate] = useState("");
-  const [inventoryId, setInventoryId] = useState("");
+  const bookingInFlight = useRef(false);
+
+  const [internalDate, setInternalDate] = useState("");
+  const [internalInventoryId, setInternalInventoryId] = useState("");
+  const date = options.date ?? internalDate;
+  const setDate = options.setDate ?? setInternalDate;
+  const inventoryId = options.inventoryId ?? internalInventoryId;
+  const setInventoryId = options.setInventoryId ?? setInternalInventoryId;
   const [adultCount, setAdultCount] = useState(1);
   const [childCount, setChildCount] = useState(0);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
@@ -33,23 +45,6 @@ export function useBookingWidget(options: BookingWidgetOptions) {
 
   const canBook = Boolean(date && options.variantId);
 
-  const buildCheckoutParams = () => {
-    const guestCounts: Record<string, number> = { ADULT: adultCount };
-    if (childCount > 0) guestCounts.CHILD = childCount;
-    const params = new URLSearchParams({
-      experienceId: options.experienceId,
-      variantId: options.variantId,
-      inventoryId,
-      date,
-      title: options.title,
-      price: String(total),
-      currency: options.currency,
-      guestCounts: JSON.stringify(guestCounts),
-    });
-    if (options.imageUrl) params.set("imageUrl", options.imageUrl);
-    return params;
-  };
-
   const isInCart = () => {
     const items = cart?.items ?? [];
     return items.some(
@@ -60,11 +55,50 @@ export function useBookingWidget(options: BookingWidgetOptions) {
     );
   };
 
-  const handleBookNow = () => {
+  const handleBookNow = async () => {
     if (!canBook) return;
+    if (bookingInFlight.current) return;
+    bookingInFlight.current = true;
     setIsBooking(true);
-    const params = buildCheckoutParams();
-    router.push(`/checkout?${params.toString()}`);
+    try {
+      const sessionId = getCartSessionId();
+      const result = await addCartItem(sessionId, {
+        experienceId: options.experienceId,
+        productId: "",
+        variantId: options.variantId,
+        inventoryId,
+        inventoryType: "NORMAL",
+        date,
+        startDateTime: options.startDateTime ?? "",
+        endDateTime: options.endDateTime ?? "",
+        adults: adultCount,
+        children: childCount,
+        guestCounts: { ADULT: adultCount, ...(childCount > 0 ? { CHILD: childCount } : {}) },
+        title: options.title,
+        priceAmount: total,
+        currency: options.currency,
+        imageUrl: options.imageUrl,
+        inputFields: [],
+      });
+
+      if (result.error || !result.data) {
+        toast({ title: "Booking failed", description: result.error ?? "Could not add item to cart.", variant: "error" });
+        return;
+      }
+
+      const raw = result.data as unknown as Record<string, unknown>;
+      const cart = (raw.data as Record<string, unknown> ?? raw) as { items?: Array<Record<string, unknown>>; id?: string };
+      const itemId = cart.items?.find((item) => item.variantId === options.variantId && item.date === date)?.id ?? cart.items?.[cart.items.length - 1]?.id;
+
+      if (itemId) {
+        router.push(`/checkout?cartItemId=${itemId}`);
+      } else {
+        toast({ title: "Booking failed", description: "Unable to determine cart item for checkout.", variant: "error" });
+      }
+    } finally {
+      setIsBooking(false);
+      bookingInFlight.current = false;
+    }
   };
 
   const handleAddToCart = async () => {
@@ -104,13 +138,13 @@ export function useBookingWidget(options: BookingWidgetOptions) {
           inventoryId,
           inventoryType: "",
           date,
-          startDateTime: "",
-          endDateTime: "",
+          startDateTime: options.startDateTime ?? "",
+          endDateTime: options.endDateTime ?? "",
           adults: adultCount,
           children: childCount,
           guestCounts: { ADULT: adultCount, ...(childCount > 0 ? { CHILD: childCount } : {}) },
           title: options.title,
-          priceAmount: options.price,
+          priceAmount: total,
           currency: options.currency,
           imageUrl: options.imageUrl,
           addedAt: new Date().toISOString(),
@@ -136,7 +170,7 @@ export function useBookingWidget(options: BookingWidgetOptions) {
       date,
       adults: adultCount,
       children: childCount,
-      priceAmount: options.price,
+      priceAmount: total,
       currency: options.currency,
       title: options.title,
       imageUrl: options.imageUrl,
@@ -166,6 +200,5 @@ export function useBookingWidget(options: BookingWidgetOptions) {
     handleBookNow,
     handleAddToCart,
     handleAddToCartDirect,
-    buildCheckoutParams,
   };
 }

@@ -3,9 +3,11 @@ package services
 import (
 	"crypto/tls"
 	"fmt"
+	"html"
 	"net"
 	"net/smtp"
 	"strings"
+	"sync"
 
 	"github.com/travel/backend/pkg/logger"
 )
@@ -19,12 +21,48 @@ type SMTPConfig struct {
 	AdminEmail string
 }
 
+type MailJob struct {
+	SendFn func() error
+}
+
 type EmailService struct {
-	cfg SMTPConfig
+	cfg      SMTPConfig
+	queue    chan MailJob
+	stopOnce sync.Once
 }
 
 func NewEmailService(cfg SMTPConfig) *EmailService {
-	return &EmailService{cfg: cfg}
+	return &EmailService{
+		cfg:   cfg,
+		queue: make(chan MailJob, 100),
+	}
+}
+
+// StartWorker launches a background goroutine that drains the email queue.
+func (s *EmailService) StartWorker() {
+	go func() {
+		for job := range s.queue {
+			if err := job.SendFn(); err != nil {
+				logger.Errorf("Async email send failed: %v", err)
+			}
+		}
+	}()
+}
+
+// StopWorker closes the queue and waits for pending sends to complete.
+func (s *EmailService) StopWorker() {
+	s.stopOnce.Do(func() {
+		close(s.queue)
+	})
+}
+
+// Enqueue adds a mail job to the async queue for non-blocking send.
+func (s *EmailService) Enqueue(job MailJob) {
+	select {
+	case s.queue <- job:
+	default:
+		logger.Warnf("Email queue full, dropping mail job")
+	}
 }
 
 type BookingConfirmationData struct {
@@ -128,15 +166,15 @@ func buildBookingAdminNotificationHTML(data BookingAdminNotificationData) string
 </table>
 </body>
 </html>`,
-		data.BookingID,
-		data.HeadoutReference,
-		data.CustomerName,
-		data.CustomerEmail,
-		data.ExperienceName,
-		data.ExperienceDate,
+		sanitizeHTML(data.BookingID),
+		sanitizeHTML(data.HeadoutReference),
+		sanitizeHTML(data.CustomerName),
+		sanitizeHTML(data.CustomerEmail),
+		sanitizeHTML(data.ExperienceName),
+		sanitizeHTML(data.ExperienceDate),
 		data.Currency,
 		data.TotalAmount,
-		data.AdminURL,
+		sanitizeHTML(data.AdminURL),
 	)
 }
 
@@ -285,11 +323,11 @@ func buildMIMEMessage(from, to, subject, htmlBody string) string {
 func buildBookingConfirmationHTML(data BookingConfirmationData) string {
 	ticketSection := ""
 	if data.TicketURL != "" {
-		ticketSection = fmt.Sprintf(`<tr><td style="padding:12px 16px;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb;width:140px">Ticket:</td><td style="padding:12px 16px;color:#374151;border-bottom:1px solid #e5e7eb"><a href="%s" style="color:#4F46E5;text-decoration:none;font-weight:600">View Ticket</a></td></tr>`, data.TicketURL)
+		ticketSection = fmt.Sprintf(`<tr><td style="padding:12px 16px;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb;width:140px">Ticket:</td><td style="padding:12px 16px;color:#374151;border-bottom:1px solid #e5e7eb"><a href="%s" style="color:#4F46E5;text-decoration:none;font-weight:600">View Ticket</a></td></tr>`, sanitizeHTML(data.TicketURL))
 	}
 	ticketDataSection := ""
 	if data.TicketData != "" {
-		ticketDataSection = fmt.Sprintf(`<p style="margin:16px 0 0;color:#374151;font-size:14px;line-height:1.6;white-space:pre-wrap">%s</p>`, data.TicketData)
+		ticketDataSection = fmt.Sprintf(`<p style="margin:16px 0 0;color:#374151;font-size:14px;line-height:1.6;white-space:pre-wrap">%s</p>`, sanitizeHTML(data.TicketData))
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html>
@@ -334,11 +372,11 @@ func buildBookingConfirmationHTML(data BookingConfirmationData) string {
 </table>
 </body>
 </html>`,
-		data.CustomerName,
-		data.BookingID,
-		data.HeadoutReference,
-		data.ExperienceName,
-		data.ExperienceDate,
+		sanitizeHTML(data.CustomerName),
+		sanitizeHTML(data.BookingID),
+		sanitizeHTML(data.HeadoutReference),
+		sanitizeHTML(data.ExperienceName),
+		sanitizeHTML(data.ExperienceDate),
 		timeSection(data.ExperienceTime),
 		data.Quantity,
 		data.Currency,
@@ -389,7 +427,7 @@ func buildHelpNotificationHTML(data HelpSubmissionData) string {
 </table>
 </body>
 </html>`,
-		data.Name, data.Email, data.Email, data.Subject, data.Message)
+		sanitizeHTML(data.Name), sanitizeHTML(data.Email), sanitizeHTML(data.Email), sanitizeHTML(data.Subject), sanitizeHTML(data.Message))
 }
 
 func (s *EmailService) SendPasswordResetEmail(email, name, resetLink string) error {
@@ -452,7 +490,7 @@ func buildPasswordResetHTML(name, resetLink string) string {
 </td></tr>
 </table>
 </body>
-</html>`, name, resetLink, resetLink)
+</html>`, sanitizeHTML(name), sanitizeHTML(resetLink), sanitizeHTML(resetLink))
 }
 
 func buildHelpAcknowledgmentHTML(data HelpSubmissionData) string {
@@ -494,7 +532,7 @@ func buildHelpAcknowledgmentHTML(data HelpSubmissionData) string {
 </table>
 </body>
 </html>`,
-		data.Name, data.Subject)
+		sanitizeHTML(data.Name), sanitizeHTML(data.Subject))
 }
 
 func (s *EmailService) SendBookingTicket(email, name, bookingID string, ticketData []byte) error {
@@ -543,7 +581,7 @@ func buildTicketHTML(name, ticketData string) string {
 </td></tr>
 </table>
 </body>
-</html>`, name, ticketData)
+</html>`, sanitizeHTML(name), sanitizeHTML(ticketData))
 }
 
 func SendBookingConfirmation(data BookingConfirmationData) error {
@@ -556,4 +594,8 @@ func SendBookingTicket(email, name, bookingID string, ticketData []byte) error {
 	logger.Infof("TICKET EMAIL TO: %s | BOOKING: %s | SIZE: %d bytes", email, bookingID, len(ticketData))
 	logger.Infof("Ticket for %s sent successfully (simulated)", name)
 	return nil
+}
+
+func sanitizeHTML(s string) string {
+	return html.EscapeString(s)
 }

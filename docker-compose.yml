@@ -71,6 +71,11 @@ services:
       SYNC_RATE_BURST: ${SYNC_RATE_BURST:-20}
       SYNC_MAX_RETRIES: ${SYNC_MAX_RETRIES:-3}
       SYNC_RETRY_BASE_DELAY_MS: ${SYNC_RETRY_BASE_DELAY_MS:-500}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      ADMIN_BASE_URL: ${ADMIN_BASE_URL:-http://localhost:3000}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

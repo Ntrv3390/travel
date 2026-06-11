@@ -348,6 +348,7 @@ func (s *AvailabilitySyncService) fetchInventoryIDMap(ctx context.Context, varia
 	// Fallback: try v2 endpoint with tourId param
 	query2 := url.Values{}
 	query2.Set("tourId", variantID)
+	query2.Set("currencyCode", "USD")
 	query2.Set("startDateTime", startDate+"T00:00")
 	query2.Set("endDateTime", endDate+"T23:59")
 

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { getCartSessionId, addCartItem } from "@/lib/api";
 import { useProduct } from "@/context/ProductContext";
 import { useToast } from "@/components/ui/toaster";
+import { mutate } from "swr";
 
 type CalendarDay = {
   date: string;
@@ -597,27 +598,44 @@ export function PackageOptionsSection() {
                   if (result.error) {
                     toast({ title: "Failed to add to cart", description: result.error, variant: "error" });
                   } else {
+                    mutate(["/api/v1/cart", sessionId]);
                     toast({ title: "Added to cart", description: `${title} added to your cart.`, variant: "success" });
                     router.push("/cart");
                   }
                 }}>
                   {isAddingToCart ? "Adding..." : "Add to cart"}
                 </Button>
-                <Button className="rounded-xl bg-gradient-to-r from-blue-700 to-brand-600 text-white hover:from-blue-800 hover:to-brand-700" disabled={!canCheckout || isBooking} onClick={() => {
+                <Button className="rounded-xl bg-gradient-to-r from-blue-700 to-brand-600 text-white hover:from-blue-800 hover:to-brand-700" disabled={!canCheckout || isBooking} onClick={async () => {
                   if (!canCheckout || isBooking) return;
                   setIsBooking(true);
-                  const guestCounts = JSON.stringify({ ADULT: quantity });
-                  const params = new URLSearchParams({
+                  const sessionId = getCartSessionId();
+                  const result = await addCartItem(sessionId, {
                     experienceId,
                     variantId,
                     date: selectedDate,
-                    title,
-                    price: String(price),
+                    adults: quantity,
+                    children: 0,
+                    priceAmount: price,
                     currency,
+                    title,
                     imageUrl,
-                    guestCounts,
                   });
-                  router.push(`/checkout?${params.toString()}`);
+                  if (result.error) {
+                    setIsBooking(false);
+                    toast({ title: "Booking failed", description: result.error, variant: "error" });
+                    return;
+                  }
+                  mutate(["/api/v1/cart", sessionId]);
+                  const raw = result.data as unknown as Record<string, unknown>;
+                  const cart = (raw.data as Record<string, unknown> ?? raw) as { items?: Array<Record<string, unknown>>; id?: string };
+                  const newItem = cart.items?.find((i) => i.variantId === variantId);
+                  const itemId = (newItem?.id ?? cart.items?.[cart.items.length - 1]?.id) as string | undefined;
+                  if (itemId) {
+                    router.push(`/checkout?cartItemId=${itemId}`);
+                  } else {
+                    toast({ title: "Checkout failed", description: "Could not determine cart item for checkout. Please open your cart and try again.", variant: "error" });
+                    router.push("/cart");
+                  }
                 }}>
                   {isBooking ? "Redirecting..." : "Book now"}
                 </Button>

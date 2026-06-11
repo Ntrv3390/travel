@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ func dockerDial(_ context.Context, _, _ string) (net.Conn, error) {
 }
 
 func readDockerLogs(container string, tail int) ([]string, error) {
-	url := fmt.Sprintf("http://localhost/containers/%s/logs?stdout=true&stderr=true&tail=%d", container, tail)
+	url := fmt.Sprintf("http://localhost/containers/%s/logs?stdout=true&stderr=true&tail=%d", url.PathEscape(container), tail)
 
 	client := &http.Client{
 		Transport: &http.Transport{DialContext: dockerDial},
@@ -69,6 +70,10 @@ func (h *AdminHandler) GetDockerLogs(c *gin.Context) {
 	}
 
 	container := c.DefaultQuery("container", "travel-api-gateway")
+	if !isValidContainerName(container) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid container name"})
+		return
+	}
 	tailStr := c.DefaultQuery("tail", "500")
 	search := strings.TrimSpace(c.Query("search"))
 	level := strings.TrimSpace(c.Query("level"))
@@ -114,7 +119,8 @@ func (h *AdminHandler) StreamDockerLogs(c *gin.Context) {
 
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "triipzy-jwt-secret-change-in-production"
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server misconfiguration"})
+		return
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -141,6 +147,10 @@ func (h *AdminHandler) StreamDockerLogs(c *gin.Context) {
 	}
 
 	container := c.DefaultQuery("container", "travel-api-gateway")
+	if !isValidContainerName(container) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid container name"})
+		return
+	}
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -148,7 +158,7 @@ func (h *AdminHandler) StreamDockerLogs(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Flush()
 
-	url := fmt.Sprintf("http://localhost/containers/%s/logs?stdout=true&stderr=true&follow=true&tail=0", container)
+	url := fmt.Sprintf("http://localhost/containers/%s/logs?stdout=true&stderr=true&follow=true&tail=0", url.PathEscape(container))
 
 	client := &http.Client{
 		Transport: &http.Transport{DialContext: dockerDial},
@@ -196,4 +206,16 @@ func (h *AdminHandler) StreamDockerLogs(c *gin.Context) {
 		fmt.Fprintf(c.Writer, "data: %s\n\n", line)
 		c.Writer.Flush()
 	}
+}
+
+func isValidContainerName(name string) bool {
+	if name == "" || len(name) > 255 {
+		return false
+	}
+	for _, ch := range name {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.') {
+			return false
+		}
+	}
+	return true
 }

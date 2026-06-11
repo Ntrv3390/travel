@@ -44,9 +44,12 @@ type Booking struct {
 	VoucherURL            string `json:"voucher_url"`
 	Tickets               string `gorm:"type:jsonb" json:"tickets"`
 
-	IdempotencyKey         string `gorm:"uniqueIndex" json:"idempotency_key"`
-	SpecialRequests        string `gorm:"type:text" json:"special_requests"`
-	ConfirmationEmailSent  bool   `gorm:"default:false" json:"confirmation_email_sent"`
+	IdempotencyKey         *string `gorm:"uniqueIndex;default:null" json:"idempotency_key"`
+	SpecialRequests        string  `gorm:"type:text" json:"special_requests"`
+	ConfirmationEmailSent  bool    `gorm:"default:false" json:"confirmation_email_sent"`
+
+	CancellationPolicy string `gorm:"type:jsonb" json:"cancellation_policy"`
+	PaxPricing         string `gorm:"type:jsonb" json:"pax_pricing"`
 
 	BookingDate     time.Time      `gorm:"not null;default:now()" json:"booking_date"`
 	ExperienceDate  time.Time      `json:"experience_date"`

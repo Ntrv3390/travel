@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,12 +34,20 @@ type CartItem struct {
 	Currency      string  `json:"currency,omitempty"`
 	Title         string  `json:"title,omitempty"`
 	ImageURL      string  `json:"imageUrl,omitempty"`
+	InputFields   []map[string]interface{} `json:"inputFields,omitempty"`
+	PaxMin        int     `json:"paxMin,omitempty"`
+	PaxMax        int     `json:"paxMax,omitempty"`
+	OriginalPriceAmount float64 `json:"originalPriceAmount,omitempty"`
+	OriginalCurrency    string  `json:"originalCurrency,omitempty"`
+	IdempotencyKey      string  `json:"-"`
 	AddedAt       string  `json:"addedAt"`
 }
 
 type Cart struct {
 	ID        string     `json:"id"`
 	SessionID string     `json:"sessionId"`
+	AuthType  string     `json:"authType"`
+	ExpiresAt string     `json:"expiresAt"`
 	Items     []CartItem `json:"items"`
 	CreatedAt string     `json:"createdAt"`
 	UpdatedAt string     `json:"updatedAt"`
@@ -52,21 +61,44 @@ func NewCartService(db *gorm.DB) *CartService {
 	return &CartService{db: db}
 }
 
-func (s *CartService) GetOrCreateCart(sessionID string) *Cart {
+func (s *CartService) GetOrCreateCart(sessionID string, authType ...string) *Cart {
 	sessionID = sanitizeSessionID(sessionID)
 	if sessionID == "" {
 		sessionID = uuid.New().String()
 	}
 
 	var model models.Cart
-	err := s.db.Where("session_id = ?", sessionID).Preload("Items").First(&model).Error
+	err := s.db.Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).Preload("Items").First(&model).Error
 	if err == nil {
 		return s.modelToCart(&model)
 	}
 
 	now := time.Now()
+	at := "anonymous"
+	if len(authType) > 0 && authType[0] == "user" {
+		at = "user"
+	}
+	expiresAt := now.Add(15 * 24 * time.Hour)
+	if at == "user" {
+		expiresAt = now.Add(60 * 24 * time.Hour)
+	}
+
+	// If a cart row exists for the session but has expired, revive it instead of failing due to unique session index.
+	if err := s.db.Where("session_id = ?", sessionID).First(&model).Error; err == nil {
+		model.ExpiresAt = expiresAt
+		if model.AuthType == "" {
+			model.AuthType = at
+		}
+		model.UpdatedAt = now
+		if err := s.db.Save(&model).Error; err == nil {
+			return s.modelToCart(&model)
+		}
+	}
+
 	model = models.Cart{
 		SessionID: sessionID,
+		AuthType:  at,
+		ExpiresAt: expiresAt,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -94,61 +126,65 @@ func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartIt
 		return nil, fmt.Errorf("date is required")
 	}
 
-	var model models.Cart
-	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
-		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
+	var cart *Cart
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var model models.Cart
+		if err := tx.Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).First(&model).Error; err != nil {
+			return fmt.Errorf("cart not found for session: %s", sessionID)
+		}
+
+		itemID := uuid.New().String()
+		cartItem := models.CartItem{
+			CartID:        model.ID,
+			UUID:          itemID,
+			ExperienceID:  item.ExperienceID,
+			ProductID:     item.ProductID,
+			VariantID:     item.VariantID,
+			InventoryID:   item.InventoryID,
+			InventoryType: item.InventoryType,
+			Date:          item.Date,
+			StartDateTime: item.StartDateTime,
+			EndDateTime:   item.EndDateTime,
+			Adults:        item.Adults,
+			Children:      item.Children,
+			GuestCounts:   encodeGuestCounts(item.GuestCounts),
+			FirstName:     item.FirstName,
+			LastName:      item.LastName,
+			Email:         item.Email,
+			Phone:         item.Phone,
+			PriceAmount:   item.PriceAmount,
+			Currency:      item.Currency,
+			Title:         item.Title,
+			ImageURL:      item.ImageURL,
+			InputFields:   encodeInputFields(item.InputFields),
+			PaxMin:        item.PaxMin,
+			PaxMax:        item.PaxMax,
+			OriginalPriceAmount: item.OriginalPriceAmount,
+			OriginalCurrency:    item.OriginalCurrency,
+		}
+
+		if err := tx.Create(&cartItem).Error; err != nil {
+			return fmt.Errorf("failed to add item: %w", err)
+		}
+
+		if err := tx.Model(&model).Update("updated_at", time.Now()).Error; err != nil {
+			return fmt.Errorf("failed to update cart timestamp: %w", err)
+		}
+
+		tx.Preload("Items").First(&model, model.ID)
+		cart = s.modelToCart(&model)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	itemID := uuid.New().String()
-	cartItem := models.CartItem{
-		CartID:        model.ID,
-		UUID:          itemID,
-		ExperienceID:  item.ExperienceID,
-		ProductID:     item.ProductID,
-		VariantID:     item.VariantID,
-		InventoryID:   item.InventoryID,
-		InventoryType: item.InventoryType,
-		Date:          item.Date,
-		StartDateTime: item.StartDateTime,
-		EndDateTime:   item.EndDateTime,
-		Adults:        item.Adults,
-		Children:      item.Children,
-		GuestCounts:   encodeGuestCounts(item.GuestCounts),
-		FirstName:     item.FirstName,
-		LastName:      item.LastName,
-		Email:         item.Email,
-		Phone:         item.Phone,
-		PriceAmount:   item.PriceAmount,
-		Currency:      item.Currency,
-		Title:         item.Title,
-		ImageURL:      item.ImageURL,
-	}
-
-	if err := s.db.WithContext(ctx).Create(&cartItem).Error; err != nil {
-		return nil, fmt.Errorf("failed to add item: %w", err)
-	}
-
-	s.db.Model(&model).Update("updated_at", time.Now())
-
-	s.db.Preload("Items").First(&model, model.ID)
-	cart := s.modelToCart(&model)
-
-	logger.Infof("Cart %s: added item %s (variant: %s, date: %s)", sessionID, itemID, item.VariantID, item.Date)
+	logger.Infof("Cart %s: added item %s (variant: %s, date: %s)", sessionID, cart.Items[0].ID, item.VariantID, item.Date)
 	return cart, nil
 }
 
 func (s *CartService) UpdateItem(ctx context.Context, sessionID string, itemID string, updates map[string]interface{}) (*Cart, error) {
 	sessionID = sanitizeSessionID(sessionID)
-
-	var model models.Cart
-	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
-		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
-	}
-
-	var cartItem models.CartItem
-	if err := s.db.WithContext(ctx).Where("cart_id = ? AND uuid = ?", model.ID, itemID).First(&cartItem).Error; err != nil {
-		return nil, fmt.Errorf("item %s not found in cart", itemID)
-	}
 
 	updateMap := make(map[string]interface{})
 
@@ -185,36 +221,65 @@ func (s *CartService) UpdateItem(ctx context.Context, sessionID string, itemID s
 		return nil, fmt.Errorf("no valid fields to update")
 	}
 
-	if err := s.db.WithContext(ctx).Model(&cartItem).Updates(updateMap).Error; err != nil {
-		return nil, fmt.Errorf("failed to update item: %w", err)
+	var cart *Cart
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var model models.Cart
+		if err := tx.Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).First(&model).Error; err != nil {
+			return fmt.Errorf("cart not found for session: %s", sessionID)
+		}
+
+		var cartItem models.CartItem
+		if err := tx.Where("cart_id = ? AND uuid = ?", model.ID, itemID).First(&cartItem).Error; err != nil {
+			return fmt.Errorf("item %s not found in cart", itemID)
+		}
+
+		if err := tx.Model(&cartItem).Updates(updateMap).Error; err != nil {
+			return fmt.Errorf("failed to update item: %w", err)
+		}
+
+		if err := tx.Model(&model).Update("updated_at", time.Now()).Error; err != nil {
+			return fmt.Errorf("failed to update cart timestamp: %w", err)
+		}
+
+		tx.Preload("Items").First(&model, model.ID)
+		cart = s.modelToCart(&model)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	s.db.Model(&model).Update("updated_at", time.Now())
-
-	s.db.Preload("Items").First(&model, model.ID)
-	return s.modelToCart(&model), nil
+	return cart, nil
 }
 
 func (s *CartService) RemoveItem(ctx context.Context, sessionID string, itemID string) (*Cart, error) {
 	sessionID = sanitizeSessionID(sessionID)
 
-	var model models.Cart
-	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
-		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
-	}
+	var cart *Cart
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var model models.Cart
+		if err := tx.Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).First(&model).Error; err != nil {
+			return fmt.Errorf("cart not found for session: %s", sessionID)
+		}
 
-	result := s.db.WithContext(ctx).Where("cart_id = ? AND uuid = ?", model.ID, itemID).Delete(&models.CartItem{})
-	if result.Error != nil {
-		return nil, fmt.Errorf("failed to remove item: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return nil, fmt.Errorf("item %s not found in cart", itemID)
-	}
+		result := tx.Where("cart_id = ? AND uuid = ?", model.ID, itemID).Delete(&models.CartItem{})
+		if result.Error != nil {
+			return fmt.Errorf("failed to remove item: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("item %s not found in cart", itemID)
+		}
 
-	s.db.Model(&model).Update("updated_at", time.Now())
+		if err := tx.Model(&model).Update("updated_at", time.Now()).Error; err != nil {
+			return fmt.Errorf("failed to update cart timestamp: %w", err)
+		}
 
-	s.db.Preload("Items").First(&model, model.ID)
-	cart := s.modelToCart(&model)
+		tx.Preload("Items").First(&model, model.ID)
+		cart = s.modelToCart(&model)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	logger.Infof("Cart %s: removed item %s", sessionID, itemID)
 	return cart, nil
@@ -224,33 +289,85 @@ func (s *CartService) GetCart(ctx context.Context, sessionID string) (*Cart, err
 	sessionID = sanitizeSessionID(sessionID)
 
 	var model models.Cart
-	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).Preload("Items").First(&model).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).Preload("Items").First(&model).Error; err != nil {
 		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
 	}
 
 	return s.modelToCart(&model), nil
 }
 
-func (s *CartService) ClearCart(ctx context.Context, sessionID string) error {
+func (s *CartService) RemoveExpiredCarts() {
+	s.db.Where("expires_at <= ?", time.Now()).Delete(&models.Cart{})
+}
+
+func (s *CartService) GetCartItem(ctx context.Context, sessionID string, itemUUID string) (*CartItem, error) {
 	sessionID = sanitizeSessionID(sessionID)
 
 	var model models.Cart
-	if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&model).Error; err != nil {
-		return fmt.Errorf("cart not found for session: %s", sessionID)
+	if err := s.db.WithContext(ctx).Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).First(&model).Error; err != nil {
+		return nil, fmt.Errorf("cart not found for session: %s", sessionID)
 	}
 
-	if err := s.db.WithContext(ctx).Where("cart_id = ?", model.ID).Delete(&models.CartItem{}).Error; err != nil {
-		return fmt.Errorf("failed to clear cart items: %w", err)
+	var cartItem models.CartItem
+	if err := s.db.WithContext(ctx).Where("cart_id = ? AND uuid = ?", model.ID, itemUUID).First(&cartItem).Error; err != nil {
+		return nil, fmt.Errorf("item %s not found in cart", itemUUID)
 	}
 
-	s.db.Model(&model).Update("updated_at", time.Now())
-	return nil
+	item := &CartItem{
+		ID:            cartItem.UUID,
+		ExperienceID:  cartItem.ExperienceID,
+		ProductID:     cartItem.ProductID,
+		VariantID:     cartItem.VariantID,
+		InventoryID:   cartItem.InventoryID,
+		InventoryType: cartItem.InventoryType,
+		Date:          cartItem.Date,
+		StartDateTime: cartItem.StartDateTime,
+		EndDateTime:   cartItem.EndDateTime,
+		Adults:        cartItem.Adults,
+		Children:      cartItem.Children,
+		GuestCounts:   parseGuestCounts(cartItem.GuestCounts),
+		FirstName:     cartItem.FirstName,
+		LastName:      cartItem.LastName,
+		Email:         cartItem.Email,
+		Phone:         cartItem.Phone,
+		PriceAmount:   cartItem.PriceAmount,
+		Currency:      cartItem.Currency,
+		Title:         cartItem.Title,
+		ImageURL:      cartItem.ImageURL,
+		InputFields:   parseInputFields(cartItem.InputFields),
+		PaxMin:        cartItem.PaxMin,
+		PaxMax:        cartItem.PaxMax,
+		OriginalPriceAmount: cartItem.OriginalPriceAmount,
+		OriginalCurrency:    cartItem.OriginalCurrency,
+		AddedAt:       cartItem.CreatedAt.Format(time.RFC3339),
+	}
+
+	return item, nil
+}
+
+func (s *CartService) ClearCart(ctx context.Context, sessionID string) error {
+	sessionID = sanitizeSessionID(sessionID)
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var model models.Cart
+		if err := tx.Where("session_id = ? AND expires_at > ?", sessionID, time.Now()).First(&model).Error; err != nil {
+			return fmt.Errorf("cart not found for session: %s", sessionID)
+		}
+
+		if err := tx.Where("cart_id = ?", model.ID).Delete(&models.CartItem{}).Error; err != nil {
+			return fmt.Errorf("failed to clear cart items: %w", err)
+		}
+
+		return tx.Model(&model).Update("updated_at", time.Now()).Error
+	})
 }
 
 func (s *CartService) modelToCart(m *models.Cart) *Cart {
 	cart := &Cart{
 		ID:        fmt.Sprintf("%d", m.ID),
 		SessionID: m.SessionID,
+		AuthType:  m.AuthType,
+		ExpiresAt: m.ExpiresAt.Format(time.RFC3339),
 		Items:     make([]CartItem, 0, len(m.Items)),
 		CreatedAt: m.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: m.UpdatedAt.Format(time.RFC3339),
@@ -277,6 +394,11 @@ func (s *CartService) modelToCart(m *models.Cart) *Cart {
 			Currency:      item.Currency,
 			Title:         item.Title,
 			ImageURL:      item.ImageURL,
+			InputFields:   parseInputFields(item.InputFields),
+			PaxMin:        item.PaxMin,
+			PaxMax:        item.PaxMax,
+			OriginalPriceAmount: item.OriginalPriceAmount,
+			OriginalCurrency:    item.OriginalCurrency,
 			AddedAt:       item.CreatedAt.Format(time.RFC3339),
 		})
 	}
@@ -284,6 +406,10 @@ func (s *CartService) modelToCart(m *models.Cart) *Cart {
 }
 
 func sanitizeSessionID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
 	if len(id) > 256 {
 		id = id[:256]
 	}
@@ -308,4 +434,24 @@ func parseGuestCounts(data string) map[string]int {
 	}
 	json.Unmarshal([]byte(data), &counts)
 	return counts
+}
+
+func encodeInputFields(fields []map[string]interface{}) string {
+	if fields == nil {
+		return "[]"
+	}
+	b, err := json.Marshal(fields)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func parseInputFields(data string) []map[string]interface{} {
+	fields := make([]map[string]interface{}, 0)
+	if data == "" {
+		return fields
+	}
+	json.Unmarshal([]byte(data), &fields)
+	return fields
 }

@@ -72,6 +72,10 @@ func main() {
 
 	rl := middleware.NewRateLimiter(300, time.Minute)
 	router.Use(rl.RateLimit())
+	router.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2*1024*1024)
+		c.Next()
+	})
 
 	// Health check routes
 	healthHandler := handlers.NewHealthHandler()
@@ -86,7 +90,7 @@ func main() {
 	router.GET("/api/v1/experiences-availability/:id", expHandler.GetAvailability)
 	router.GET("/api/v1/experiences/search", expHandler.SearchExperiences)
 
-	// Email service
+	// Email service with async worker
 	emailSvc := services.NewEmailService(services.SMTPConfig{
 		Host:       cfg.SMTPHost,
 		Port:       cfg.SMTPPort,
@@ -95,6 +99,7 @@ func main() {
 		From:       cfg.SMTPFrom,
 		AdminEmail: cfg.AdminEmail,
 	})
+	emailSvc.StartWorker()
 
 	// Auth routes
 	authHandler := handlers.NewAuthHandler(database.GetDB(), emailSvc)
@@ -265,6 +270,7 @@ func main() {
 	cartGroup := router.Group("/api/v1/cart")
 	{
 		cartGroup.GET("", cartHandler.GetCart)
+		cartGroup.GET("/items/:uuid", cartHandler.GetCartItem)
 		cartGroup.POST("/items", cartHandler.AddItem)
 		cartGroup.PATCH("/items/:id", cartHandler.UpdateItem)
 		cartGroup.DELETE("/items/:id", cartHandler.RemoveItem)
@@ -296,14 +302,15 @@ func main() {
 	}
 
 	// Setup cron jobs
-	setupCronJobs(cfg, gttdServices, syncService)
+	setupCronJobs(cfg, gttdServices, syncService, cartSvc)
 
 	// Create HTTP server
 	server := &http.Server{
 		Addr:           ":" + cfg.Port,
 		Handler:        router,
-		ReadTimeout:    600 * time.Second,
-		WriteTimeout:   600 * time.Second,
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   60 * time.Second,
+		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
@@ -324,6 +331,8 @@ func main() {
 	logger.Info("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	emailSvc.StopWorker()
 
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Errorf("Server forced to shutdown: %v", err)
@@ -428,8 +437,18 @@ func initGTTDServices() (*GTTDServices, error) {
 	}, nil
 }
 
-func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *synclib.Service) {
+func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *synclib.Service, cartSvc *services.CartService) {
 	c := cron.New()
+
+	// Cart cleanup cron job (every hour)
+	_, err := c.AddFunc("0 * * * *", func() {
+		cartSvc.RemoveExpiredCarts()
+	})
+	if err != nil {
+		logger.Warnf("Failed to schedule cart cleanup cron job: %v", err)
+	} else {
+		logger.Infof("Cart cleanup cron job scheduled: 0 * * * *")
+	}
 
 	// GTTD feed upload cron job
 	if gttdServices != nil {
@@ -466,7 +485,7 @@ func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *
 	if availabilityCronSchedule == "" {
 		availabilityCronSchedule = "0 * * * *" // Default: every hour
 	}
-	_, err := c.AddFunc(availabilityCronSchedule, availabilitySyncCronFn)
+	_, err = c.AddFunc(availabilityCronSchedule, availabilitySyncCronFn)
 	if err != nil {
 		logger.Warnf("Failed to schedule availability sync cron job: %v", err)
 	} else {
@@ -501,8 +520,13 @@ func seedUsers(db *gorm.DB) {
 		},
 	}
 
+	adminPass := os.Getenv("INITIAL_ADMIN_PASSWORD")
+	if adminPass == "" {
+		adminPass = "admin"
+	}
+
 	for _, u := range users {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
 		if err != nil {
 			logger.Errorf("Failed to hash password for seed user %s: %v", u.Email, err)
 			continue
@@ -521,7 +545,7 @@ func corsMiddleware() gin.HandlerFunc {
 		allowedOrigin = os.Getenv("NEXT_PUBLIC_SITE_URL")
 	}
 	if allowedOrigin == "" {
-		allowedOrigin = "*"
+		panic("FRONTEND_URL or NEXT_PUBLIC_SITE_URL must be set")
 	}
 
 	return func(c *gin.Context) {

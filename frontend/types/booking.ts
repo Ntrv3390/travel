@@ -49,6 +49,11 @@ export interface CartItem {
   priceAmount: number;
   currency: string;
   imageUrl: string;
+  inputFields?: Record<string, unknown>[];
+  paxMin?: number;
+  paxMax?: number | null;
+  originalPriceAmount?: number;
+  originalCurrency?: string;
   addedAt: string;
 }
 

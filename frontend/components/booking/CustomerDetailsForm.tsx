@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { buildCheckoutSchema, type InputFieldDef } from "@/lib/validations";
 
 interface CustomerDetailsFormProps {
@@ -29,11 +30,7 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
       }
       const defaults: Record<string, unknown> = {};
       for (const field of inputFields) {
-        if (field.dataType === "BOOL") {
-          defaults[field.id] = false;
-        } else {
-          defaults[field.id] = "";
-        }
+        defaults[field.id] = field.dataType === "BOOL" ? false : "";
       }
       return defaults;
     }, [inputFields]),
@@ -43,9 +40,7 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
 
   useEffect(() => {
     if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
@@ -54,18 +49,19 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         {isFallback ? (
           <>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel className="text-sm font-medium">First Name</FormLabel>
                     <FormControl>
                       <Input
+                        className="h-12 rounded-xl text-base"
                         placeholder="John"
                         value={field.value as string}
                         onChange={field.onChange}
@@ -84,9 +80,10 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel className="text-sm font-medium">Last Name</FormLabel>
                     <FormControl>
                       <Input
+                        className="h-12 rounded-xl text-base"
                         placeholder="Doe"
                         value={field.value as string}
                         onChange={field.onChange}
@@ -101,15 +98,17 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                 )}
               />
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-sm font-medium">Email Address</FormLabel>
                     <FormControl>
                       <Input
+                        className="h-12 rounded-xl text-base"
                         type="email"
                         placeholder="john@example.com"
                         value={field.value as string}
@@ -129,9 +128,10 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel className="text-sm font-medium">Phone Number</FormLabel>
                     <FormControl>
                       <Input
+                        className="h-12 rounded-xl text-base"
                         type="tel"
                         placeholder="+1 555 0123"
                         value={field.value as string}
@@ -147,6 +147,31 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="specialRequests"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">
+                    Special Requests{" "}
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <textarea
+                      className="flex min-h-[96px] w-full rounded-xl border border-input bg-background px-4 py-3 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                      placeholder="Dietary requirements, accessibility needs, etc."
+                      value={field.value as string}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      disabled={field.disabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </>
         ) : (
           inputFields.map((f) => (
@@ -156,7 +181,7 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
               name={f.id}
               render={({ field, fieldState }) => (
                 <FormItem>
-                  <FormLabel>
+                  <FormLabel className="text-sm font-medium">
                     {f.name}
                     {f.validation?.required && <span className="ml-1 text-destructive">*</span>}
                   </FormLabel>
@@ -169,7 +194,7 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                         value={typeof field.value === "string" ? field.value : ""}
                         onValueChange={field.onChange}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-12 rounded-xl text-base">
                           <SelectValue placeholder={`Select ${f.name}`} />
                         </SelectTrigger>
                         <SelectContent>
@@ -181,7 +206,7 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                         </SelectContent>
                       </Select>
                     ) : f.dataType === "BOOL" ? (
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label className="flex items-center gap-3 cursor-pointer rounded-xl border px-4 py-3">
                         <input
                           type="checkbox"
                           checked={!!field.value}
@@ -192,21 +217,20 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
                       </label>
                     ) : (
                       <Input
+                        className="h-12 rounded-xl text-base"
                         type={
-                          f.dataType === "INT" ? "number" :
-                          f.dataType === "FLOAT" ? "number" :
-                          "text"
+                          f.dataType === "INT" || f.dataType === "FLOAT" ? "number" : "text"
                         }
                         {...(f.dataType === "FLOAT" ? { step: "any" } : {})}
                         placeholder={`Enter ${f.name.toLowerCase()}`}
                         value={field.value as string | number}
                         onChange={(e) => {
                           if (f.dataType === "INT") {
-                            const val = e.target.value === "" ? "" : parseInt(e.target.value, 10);
-                            field.onChange(val === "" ? "" : (isNaN(val) ? "" : val));
+                            const v = parseInt(e.target.value, 10);
+                            field.onChange(e.target.value === "" ? "" : isNaN(v) ? "" : v);
                           } else if (f.dataType === "FLOAT") {
-                            const val = e.target.value === "" ? "" : parseFloat(e.target.value);
-                            field.onChange(val === "" ? "" : (isNaN(val) ? "" : val));
+                            const v = parseFloat(e.target.value);
+                            field.onChange(e.target.value === "" ? "" : isNaN(v) ? "" : v);
                           } else {
                             field.onChange(e.target.value);
                           }
@@ -222,8 +246,16 @@ export function CustomerDetailsForm({ submitLabel, submitting, inputFields, onSu
             />
           ))
         )}
-        <Button className="w-full" type="submit" disabled={submitting}>
-          {submitting ? "Processing..." : submitLabel}
+
+        <Button className="w-full h-14 rounded-xl text-base font-semibold" type="submit" disabled={submitting}>
+          {submitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing…
+            </>
+          ) : (
+            submitLabel
+          )}
         </Button>
       </form>
     </Form>

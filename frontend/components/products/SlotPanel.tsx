@@ -11,6 +11,8 @@ import { useProductDetail } from "@/context/ProductDetailContext"
 import { useToast } from "@/components/ui/toaster"
 import { cn } from "@/lib/utils"
 import type { SlotItem } from "@/types/product"
+import { addCartItem, getCartSessionId } from "@/lib/api"
+import { mutate } from "swr"
 
 interface SlotPanelProps {
   slots: SlotItem[]
@@ -215,27 +217,48 @@ export function SlotPanel({
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  const handleBookNow = (slot: SlotItem) => {
-    const totalPrice = calculateTotalPrice(slot)
+  const handleBookNow = async (slot: SlotItem) => {
     const totalBookingPrice = calculateTotalBookingPrice(slot)
-    const params = new URLSearchParams({
-      productId,
-      productName: productName ?? "Experience",
-      variantId: String(variantId),
-      variantName: variantName ?? "Standard",
-      inventoryId: slot.id,
-      inventoryType: "NORMAL",
-      date: selectedDate,
-      startDateTime: slot.startDateTime,
-      endDateTime: slot.endDateTime,
-      guestCounts: JSON.stringify(effectiveGuests),
-      price: String(totalPrice),
-      bookingPrice: String(totalBookingPrice),
-      currency: currency ?? "USD",
-      title: variantName ?? productName ?? "Experience",
-      inputFields: inputFields ? JSON.stringify(inputFields) : "",
-    })
-    router.push(`/checkout?${params.toString()}`)
+    try {
+      const sessionId = getCartSessionId()
+      const result = await addCartItem(sessionId, {
+        experienceId: productId,
+        productId,
+        variantId: String(variantId),
+        inventoryId: slot.id,
+        inventoryType: "NORMAL",
+        date: selectedDate,
+        startDateTime: slot.startDateTime,
+        endDateTime: slot.endDateTime,
+        adults: effectiveGuests.ADULT ?? 0,
+        children: effectiveGuests.CHILD ?? 0,
+        guestCounts: effectiveGuests,
+        title: variantName ?? productName ?? "Experience",
+        priceAmount: totalBookingPrice,
+        currency: currency ?? "USD",
+        imageUrl,
+        inputFields: inputFields ?? [],
+      })
+      mutate(["/api/v1/cart", sessionId])
+      if (result.error || !result.data) {
+        toast({ title: "Booking failed", description: result.error ?? "Could not add item. Please try again.", variant: "error" })
+        return
+      }
+      const raw = result.data as unknown as Record<string, unknown>
+      const cart = (raw.data as Record<string, unknown> ?? raw) as { items?: Array<Record<string, unknown>>; id?: string }
+      const newItem = cart.items?.find(
+        (i) => i.variantId === String(variantId) && i.inventoryId === slot.id
+      )
+      const itemId = newItem?.id ?? cart.items?.[cart.items.length - 1]?.id
+      if (itemId) {
+        router.push(`/checkout?cartItemId=${itemId}`)
+      } else {
+        toast({ title: "Checkout failed", description: "Could not determine cart item for checkout. Please open your cart and try again.", variant: "error" })
+        router.push("/cart")
+      }
+    } catch (err) {
+      toast({ title: "Booking failed", description: err instanceof Error ? err.message : "Could not process booking.", variant: "error" })
+    }
   }
 
   const handleAddToCart = async (slot: SlotItem) => {
@@ -287,6 +310,7 @@ export function SlotPanel({
           priceAmount: totalBookingPrice,
           currency: currency ?? "USD",
           imageUrl,
+          inputFields: inputFields ?? [],
           addedAt: new Date().toISOString(),
         })
         toast({ title: "Added to cart", description: `${variantName ?? productName ?? "Experience"} added to your cart.`, variant: "success" })

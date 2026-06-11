@@ -28,7 +28,8 @@ func JWTAuth() gin.HandlerFunc {
 		tokenString := parts[1]
 		secret := os.Getenv("JWT_SECRET")
 		if secret == "" {
-			secret = "triipzy-jwt-secret-change-in-production"
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "server misconfiguration"})
+			return
 		}
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

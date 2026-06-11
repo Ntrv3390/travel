@@ -20,12 +20,15 @@ const (
 	MetadataSyncThreshold = 24 * time.Hour
 	// AvailabilitySyncThreshold is the duration after which availability is considered stale.
 	AvailabilitySyncThreshold = 1 * time.Hour
+	// SyncJobTimeout is the maximum duration for a single sync job.
+	SyncJobTimeout = 30 * time.Minute
 )
 
 // Service orchestrates concurrent product synchronization with the Headout API.
 type Service struct {
 	db             *gorm.DB
 	headoutProxy   *services.HeadoutProxyService
+	rateLimiter    *RateLimiter
 	workerCount    int
 	jobService     *JobService
 
@@ -36,9 +39,11 @@ type Service struct {
 
 // NewService creates a new sync service with configured worker pool.
 func NewService(cfg *config.Config, db *gorm.DB, headoutProxy *services.HeadoutProxyService) *Service {
+	rl := NewRateLimiter(cfg.SyncRateLimitPerSec, cfg.SyncRateBurst)
 	return &Service{
 		db:           db,
 		headoutProxy: headoutProxy,
+		rateLimiter:  rl,
 		workerCount:  cfg.SyncWorkerCount,
 		jobService:   NewJobService(db),
 		activeJobs:   make(map[string]context.CancelFunc),
@@ -186,7 +191,13 @@ func (s *Service) GetMetrics(ctx context.Context, jobID string) (map[string]inte
 // --- Internal methods ---
 
 func (s *Service) runSyncJob(jobID string, jobs []Job, handler func(ctx context.Context, job Job) error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf("Recovered from panic in availability sync: %v", r)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), SyncJobTimeout)
 
 	s.activeJobsMu.Lock()
 	s.activeJobs[jobID] = cancel
@@ -227,6 +238,9 @@ func (s *Service) runSyncJob(jobID string, jobs []Job, handler func(ctx context.
 }
 
 func (s *Service) processMetadata(ctx context.Context, job Job) error {
+	if err := s.rateLimiter.Wait(ctx); err != nil {
+		return fmt.Errorf("rate limit wait: %w", err)
+	}
 	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(job.HeadoutID))
 	resp, err := s.headoutProxy.Get(ctx, path, nil, true)
 	if err != nil {
@@ -251,6 +265,9 @@ func (s *Service) processMetadata(ctx context.Context, job Job) error {
 }
 
 func (s *Service) processAvailability(ctx context.Context, job Job) error {
+	if err := s.rateLimiter.Wait(ctx); err != nil {
+		return fmt.Errorf("rate limit wait: %w", err)
+	}
 	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(job.HeadoutID))
 	resp, err := s.headoutProxy.Get(ctx, path, nil, true)
 	if err != nil {
@@ -314,6 +331,10 @@ func (s *Service) syncProductAvailabilities(ctx context.Context, job Job, pData 
 			variantTitle = ExtractString(variant, "name")
 		}
 
+		if err := s.rateLimiter.Wait(ctx); err != nil {
+			logger.Warnf("Rate limit wait cancelled for variant %s: %v", variantID, err)
+			continue
+		}
 		availPath := fmt.Sprintf("/v2/products/%s/variants/%s/availabilities/", url.PathEscape(headoutID), url.PathEscape(variantID))
 		availResp, err := s.headoutProxy.Get(ctx, availPath, nil, true)
 		if err != nil {

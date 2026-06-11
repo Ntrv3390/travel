@@ -1,8 +1,9 @@
 "use client"
 
-import { createContext, useContext, useMemo, type ReactNode } from "react"
+import { createContext, useContext, useMemo, useState, useEffect, type ReactNode } from "react"
 import { useSearchParams } from "next/navigation"
 import type { ProductVariant } from "@/types/product"
+import { getCartItem, getCartSessionId } from "@/lib/api"
 
 export type InputField = NonNullable<ProductVariant["inputFields"]>[number]
 
@@ -25,7 +26,9 @@ export interface CheckoutInfo {
   bookingPrice: number
   guests: number
   cartItemId: string
+  imageUrl: string
   inputFields: InputField[]
+  loading: boolean
 }
 
 const defaultCheckout: CheckoutInfo = {
@@ -47,7 +50,9 @@ const defaultCheckout: CheckoutInfo = {
   bookingPrice: 0,
   guests: 1,
   cartItemId: "",
+  imageUrl: "",
   inputFields: [],
+  loading: false,
 }
 
 interface CheckoutContextValue {
@@ -58,54 +63,66 @@ const CheckoutContext = createContext<CheckoutContextValue>({ info: defaultCheck
 
 export function CheckoutProvider({ children }: { children: ReactNode }) {
   const search = useSearchParams()
+  const cartItemId = search.get("cartItemId") ?? ""
+  const [backendItem, setBackendItem] = useState<Record<string, unknown> | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!cartItemId) {
+      setBackendItem(null)
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    const sessionId = getCartSessionId()
+    getCartItem(sessionId, cartItemId).then((result) => {
+      if (cancelled) return
+      if (result.data) {
+        const unwrapped = (result.data as unknown as Record<string, unknown>)?.data as Record<string, unknown> ?? result.data as unknown as Record<string, unknown>
+        setBackendItem(unwrapped)
+      }
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [cartItemId])
 
   const info = useMemo<CheckoutInfo>(() => {
-    let guestCounts: Record<string, number> = { ADULT: 1 }
-    try {
-      const parsed = JSON.parse(search.get("guestCounts") || "{}")
-      if (Object.keys(parsed).length > 0) guestCounts = parsed
-    } catch {
-      const adults = parseInt(search.get("adults") ?? "1", 10)
-      const children = parseInt(search.get("children") ?? "0", 10)
-      guestCounts = { ADULT: adults }
-      if (children > 0) guestCounts.CHILD = children
-    }
-    const price = parseFloat(search.get("price") ?? "0")
-    const bookingPrice = parseFloat(search.get("bookingPrice") ?? String(price))
-    const experienceId = search.get("experienceId") ?? ""
-    const productId = search.get("productId") ?? experienceId
-
-    let inputFields: InputField[] = []
-    try {
-      const raw = search.get("inputFields")
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) inputFields = parsed
+    if (cartItemId && backendItem) {
+      const bi = backendItem as Record<string, any>
+      const guestCounts = (bi.guestCounts as Record<string, number>) ?? { ADULT: bi.adults ?? 1 }
+      const gCounts = Object.values(guestCounts).reduce((a: number, b: number) => a + b, 0)
+      return {
+        experienceId: (bi.experienceId as string) ?? "",
+        productId: (bi.productId as string) ?? (bi.experienceId as string) ?? "",
+        productName: (bi.title as string) ?? "Experience",
+        variantId: (bi.variantId as string) ?? "",
+        variantName: (bi.title as string) ?? "Standard",
+        inventoryId: (bi.inventoryId as string) ?? "",
+        inventoryType: (bi.inventoryType as string) ?? "NORMAL",
+        date: (bi.date as string) ?? "",
+        startDateTime: (bi.startDateTime as string) ?? "",
+        endDateTime: (bi.endDateTime as string) ?? "",
+        time: ((bi.startDateTime as string) ?? "").split("T")[1]?.slice(0, 5) ?? "",
+        guestCounts,
+        currency: (bi.currency as string) ?? "USD",
+        title: (bi.title as string) ?? "Experience",
+        price: (bi.priceAmount as number) ?? 0,
+        bookingPrice: (bi.priceAmount as number) ?? 0,
+        guests: gCounts,
+        cartItemId,
+        imageUrl: (bi.imageUrl as string) ?? "",
+        inputFields: (bi.inputFields as InputField[]) ?? [],
+        loading,
       }
-    } catch {}
+    }
 
     return {
-      experienceId,
-      productId,
-      productName: search.get("productName") ?? search.get("title") ?? "Experience",
-      variantId: search.get("variantId") ?? "",
-      variantName: search.get("variantName") ?? search.get("title") ?? "Standard",
-      inventoryId: search.get("inventoryId") ?? "",
-      inventoryType: search.get("inventoryType") ?? "NORMAL",
-      date: search.get("date") ?? "",
-      startDateTime: search.get("startDateTime") ?? "",
-      endDateTime: search.get("endDateTime") ?? "",
-      time: search.get("time") ?? "",
-      guestCounts,
-      currency: search.get("currency") ?? "USD",
-      title: search.get("title") ?? "Experience",
-      price,
-      bookingPrice,
-      guests: Object.values(guestCounts).reduce((a, b) => a + b, 0),
-      cartItemId: search.get("cartItemId") ?? "",
-      inputFields,
+      ...defaultCheckout,
+      cartItemId,
+      loading,
     }
-  }, [search])
+  }, [cartItemId, backendItem, loading])
 
   return (
     <CheckoutContext.Provider value={{ info }}>

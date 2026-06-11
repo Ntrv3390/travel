@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/travel/backend/internal/services"
 )
 
@@ -50,6 +51,26 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data":    cart,
 		"message": "Item added to cart",
+	})
+}
+
+func (h *CartHandler) GetCartItem(c *gin.Context) {
+	sessionID := resolveSessionID(c)
+	itemUUID := strings.TrimSpace(c.Param("uuid"))
+
+	if itemUUID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "item uuid is required"})
+		return
+	}
+
+	item, err := h.cartService.GetCartItem(c.Request.Context(), sessionID, itemUUID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": item,
 	})
 }
 
@@ -123,7 +144,9 @@ func resolveSessionID(c *gin.Context) string {
 		sessionID = strings.TrimSpace(c.PostForm("sessionId"))
 	}
 	if sessionID == "" {
-		sessionID = "default"
+		newID := uuid.New().String()
+		c.Header("X-Session-ID", newID)
+		return newID
 	}
 	return sessionID
 }

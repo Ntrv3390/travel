@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ import (
 	"github.com/travel/backend/internal/services"
 	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -33,6 +35,7 @@ type BookingFlowHandler struct {
 }
 
 type inventoryPersonPrice struct {
+	Type               string   `json:"type"`
 	Price              *float64 `json:"price"`
 	OriginalPrice      *float64 `json:"originalPrice"`
 	NetPrice           *float64 `json:"netPrice"`
@@ -165,20 +168,43 @@ func (h *BookingFlowHandler) GetCalendar(c *gin.Context) {
 	now := time.Now()
 	todayKey := toDateKey(startOfDay(now))
 	maxBookableQuantity := (*int)(nil)
-	for _, candidate := range candidates {
-		inventoryItems, fetchErr := h.fetchInventoryByVariant(c, candidate, startDate, dayEnd)
-		if fetchErr != nil {
-			logger.Warnf("Calendar inventory fetch failed for candidate %s: %v", candidate, fetchErr)
-			continue
-		}
 
-		if len(inventoryItems) > 0 {
-			resolvedVariantID = candidate
-			items = inventoryItems
-			maxBookableQuantity = extractMaxBookableQuantityFromItems(inventoryItems)
-			break
-		}
+	// Fetch inventory for all candidates in parallel
+	var (
+		mu   sync.Mutex
+		done bool
+	)
+	g, gCtx := errgroup.WithContext(c.Request.Context())
+	for _, candidate := range candidates {
+		candidate := candidate
+		g.Go(func() error {
+			mu.Lock()
+			if done {
+				mu.Unlock()
+				return nil
+			}
+			mu.Unlock()
+
+			inventoryItems, fetchErr := h.fetchInventoryByVariantG(gCtx, candidate, startDate, dayEnd, "")
+			if fetchErr != nil {
+				logger.Warnf("Calendar inventory fetch failed for candidate %s: %v", candidate, fetchErr)
+				return nil
+			}
+
+			if len(inventoryItems) > 0 {
+				mu.Lock()
+				if !done {
+					done = true
+					resolvedVariantID = candidate
+					items = inventoryItems
+					maxBookableQuantity = extractMaxBookableQuantityFromItems(inventoryItems)
+				}
+				mu.Unlock()
+			}
+			return nil
+		})
 	}
+	_ = g.Wait()
 
 	dayMap := make(map[string]*calendarDay, days)
 	dayHasTimedInventory := make(map[string]bool, days)
@@ -270,6 +296,10 @@ func (h *BookingFlowHandler) GetCalendar(c *gin.Context) {
 func (h *BookingFlowHandler) GetAvailability(c *gin.Context) {
 	variantID := strings.TrimSpace(c.Query("variantId"))
 	dateParam := strings.TrimSpace(c.Query("date"))
+	currencyCode := strings.ToUpper(strings.TrimSpace(c.Query("currencyCode")))
+	if currencyCode == "" {
+		currencyCode = "USD"
+	}
 
 	if variantID == "" || dateParam == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "variantId and date are required"})
@@ -290,7 +320,7 @@ func (h *BookingFlowHandler) GetAvailability(c *gin.Context) {
 	now := time.Now()
 	todayKey := toDateKey(startOfDay(now))
 
-	items, err := h.fetchInventoryByVariant(c, variantID, dateValue, dateValue)
+	items, err := h.fetchInventoryByVariant(c, variantID, dateValue, dateValue, currencyCode)
 	if err != nil {
 		logger.Errorf("Availability fetch failed: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch availability from headout"})
@@ -389,26 +419,78 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
 		return
 	}
-	// if req.Email == "" {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
-	// 	return
-	// }
-	// if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
-	// 	return
-	// }
-	// if req.FirstName == "" || req.LastName == "" {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "firstName and lastName are required"})
-	// 	return
-	// }
-	// if req.Adults < 0 || req.Children < 0 {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "adults and children must be non-negative"})
-	// 	return
-	// }
-	// if req.Phone != "" && len(req.Phone) < 6 {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid phone number"})
-	// 	return
-	// }
+	if req.Email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		return
+	}
+	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
+		return
+	}
+	if len(req.Email) > 320 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email is too long"})
+		return
+	}
+	if req.FirstName == "" || req.LastName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "firstName and lastName are required"})
+		return
+	}
+	if len(req.FirstName) > 128 || len(req.LastName) > 128 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "firstName or lastName is too long"})
+		return
+	}
+	if req.Adults < 0 || req.Children < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "adults and children must be non-negative"})
+		return
+	}
+	if req.Phone != "" {
+		digits := 0
+		for _, ch := range req.Phone {
+			if ch >= '0' && ch <= '9' {
+				digits++
+			} else if ch != '+' && ch != ' ' && ch != '-' && ch != '(' && ch != ')' {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid phone number format"})
+				return
+			}
+		}
+		if digits < 6 || digits > 15 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "phone number must contain 6-15 digits"})
+			return
+		}
+	}
+	if len(req.SpecialRequests) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "specialRequests must be 500 characters or fewer"})
+		return
+	}
+
+	req.StartDateTime = normalizeInventoryDateTime(req.StartDateTime)
+	req.EndDateTime = normalizeInventoryDateTime(req.EndDateTime)
+	totalPaxCheck := 0
+	if req.GuestCounts != nil && len(req.GuestCounts) > 0 {
+		for _, count := range req.GuestCounts {
+			totalPaxCheck += count
+		}
+	} else {
+		totalPaxCheck = req.Adults + req.Children
+	}
+	if totalPaxCheck < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one guest is required"})
+		return
+	}
+	if totalPaxCheck > 1000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "guest count exceeds maximum (1000)"})
+		return
+	}
+
+	req.InventoryID = h.resolveSyntheticInventoryID(c, req.InventoryID, req.VariantID, req.Date, req.StartDateTime, req.EndDateTime)
+	if strings.HasPrefix(req.InventoryID, "slot_") {
+		logger.Warnf("Unable to resolve synthetic inventory ID %s for variant %s on %s", req.InventoryID, req.VariantID, req.Date)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "selected slot is unavailable or could not be resolved"})
+		return
+	}
+	if req.InventoryType == "" {
+		req.InventoryType = "NORMAL"
+	}
 
 	if idempotencyKey != "" {
 		var existing models.Booking
@@ -429,26 +511,13 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		}
 	}
 
-	inventoryID := strings.TrimSpace(req.InventoryID)
-
-	if strings.HasPrefix(inventoryID, "slot_") {
-		resolvedID, err := h.resolveInventoryIDFromDB(req.VariantID, req.Date, req.StartDateTime, req.EndDateTime)
-		if err != nil {
-			logger.Warnf("Failed to resolve synthetic inventory ID from DB: %v, falling back to live fetch", err)
-		}
-		if resolvedID == "" || strings.HasPrefix(resolvedID, "slot_") {
-			liveID, liveErr := h.resolveInventoryID(c, req.VariantID, req.Date)
-			if liveErr == nil && liveID != "" {
-				logger.Infof("Resolved synthetic inventory ID %s -> live ID %s for variant %s on %s", inventoryID, liveID, req.VariantID, req.Date)
-				inventoryID = liveID
-			} else {
-				logger.Warnf("Failed to resolve synthetic inventory ID %s via live fetch for variant %s on %s: %v", inventoryID, req.VariantID, req.Date, liveErr)
-			}
-		} else {
-			logger.Infof("Resolved synthetic inventory ID %s -> DB ID %s for variant %s on %s", inventoryID, resolvedID, req.VariantID, req.Date)
-			inventoryID = resolvedID
-		}
+	if err := h.verifyPrice(c.Request.Context(), &req); err != nil {
+		logger.Warnf("Price verification failed for variant %s: %v", req.VariantID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
+
+	inventoryID := strings.TrimSpace(req.InventoryID)
 
 	totalPax := 0
 	if req.GuestCounts != nil && len(req.GuestCounts) > 0 {
@@ -537,6 +606,11 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		totalAmount = 0
 	}
 
+	if totalAmount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking amount"})
+		return
+	}
+
 	headoutPayload := map[string]interface{}{
 		"productId":  req.ProductID,
 		"variantId":  req.VariantID,
@@ -564,9 +638,6 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare booking"})
 		return
 	}
-
-	logger.Infof("Headout Booking Payload: %s", string(bodyBytes))
-
 
 	upstream, err := retryHeadoutCall(func() (*services.UpstreamResponse, error) {
 		return h.authService.Post(c.Request.Context(), "/v2/bookings/", url.Values{}, bodyBytes, true)
@@ -602,6 +673,41 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	if err := h.saveBookingToDB(c.Request.Context(), req, headoutResp); err != nil {
 		logger.Errorf("Booking created on Headout but local save failed: %v", err)
+	}
+
+	capturePayload := map[string]interface{}{
+		"status":             "PENDING",
+		"partnerReferenceId": "",
+	}
+	captureBytes, _ := json.Marshal(capturePayload)
+	capturePath := fmt.Sprintf("/v2/bookings/%s/", url.PathEscape(headoutResp.BookingID))
+	captureUpstream, captureErr := h.authService.Put(c.Request.Context(), capturePath, url.Values{}, captureBytes, true)
+	if captureErr != nil {
+		logger.Errorf("Booking %s created but capture failed: %v", headoutResp.BookingID, captureErr)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "booking created but could not be confirmed, contact support with booking ID: " + headoutResp.BookingID})
+		return
+	}
+	if captureUpstream.StatusCode < 200 || captureUpstream.StatusCode >= 300 {
+		preview := string(captureUpstream.Body)
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		logger.Errorf("Booking %s capture rejected with status %d: %s", headoutResp.BookingID, captureUpstream.StatusCode, preview)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "booking capture rejected: " + preview})
+		return
+	}
+	capturedResp := parseHeadoutBookingResponse(captureUpstream.Body)
+	if capturedResp.Status != "" {
+		database.GetDB().WithContext(c.Request.Context()).Model(&models.Booking{}).
+			Where("booking_id = ?", headoutResp.BookingID).
+			Updates(map[string]interface{}{
+				"status":      capturedResp.Status,
+				"voucher_url": capturedResp.VoucherURL,
+			})
+		headoutResp.Status = capturedResp.Status
+		if capturedResp.VoucherURL != "" {
+			headoutResp.VoucherURL = capturedResp.VoucherURL
+		}
 	}
 
 	go func() {
@@ -666,8 +772,8 @@ func (h *BookingFlowHandler) CaptureBooking(c *gin.Context) {
 	}
 
 	body := map[string]interface{}{
-		"bookingId": bookingID,
-		"status":    "CAPTURED",
+		"status":             "PENDING",
+		"partnerReferenceId": "",
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
@@ -675,7 +781,7 @@ func (h *BookingFlowHandler) CaptureBooking(c *gin.Context) {
 		return
 	}
 
-	upstream, err := h.authService.Put(c.Request.Context(), "/v2/bookings/update", url.Values{}, bodyBytes, true)
+	upstream, err := h.authService.Put(c.Request.Context(), fmt.Sprintf("/v2/bookings/%s/", url.PathEscape(bookingID)), url.Values{}, bodyBytes, true)
 	if err != nil {
 		h.handleProxyError(c, err)
 		return
@@ -689,6 +795,11 @@ func (h *BookingFlowHandler) CaptureBooking(c *gin.Context) {
 				db.WithContext(c.Request.Context()).Model(&models.Booking{}).
 					Where("booking_id = ?", bookingID).
 					Update("status", newStatus)
+			} else {
+				db := database.GetDB()
+				db.WithContext(c.Request.Context()).Model(&models.Booking{}).
+					Where("booking_id = ?", bookingID).
+					Update("status", "PENDING")
 			}
 		}
 	}
@@ -814,18 +925,22 @@ func (h *BookingFlowHandler) resolveVariantCandidates(c *gin.Context, variantID 
 	return found
 }
 
-func (h *BookingFlowHandler) fetchInventoryByVariant(
-	c *gin.Context,
+func (h *BookingFlowHandler) fetchInventoryByVariantG(
+	ctx context.Context,
 	variantID string,
 	startDate time.Time,
 	endDate time.Time,
+	currencyCode string,
 ) ([]inventoryItem, error) {
 	query := url.Values{}
 	query.Set("variantId", variantID)
 	query.Set("startDateTime", toDateKey(startDate)+defaultInventoryFrom)
 	query.Set("endDateTime", toDateKey(endDate)+defaultInventoryTo)
+	if currencyCode != "" {
+		query.Set("currencyCode", strings.ToUpper(currencyCode))
+	}
 
-	upstream, err := h.authService.Get(c.Request.Context(), "/v1/inventory/list-by/variant", query, true)
+	upstream, err := h.authService.Get(ctx, "/v1/inventory/list-by/variant", query, true)
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +964,6 @@ func (h *BookingFlowHandler) fetchInventoryByVariant(
 		if err := json.Unmarshal(rawItem, &typed); err != nil {
 			continue
 		}
-
 		var raw map[string]interface{}
 		if err := json.Unmarshal(rawItem, &raw); err == nil {
 			typed.Raw = raw
@@ -858,6 +972,16 @@ func (h *BookingFlowHandler) fetchInventoryByVariant(
 	}
 
 	return items, nil
+}
+
+func (h *BookingFlowHandler) fetchInventoryByVariant(
+	c *gin.Context,
+	variantID string,
+	startDate time.Time,
+	endDate time.Time,
+	currencyCode string,
+) ([]inventoryItem, error) {
+	return h.fetchInventoryByVariantG(c.Request.Context(), variantID, startDate, endDate, currencyCode)
 }
 
 func collectVariantIDs(value interface{}, parentKey string, add func(string)) {
@@ -925,7 +1049,9 @@ func pickItemPrice(item inventoryItem) *float64 {
 	}
 
 	p := item.Pricing.Persons[0]
-	for _, value := range []*float64{p.HeadoutSellingPrice, p.Price, p.OriginalPrice, p.NetPrice} {
+	// Use `price` first — Headout validates booking price against this field.
+	// headoutSellingPrice may differ (it's Headout's own-channel price, not the partner price).
+	for _, value := range []*float64{p.Price, p.OriginalPrice, p.HeadoutSellingPrice, p.NetPrice} {
 		if value != nil {
 			copyVal := *value
 			return &copyVal
@@ -1107,15 +1233,26 @@ func max(a, b int) int {
 	return b
 }
 
-func (h *BookingFlowHandler) resolveInventoryID(c *gin.Context, variantID string, dateStr string) (string, error) {
+func (h *BookingFlowHandler) resolveInventoryID(c *gin.Context, variantID string, dateStr string, startDateTime string) (string, error) {
 	parsedDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid date: %w", err)
 	}
 
-	items, err := h.fetchInventoryByVariant(c, variantID, parsedDate, parsedDate)
+	items, err := h.fetchInventoryByVariant(c, variantID, parsedDate, parsedDate, "")
 	if err != nil {
 		return "", fmt.Errorf("fetch inventory: %w", err)
+	}
+
+	startDateTime = normalizeInventoryDateTime(startDateTime)
+	slot := ""
+	if startDateTime != "" {
+		_, slot = extractDateAndSlot(startDateTime)
+	}
+	if slot != "" {
+		if resolved := findInventoryIDBySlot(items, dateStr, slot); resolved != "" {
+			return resolved, nil
+		}
 	}
 
 	now := time.Now()
@@ -1141,6 +1278,36 @@ func (h *BookingFlowHandler) resolveInventoryID(c *gin.Context, variantID string
 	}
 
 	return "", fmt.Errorf("no available inventory for variant %s on %s", variantID, dateStr)
+}
+
+func findInventoryIDBySlot(items []inventoryItem, dateKey, slot string) string {
+	for _, item := range items {
+		itemDate, itemSlot := extractDateAndSlot(item.StartDateTime)
+		if itemDate != dateKey || itemSlot != slot {
+			continue
+		}
+		if item.InventoryID != "" && !strings.HasPrefix(item.InventoryID, "slot_") {
+			return item.InventoryID
+		}
+		if item.ID != "" && !strings.HasPrefix(item.ID, "slot_") {
+			return item.ID
+		}
+		if item.InventoryID != "" {
+			return item.InventoryID
+		}
+		if item.ID != "" {
+			return item.ID
+		}
+	}
+	return ""
+}
+
+func normalizeInventoryDateTime(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasSuffix(value, "T") {
+		return strings.TrimSuffix(value, "T")
+	}
+	return value
 }
 
 func (h *BookingFlowHandler) resolveInventoryIDFromDB(variantID, date, startDateTime, endDateTime string) (string, error) {
@@ -1183,6 +1350,294 @@ func (h *BookingFlowHandler) resolveInventoryIDFromDB(variantID, date, startDate
 	}
 
 	return "", fmt.Errorf("no real inventory ID found in DB for variant %s on %s", variantID, date)
+}
+
+func (h *BookingFlowHandler) resolveSyntheticInventoryID(c *gin.Context, inventoryID, variantID, date, startDateTime, endDateTime string) string {
+	inventoryID = strings.TrimSpace(inventoryID)
+	if inventoryID == "" || !strings.HasPrefix(inventoryID, "slot_") {
+		return inventoryID
+	}
+
+	resolvedID, err := h.resolveInventoryIDFromDB(variantID, date, startDateTime, endDateTime)
+	if err != nil {
+		logger.Warnf("Failed to resolve synthetic inventory ID from DB: %v, falling back to live fetch", err)
+	}
+
+	if resolvedID != "" && !strings.HasPrefix(resolvedID, "slot_") {
+		logger.Infof("Resolved synthetic inventory ID %s -> DB ID %s for variant %s on %s", inventoryID, resolvedID, variantID, date)
+		return resolvedID
+	}
+
+	liveID, liveErr := h.resolveInventoryID(c, variantID, date, startDateTime)
+	if liveErr == nil && liveID != "" {
+		logger.Infof("Resolved synthetic inventory ID %s -> live ID %s for variant %s on %s", inventoryID, liveID, variantID, date)
+		return liveID
+	}
+	if liveErr != nil {
+		logger.Warnf("Failed to resolve synthetic inventory ID %s via live fetch for variant %s on %s: %v", inventoryID, variantID, date, liveErr)
+	}
+
+	return inventoryID
+}
+
+func (h *BookingFlowHandler) verifyPrice(ctx context.Context, req *createBookingRequest) error {
+	currentTotal, err := fetchFreshTotalPrice(ctx, h.authService, req.VariantID, req.InventoryID, req.Date, req.CurrencyCode, req.StartDateTime, req.GuestCounts, req.Adults, req.Children)
+	if err != nil {
+		return fmt.Errorf("unable to verify price: %w", err)
+	}
+	if currentTotal <= 0 {
+		return fmt.Errorf("unable to determine current price")
+	}
+
+	req.CurrencyCode = strings.ToUpper(strings.TrimSpace(req.CurrencyCode))
+	if req.CurrencyCode == "" {
+		req.CurrencyCode = "USD"
+	}
+
+	if req.PriceAmount <= 0 || math.Abs(req.PriceAmount-currentTotal)/currentTotal > 0.05 {
+		logger.Warnf("Refreshing submitted price %.2f to current total %.2f for variant %s", req.PriceAmount, currentTotal, req.VariantID)
+	}
+	req.PriceAmount = currentTotal
+	return nil
+}
+
+func buildGuestCounts(guestCounts map[string]int, adults, children int) map[string]int {
+	counts := map[string]int{}
+	if guestCounts != nil && len(guestCounts) > 0 {
+		for typ, count := range guestCounts {
+			if count <= 0 {
+				continue
+			}
+			counts[strings.ToUpper(strings.TrimSpace(typ))] = count
+		}
+	}
+	if len(counts) == 0 {
+		if adults > 0 {
+			counts["ADULT"] = adults
+		}
+		if children > 0 {
+			counts["CHILD"] = children
+		}
+	}
+	if len(counts) == 0 {
+		counts["ADULT"] = 1
+	}
+	return counts
+}
+
+func calculateExpectedPrice(pricing *inventoryPricingV2, guestCounts map[string]int, adults, children int) float64 {
+	counts := buildGuestCounts(guestCounts, adults, children)
+	totalPax := 0
+	for _, count := range counts {
+		totalPax += count
+	}
+
+	priceByType := map[string]float64{}
+	for _, p := range pricing.Persons {
+		typeKey := strings.ToUpper(strings.TrimSpace(p.Type))
+		// Use `price` first — Headout validates booking price against this field.
+		// headoutSellingPrice may differ (it's Headout's own-channel price, not the partner price).
+		referencePrice := p.Price
+		if referencePrice == nil {
+			referencePrice = p.OriginalPrice
+		}
+		if referencePrice == nil {
+			referencePrice = p.HeadoutSellingPrice
+		}
+		if referencePrice == nil || *referencePrice <= 0 {
+			continue
+		}
+		if typeKey == "" {
+			typeKey = "UNKNOWN"
+		}
+		priceByType[typeKey] = *referencePrice
+	}
+
+	for _, g := range pricing.Groups {
+		referencePrice := g.Price
+		if referencePrice == nil {
+			referencePrice = g.OriginalPrice
+		}
+		if referencePrice == nil {
+			referencePrice = g.HeadoutSellingPrice
+		}
+		if referencePrice == nil || *referencePrice <= 0 {
+			continue
+		}
+		if g.Size >= totalPax {
+			priceByType[fmt.Sprintf("GROUP_%d", g.Size)] = *referencePrice
+		}
+	}
+
+	expectedPrice := 0.0
+	matched := 0
+	for typ, count := range counts {
+		if count <= 0 {
+			continue
+		}
+		if price, ok := priceByType[strings.ToUpper(strings.TrimSpace(typ))]; ok {
+			expectedPrice += price * float64(count)
+			matched++
+		}
+	}
+
+	if matched == 0 {
+		if len(priceByType) == 1 {
+			for _, price := range priceByType {
+				expectedPrice = price * float64(totalPax)
+				break
+			}
+		} else {
+			if groupPrice := findBestGroupPrice(pricing.Groups, totalPax); groupPrice > 0 {
+				expectedPrice = groupPrice
+			} else {
+				for _, price := range priceByType {
+					expectedPrice = price * float64(totalPax)
+					break
+				}
+			}
+		}
+	}
+
+	return expectedPrice
+}
+
+type inventoryPricingV2 struct {
+	Persons      []inventoryPersonPrice `json:"persons"`
+	Groups       []inventoryGroupPrice  `json:"groups"`
+	CurrencyCode string                 `json:"currencyCode"`
+}
+
+type inventoryGroupPrice struct {
+	Size               int      `json:"size"`
+	Price              *float64 `json:"price"`
+	OriginalPrice      *float64 `json:"originalPrice"`
+	NetPrice           *float64 `json:"netPrice"`
+	HeadoutSellingPrice *float64 `json:"headoutSellingPrice"`
+}
+
+func findBestGroupPrice(groups []inventoryGroupPrice, totalPax int) float64 {
+	best := 0.0
+	for _, g := range groups {
+		if g.Size <= 0 {
+			continue
+		}
+		referencePrice := g.Price
+		if referencePrice == nil {
+			referencePrice = g.OriginalPrice
+		}
+		if referencePrice == nil {
+			referencePrice = g.HeadoutSellingPrice
+		}
+		if referencePrice == nil || *referencePrice <= 0 {
+			continue
+		}
+		if g.Size >= totalPax {
+			if best == 0 || *referencePrice < best {
+				best = *referencePrice
+			}
+		}
+	}
+	return best
+}
+
+type inventoryV2Item struct {
+	ID            string              `json:"id"`
+	StartDateTime string              `json:"startDateTime"`
+	Pricing       inventoryPricingV2  `json:"pricing"`
+}
+
+type inventoryV2Response struct {
+	Items []inventoryV2Item `json:"items"`
+}
+
+func fetchInventoryPricingV2(ctx context.Context, authService *services.HeadoutProxyService, variantID, inventoryID, date, currencyCode, startDateTime string) (*inventoryPricingV2, error) {
+	currencyCode = strings.ToUpper(strings.TrimSpace(currencyCode))
+	if currencyCode == "" {
+		currencyCode = "USD"
+	}
+
+	query := url.Values{}
+	query.Set("tourId", variantID)
+	query.Set("currencyCode", currencyCode)
+	query.Set("startDateTime", date+"T00:00")
+	query.Set("endDateTime", date+"T23:59")
+
+	upstream, err := authService.Get(ctx, "/v2/inventory/list-by/tour/", query, true)
+	if err != nil {
+		return nil, fmt.Errorf("v2 inventory fetch failed: %w", err)
+	}
+
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		return nil, fmt.Errorf("v2 inventory returned status %d", upstream.StatusCode)
+	}
+
+	var resp inventoryV2Response
+	if err := json.Unmarshal(upstream.Body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to decode v2 inventory response: %w", err)
+	}
+
+	// Pass 1: exact inventory ID match
+	if inventoryID != "" {
+		for _, item := range resp.Items {
+			if item.ID != inventoryID {
+				continue
+			}
+			if len(item.Pricing.Persons) > 0 || len(item.Pricing.Groups) > 0 {
+				return &item.Pricing, nil
+			}
+		}
+	}
+
+	// Pass 2: match by start-time HH:MM prefix (v1 and v2 IDs differ; time is the reliable cross-version key)
+	slotTimePrefix := ""
+	if idx := strings.Index(startDateTime, "T"); idx >= 0 {
+		timePart := strings.TrimSpace(startDateTime[idx+1:])
+		if len(timePart) >= 5 {
+			slotTimePrefix = timePart[:5] // "HH:MM"
+		}
+	}
+	if slotTimePrefix != "" {
+		for _, item := range resp.Items {
+			// item.StartDateTime is like "2026-06-25T09:00:00"
+			if strings.Contains(item.StartDateTime, "T"+slotTimePrefix) {
+				if len(item.Pricing.Persons) > 0 || len(item.Pricing.Groups) > 0 {
+					return &item.Pricing, nil
+				}
+			}
+		}
+	}
+
+	// Pass 3: single-item response — unambiguous, safe to use
+	if len(resp.Items) == 1 && (len(resp.Items[0].Pricing.Persons) > 0 || len(resp.Items[0].Pricing.Groups) > 0) {
+		return &resp.Items[0].Pricing, nil
+	}
+
+	if len(resp.Items) == 0 {
+		return nil, fmt.Errorf("no inventory items returned for variant %s on %s", variantID, date)
+	}
+	return nil, fmt.Errorf("inventory item %s not found in v2 response for variant %s on %s (got %d items)", inventoryID, variantID, date, len(resp.Items))
+}
+
+func fetchFreshTotalPrice(ctx context.Context, authService *services.HeadoutProxyService, variantID, inventoryID, date, currencyCode, startDateTime string, guestCounts map[string]int, adults, children int) (float64, error) {
+	currencyCode = strings.ToUpper(strings.TrimSpace(currencyCode))
+	if currencyCode == "" {
+		currencyCode = "USD"
+	}
+
+	pricing, err := fetchInventoryPricingV2(ctx, authService, variantID, inventoryID, date, currencyCode, startDateTime)
+	if err != nil {
+		return 0, err
+	}
+	if pricing == nil {
+		return 0, fmt.Errorf("missing inventory pricing")
+	}
+
+	currentTotal := calculateExpectedPrice(pricing, guestCounts, adults, children)
+	if currentTotal <= 0 {
+		return 0, fmt.Errorf("unable to calculate total price from inventory pricing")
+	}
+	return currentTotal, nil
 }
 
 func parseHeadoutBookingResponse(body []byte) headoutBookingResponse {
@@ -1357,7 +1812,7 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 		VoucherURL:            headoutResp.VoucherURL,
 		Tickets:               "[]",
 
-		IdempotencyKey:        req.IdempotencyKey,
+		IdempotencyKey:        nullableString(req.IdempotencyKey),
 		SpecialRequests:       req.SpecialRequests,
 		ConfirmationEmailSent: true,
 
@@ -1519,4 +1974,11 @@ func extractMaxBookableQuantityFromItems(items []inventoryItem) *int {
 	}
 
 	return &best
+}
+
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

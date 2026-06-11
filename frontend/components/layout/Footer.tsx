@@ -102,7 +102,7 @@ export function Footer() {
           </div>
 
           <Separator className="mt-5" />
-          <div className="pt-4 text-sm text-slate-500">Copyright 2026 Triipzy. All rights reserved.</div>
+          <div className="pt-4 text-sm text-slate-500">Copyright 2026 <span className="font-bold">Triipzy.com</span>. All rights reserved.</div>
         </Card>
       </div>
     </footer>

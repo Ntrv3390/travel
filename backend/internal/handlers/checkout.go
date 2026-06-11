@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/travel/backend/internal/database"
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
@@ -47,6 +49,8 @@ func NewCheckoutHandler(cartService *services.CartService, authService *services
 func (h *CheckoutHandler) Checkout(c *gin.Context) {
 	sessionID := resolveSessionID(c)
 
+	checkoutID := uuid.New().String()
+
 	cart, err := h.cartService.GetCart(c.Request.Context(), sessionID)
 	if err != nil {
 		cart = h.cartService.GetOrCreateCart(sessionID)
@@ -61,6 +65,8 @@ func (h *CheckoutHandler) Checkout(c *gin.Context) {
 	allSucceeded := true
 
 	for _, item := range cart.Items {
+		// Pass idempotency key derived from checkoutID + item index for retry safety
+		item.IdempotencyKey = fmt.Sprintf("chk_%s_item_%s", checkoutID, item.ID)
 		result := h.processCartItem(c.Request.Context(), item, sessionID)
 		if result.Error != "" {
 			allSucceeded = false
@@ -87,8 +93,24 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 	}
 
 	inventoryID := strings.TrimSpace(item.InventoryID)
+	inventoryID = h.resolveSyntheticInventoryID(ctx, inventoryID, item.VariantID, item.Date, item.StartDateTime, item.EndDateTime)
+	if inventoryID != "" {
+		valid, err := h.isInventoryIDAvailable(ctx, item.VariantID, item.Date, inventoryID)
+		if err != nil {
+			logger.Warnf("Checkout: unable to validate inventory %s for variant %s on %s: %v", inventoryID, item.VariantID, item.Date, err)
+		} else if !valid {
+			logger.Warnf("Checkout: inventory %s no longer available, resolving fresh inventory for variant %s on %s", inventoryID, item.VariantID, item.Date)
+			resolvedID, err := h.resolveInventoryID(ctx, item.VariantID, item.Date, item.StartDateTime)
+			if err != nil {
+				result.Status = "FAILED"
+				result.Error = fmt.Sprintf("inventory not available: %v", err)
+				return result
+			}
+			inventoryID = resolvedID
+		}
+	}
 	if inventoryID == "" {
-		resolvedID, err := h.resolveInventoryID(ctx, item.VariantID, item.Date)
+		resolvedID, err := h.resolveInventoryID(ctx, item.VariantID, item.Date, item.StartDateTime)
 		if err != nil {
 			result.Status = "FAILED"
 			result.Error = fmt.Sprintf("inventory not available: %v", err)
@@ -101,6 +123,20 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 	if totalPax < 1 {
 		totalPax = 1
 	}
+
+	item.Currency = strings.ToUpper(strings.TrimSpace(item.Currency))
+	if item.Currency == "" {
+		item.Currency = "USD"
+	}
+
+	currentTotal, err := fetchFreshTotalPrice(ctx, h.authService, item.VariantID, inventoryID, item.Date, item.Currency, item.StartDateTime, item.GuestCounts, item.Adults, item.Children)
+	if err != nil {
+		result.Status = "FAILED"
+		result.Error = fmt.Sprintf("unable to refresh price: %v", err)
+		return result
+	}
+
+	totalAmount := currentTotal
 
 	productID := item.ProductID
 	if productID == "" {
@@ -132,11 +168,6 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		})
 	}
 
-	totalAmount := item.PriceAmount
-	if totalAmount <= 0 {
-		totalAmount = 0
-	}
-
 	headoutPayload := map[string]interface{}{
 		"productId":   productID,
 		"variantId":   item.VariantID,
@@ -145,11 +176,20 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			"count":     totalPax,
 			"customers": customers,
 		},
-		"variantInputFields": []map[string]interface{}{},
 		"price": map[string]interface{}{
 			"amount":       totalAmount,
 			"currencyCode": item.Currency,
 		},
+	}
+
+	if item.IdempotencyKey != "" {
+		var existing models.Booking
+		if err := database.GetDB().WithContext(ctx).
+			Where("idempotency_key = ?", item.IdempotencyKey).First(&existing).Error; err == nil {
+			result.Status = existing.Status
+			result.BookingID = existing.BookingID
+			return result
+		}
 	}
 
 	bodyBytes, err := json.Marshal(headoutPayload)
@@ -178,12 +218,40 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		logger.Errorf("Checkout: booking created on Headout but local save failed: %v", err)
 	}
 
+	capturePayload := map[string]interface{}{
+		"status":             "PENDING",
+		"partnerReferenceId": "",
+	}
+	captureBytes, _ := json.Marshal(capturePayload)
+	capturePath := fmt.Sprintf("/v2/bookings/%s/", url.PathEscape(headoutResp.BookingID))
+	captureUpstream, captureErr := h.authService.Put(ctx, capturePath, url.Values{}, captureBytes, true)
+	if captureErr != nil || captureUpstream.StatusCode < 200 || captureUpstream.StatusCode >= 300 {
+		logger.Errorf("Checkout: booking %s created but capture failed", headoutResp.BookingID)
+		result.Status = "UNCAPTURED"
+		result.BookingID = headoutResp.BookingID
+		result.Error = "booking created but capture failed, please contact support"
+		return result
+	}
+	capturedResp := parseHeadoutBookingResponse(captureUpstream.Body)
+	if capturedResp.Status != "" {
+		database.GetDB().WithContext(ctx).Model(&models.Booking{}).
+			Where("booking_id = ?", headoutResp.BookingID).
+			Updates(map[string]interface{}{
+				"status":      capturedResp.Status,
+				"voucher_url": capturedResp.VoucherURL,
+			})
+		headoutResp.Status = capturedResp.Status
+		if capturedResp.VoucherURL != "" {
+			headoutResp.VoucherURL = capturedResp.VoucherURL
+		}
+	}
+
 	ticketText := ""
 	if headoutResp.VoucherURL != "" && headoutResp.VoucherURL != "embedded" {
 		ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
 	}
 	if h.emailSvc != nil {
-		if err := h.emailSvc.SendBookingConfirmation(services.BookingConfirmationData{
+		confData := services.BookingConfirmationData{
 			BookingID:        headoutResp.BookingID,
 			HeadoutReference: headoutResp.HeadoutReference,
 			CustomerName:     item.FirstName + " " + item.LastName,
@@ -195,10 +263,8 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			Quantity:         totalPax,
 			TicketURL:        headoutResp.VoucherURL,
 			TicketData:       ticketText,
-		}); err != nil {
-			logger.Errorf("Failed to send booking confirmation to %s: %v", item.Email, err)
 		}
-		if err := h.emailSvc.SendBookingAdminNotification(services.BookingAdminNotificationData{
+		adminNotifData := services.BookingAdminNotificationData{
 			BookingID:        headoutResp.BookingID,
 			HeadoutReference: headoutResp.HeadoutReference,
 			CustomerName:     item.FirstName + " " + item.LastName,
@@ -207,14 +273,19 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			ExperienceDate:   item.Date,
 			TotalAmount:      headoutResp.TotalAmount,
 			Currency:         headoutResp.Currency,
-			AdminURL:         fmt.Sprintf("http://localhost:3000/admin/bookings?highlight=%s", headoutResp.BookingID),
-		}); err != nil {
-			logger.Errorf("Failed to send admin booking notification for %s: %v", headoutResp.BookingID, err)
+			AdminURL:         fmt.Sprintf("%s/admin/bookings?highlight=%s", getAdminBaseURL(), headoutResp.BookingID),
 		}
+
+		h.emailSvc.Enqueue(services.MailJob{SendFn: func() error {
+			return h.emailSvc.SendBookingConfirmation(confData)
+		}})
+		h.emailSvc.Enqueue(services.MailJob{SendFn: func() error {
+			return h.emailSvc.SendBookingAdminNotification(adminNotifData)
+		}})
 		if len(headoutResp.TicketData) > 0 {
-			if err := h.emailSvc.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData); err != nil {
-				logger.Errorf("Failed to send ticket email to %s: %v", item.Email, err)
-			}
+			h.emailSvc.Enqueue(services.MailJob{SendFn: func() error {
+				return h.emailSvc.SendBookingTicket(item.Email, item.FirstName+" "+item.LastName, headoutResp.BookingID, headoutResp.TicketData)
+			}})
 		}
 	}
 
@@ -275,6 +346,7 @@ func saveCheckoutBooking(ctx context.Context, item services.CartItem, headoutRes
 		VoucherURL:            headoutResp.VoucherURL,
 		Tickets:               "[]",
 
+		IdempotencyKey:        nullableStr(item.IdempotencyKey),
 		ConfirmationEmailSent: true,
 
 		BookingDate:    time.Now(),
@@ -310,7 +382,7 @@ func convertItemToReq(item services.CartItem) createBookingRequest {
 	}
 }
 
-func (h *CheckoutHandler) resolveInventoryID(ctx context.Context, variantID string, dateStr string) (string, error) {
+func (h *CheckoutHandler) resolveInventoryID(ctx context.Context, variantID string, dateStr string, startDateTime string) (string, error) {
 	parsedDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid date: %w", err)
@@ -319,6 +391,17 @@ func (h *CheckoutHandler) resolveInventoryID(ctx context.Context, variantID stri
 	items, err := h.fetchInventoryByVariant(ctx, variantID, parsedDate, parsedDate)
 	if err != nil {
 		return "", fmt.Errorf("fetch inventory: %w", err)
+	}
+
+	startDateTime = normalizeInventoryDateTime(startDateTime)
+	slot := ""
+	if startDateTime != "" {
+		_, slot = extractDateAndSlot(startDateTime)
+	}
+	if slot != "" {
+		if resolved := findInventoryIDBySlot(items, dateStr, slot); resolved != "" {
+			return resolved, nil
+		}
 	}
 
 	now := time.Now()
@@ -344,6 +427,57 @@ func (h *CheckoutHandler) resolveInventoryID(ctx context.Context, variantID stri
 	}
 
 	return "", fmt.Errorf("no available inventory for variant %s on %s", variantID, dateStr)
+}
+
+func (h *CheckoutHandler) resolveSyntheticInventoryID(ctx context.Context, inventoryID, variantID, date, startDateTime, endDateTime string) string {
+	inventoryID = strings.TrimSpace(inventoryID)
+	if inventoryID == "" || !strings.HasPrefix(inventoryID, "slot_") {
+		return inventoryID
+	}
+
+	liveID, liveErr := h.resolveInventoryID(ctx, variantID, date, startDateTime)
+	if liveErr == nil && liveID != "" {
+		logger.Infof("Resolved synthetic inventory ID %s -> live ID %s for variant %s on %s", inventoryID, liveID, variantID, date)
+		return liveID
+	}
+	if liveErr != nil {
+		logger.Warnf("Failed to resolve synthetic inventory ID %s via live fetch for variant %s on %s: %v", inventoryID, variantID, date, liveErr)
+	}
+
+	return inventoryID
+}
+
+func (h *CheckoutHandler) isInventoryIDAvailable(ctx context.Context, variantID, dateStr, inventoryID string) (bool, error) {
+	parsedDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return false, fmt.Errorf("invalid date: %w", err)
+	}
+
+	items, err := h.fetchInventoryByVariant(ctx, variantID, parsedDate, parsedDate)
+	if err != nil {
+		return false, fmt.Errorf("fetch inventory: %w", err)
+	}
+
+	now := time.Now()
+	todayKey := toDateKey(startOfDay(now))
+	for _, item := range items {
+		dateKey, _ := extractDateAndSlot(item.StartDateTime)
+		if dateKey != dateStr {
+			continue
+		}
+		if isPastTimedInventorySlot(dateKey, item.StartDateTime, now, todayKey) {
+			continue
+		}
+		avail := strings.ToUpper(strings.TrimSpace(item.Availability))
+		if avail == "UNAVAILABLE" || avail == "SOLD_OUT" {
+			continue
+		}
+		if item.InventoryID == inventoryID || item.ID == inventoryID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (h *CheckoutHandler) fetchInventoryByVariant(ctx context.Context, variantID string, startDate time.Time, endDate time.Time) ([]inventoryItem, error) {
@@ -385,4 +519,18 @@ func (h *CheckoutHandler) fetchInventoryByVariant(ctx context.Context, variantID
 	}
 
 	return items, nil
+}
+
+func getAdminBaseURL() string {
+	if u := strings.TrimRight(os.Getenv("ADMIN_BASE_URL"), "/"); u != "" {
+		return u
+	}
+	return "http://localhost:3000"
+}
+
+func nullableStr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

@@ -3,12 +3,15 @@ package models
 import "time"
 
 type Cart struct {
-	ID        uint       `gorm:"primaryKey" json:"id"`
-	SessionID string     `gorm:"uniqueIndex;not null" json:"session_id"`
-	UserID    string     `json:"user_id"`
-	CreatedAt time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
-	Items     []CartItem `gorm:"foreignKey:CartID" json:"items"`
+	ID                  uint       `gorm:"primaryKey" json:"id"`
+	UserID              uint       `gorm:"index" json:"user_id"`
+	SessionID           string     `gorm:"uniqueIndex;not null" json:"session_id"`
+	Currency            string     `json:"currency"`
+	AuthType            string     `gorm:"default:anonymous" json:"auth_type"`
+	ExpiresAt           time.Time  `json:"expires_at"`
+	Items               []CartItem `gorm:"foreignKey:CartID;constraint:OnDelete:CASCADE;" json:"items,omitempty"`
+	CreatedAt           time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt           time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 type CartItem struct {
@@ -34,5 +37,10 @@ type CartItem struct {
 	Currency      string    `json:"currency"`
 	Title         string    `json:"title"`
 	ImageURL      string    `json:"image_url"`
+	InputFields   string    `gorm:"type:jsonb" json:"input_fields"`
+	PaxMin        int       `json:"pax_min"`
+	PaxMax        int       `json:"pax_max"`
+	OriginalPriceAmount float64 `json:"original_price_amount"`
+	OriginalCurrency    string  `json:"original_currency"`
 	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
 }

@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { AVAILABILITY_REFRESH_MS } from "@/lib/constants";
+import { useCurrency } from "@/hooks/useCurrency";
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -12,9 +13,10 @@ const fetcher = async (url: string) => {
 };
 
 export function useAvailability(experienceId: string, variantId: string, date: string) {
+  const { currency } = useCurrency();
   const { data, error, isLoading } = useSWR(
     experienceId && variantId && date
-      ? `/api/availability?id=${encodeURIComponent(experienceId)}&variantId=${encodeURIComponent(variantId)}&date=${encodeURIComponent(date)}`
+      ? `/api/availability?id=${encodeURIComponent(experienceId)}&variantId=${encodeURIComponent(variantId)}&date=${encodeURIComponent(date)}&currencyCode=${encodeURIComponent(currency)}`
       : null,
     fetcher,
     {

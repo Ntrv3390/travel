@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
   const id = searchParams.get("id");
   const date = searchParams.get("date");
   const variantId = searchParams.get("variantId");
+  const currencyCode = searchParams.get("currencyCode") ?? "USD";
 
   if (!id || !date) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
 
   const queryParams = new URLSearchParams({
     date: date,
+    currencyCode: currencyCode.toUpperCase(),
   });
   if (variantId) {
     queryParams.set("variantId", variantId);

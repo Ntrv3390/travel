@@ -35,10 +35,18 @@ type HeadoutProxyService struct {
 }
 
 func NewHeadoutProxyService(cfg *config.Config) *HeadoutProxyService {
+	transport := &http.Transport{
+		MaxIdleConns:        200,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+		DisableKeepAlives:   false,
+	}
 	return &HeadoutProxyService{
-		httpClient: &http.Client{Timeout: headoutDefaultTimeout},
-		baseURL:    strings.TrimRight(cfg.HeadoutURL, "/"),
-		apiKey:     strings.TrimSpace(cfg.HeadoutAPIKey),
+		httpClient: &http.Client{
+			Transport: transport,
+		},
+		baseURL: strings.TrimRight(cfg.HeadoutURL, "/"),
+		apiKey:  strings.TrimSpace(cfg.HeadoutAPIKey),
 	}
 }
 
@@ -98,7 +106,7 @@ func (s *HeadoutProxyService) request(
 	}
 	defer response.Body.Close()
 
-	responseBody, err := io.ReadAll(response.Body)
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 10*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read headout response: %w", err)
 	}

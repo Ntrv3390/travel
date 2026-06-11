@@ -9,6 +9,20 @@ import type { SearchAllResponse } from "@/types/search";
 
 const API_BASE = env.API_URL;
 
+function isServer(): boolean {
+  return typeof window === "undefined";
+}
+
+function apiUrl(path: string): string {
+  if (isServer()) return `${API_BASE}${path}`;
+  return path;
+}
+
+function buildUrl(path: string): URL {
+  if (isServer()) return new URL(`${API_BASE}${path}`);
+  return new URL(path, window.location.origin);
+}
+
 // ── In-memory cache (shared across all requests, server-side only) ──
 const DEFAULT_CACHE_TTL = HOME_REVALIDATE_SECONDS * 1000;
 interface CacheEntry { data: unknown; timestamp: number }
@@ -153,7 +167,7 @@ async function requestExperiences(url: string, options?: { signal?: AbortSignal 
 }
 
 export async function getTopExperiences(limit = 24, page = 1, currency = "USD", options?: { signal?: AbortSignal }) {
-  const url = new URL(`${API_BASE}/api/v1/experiences`);
+  const url = buildUrl("/api/v1/experiences");
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("page", String(page));
   url.searchParams.set("currencyCode", currency);
@@ -162,7 +176,7 @@ export async function getTopExperiences(limit = 24, page = 1, currency = "USD", 
 
 // ── New: Popular Experiences ──
 export async function getPopularExperiences(currency = "USD", limit = 24) {
-  const url = new URL(`${API_BASE}/api/v1/experiences`);
+  const url = buildUrl("/api/v1/experiences");
   url.searchParams.set("currencyCode", currency);
   url.searchParams.set("limit", String(limit));
   const res = await fetch(url.toString(), { cache: "no-store" });
@@ -174,7 +188,7 @@ export async function getPopularExperiences(currency = "USD", limit = 24) {
 export async function getExperienceCalendar(experienceId: string, months = 2, currency = "USD") {
   try {
     const res = await fetch(
-      `${API_BASE}/api/v1/booking-flow/calendar?headoutId=${encodeURIComponent(experienceId)}&months=${months}&currencyCode=${currency}`,
+      apiUrl(`/api/v1/booking-flow/calendar?headoutId=${encodeURIComponent(experienceId)}&months=${months}&currencyCode=${currency}`),
       { cache: "no-store" }
     );
     if (!res.ok) return { data: [], error: null };
@@ -188,7 +202,7 @@ export async function getExperienceCalendar(experienceId: string, months = 2, cu
 export async function getSlotAvailability(experienceId: string, variantId: string, date: string, currency = "USD") {
   try {
     const res = await fetch(
-      `${API_BASE}/api/v1/experiences-availability/${encodeURIComponent(experienceId)}?variantId=${encodeURIComponent(variantId)}&date=${encodeURIComponent(date)}&currencyCode=${currency}`,
+      apiUrl(`/api/v1/experiences-availability/${encodeURIComponent(experienceId)}?variantId=${encodeURIComponent(variantId)}&date=${encodeURIComponent(date)}&currencyCode=${currency}`),
       { cache: "no-store" }
     );
     if (!res.ok) return { data: [], error: null };
@@ -201,7 +215,7 @@ export async function getSlotAvailability(experienceId: string, variantId: strin
 
 export async function getSupportedCurrencies() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/currencies`, {
+    const res = await fetch(apiUrl("/api/v1/currencies"), {
       next: { revalidate: 86400 },
     });
     if (!res.ok) return { data: [], error: null };
@@ -213,7 +227,7 @@ export async function getSupportedCurrencies() {
 }
 
 export async function getCities(offset = 0, limit = 20) {
-  const url = new URL(`${API_BASE}/api/v1/headout/v2/cities`);
+  const url = buildUrl("/api/v1/headout/v2/cities");
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("limit", String(limit));
   const urlStr = url.toString();
@@ -231,7 +245,7 @@ export async function getCities(offset = 0, limit = 20) {
 
 export async function getProducts(params: ProductsQueryParams, options?: { signal?: AbortSignal }): Promise<ApiResult<ProductsResponse>> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/products`);
+    const url = buildUrl("/api/v1/headout/v2/products");
     if (params.cityCode) url.searchParams.set("cityCode", params.cityCode);
     if (params.collectionId) url.searchParams.set("collectionId", params.collectionId);
     if (params.categoryId) url.searchParams.set("categoryId", params.categoryId);
@@ -254,7 +268,7 @@ export async function getVariantAvailabilities(
   options?: { currencyCode?: string; startDate?: string; endDate?: string },
 ): Promise<ApiResult<VariantAvailabilityResponse>> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/availabilities`);
+    const url = buildUrl(`/api/v1/headout/v2/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/availabilities`);
     if (options?.currencyCode) url.searchParams.set("currencyCode", options.currencyCode);
     if (options?.startDate) url.searchParams.set("startDate", options.startDate);
     if (options?.endDate) url.searchParams.set("endDate", options.endDate);
@@ -272,7 +286,7 @@ export async function getSlotInventory(
   currencyCode: string,
 ): Promise<ApiResult<SlotInventoryResponse>> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/inventory`);
+    const url = buildUrl("/api/v1/headout/v2/inventory");
     url.searchParams.set("tourId", String(tourId));
     url.searchParams.set("startDateTime", startDateTime);
     url.searchParams.set("endDateTime", endDateTime);
@@ -289,7 +303,7 @@ export async function getProductById(
   options?: { languageCode?: string; currencyCode?: string },
 ): Promise<ApiResult<Product>> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/products/${encodeURIComponent(id)}`);
+    const url = buildUrl(`/api/v1/headout/v2/products/${encodeURIComponent(id)}`);
     if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
     if (options?.currencyCode) url.searchParams.set("currencyCode", options.currencyCode);
     const res = await fetch(url.toString(), { cache: "no-store" });
@@ -313,7 +327,7 @@ export async function searchAll(
   options?: { signal?: AbortSignal; currencyCode?: string; offset?: number; limit?: number },
 ): Promise<SearchAllResponse | null> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/search`);
+    const url = buildUrl("/api/v1/search");
     url.searchParams.set("q", q);
     if (options?.currencyCode) {
       url.searchParams.set("currencyCode", options.currencyCode);
@@ -332,7 +346,7 @@ export async function searchAll(
 
 export async function getHomeCategories() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/home/categories`, {
+    const res = await fetch(apiUrl("/api/v1/home/categories"), {
       next: { revalidate: 86400 },
     });
     if (!res.ok) return { data: [], error: null };
@@ -345,7 +359,7 @@ export async function getHomeCategories() {
 
 export async function getHomeTestimonials() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/home/testimonials`, {
+    const res = await fetch(apiUrl("/api/v1/home/testimonials"), {
       next: { revalidate: 86400 },
     });
     if (!res.ok) return { data: [], error: null };
@@ -360,7 +374,7 @@ export async function batchLookupRecentlyViewed(
   headoutIds: string[],
 ): Promise<ApiResult<{ experiences: Experience[]; count: number }>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/recently-viewed/batch`, {
+    const res = await fetch(apiUrl("/api/v1/recently-viewed/batch"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ headout_ids: headoutIds }),
@@ -384,7 +398,7 @@ export async function batchLookupRecentlyViewed(
 
 export async function getHomeCollections() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/home/collections`, {
+    const res = await fetch(apiUrl("/api/v1/home/collections"), {
       next: { revalidate: 86400 },
     });
     if (!res.ok) return { data: [], error: null };
@@ -397,7 +411,7 @@ export async function getHomeCollections() {
 
 export async function getCategories(cityCode?: string) {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/categories`);
+    const url = buildUrl("/api/v1/headout/v2/categories");
     if (cityCode) url.searchParams.set("cityCode", cityCode);
     const res = await fetch(url.toString(), {
       next: { revalidate: 86400 },
@@ -412,7 +426,7 @@ export async function getCategories(cityCode?: string) {
 
 export async function getSubcategories(cityCode: string, options?: { languageCode?: string }) {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/subcategories`);
+    const url = buildUrl("/api/v1/headout/v2/subcategories");
     url.searchParams.set("cityCode", cityCode);
     if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
     const res = await fetch(url.toString(), { cache: "no-store" });
@@ -426,7 +440,7 @@ export async function getSubcategories(cityCode: string, options?: { languageCod
 
 export async function getCollections(cityCode: string, options?: { languageCode?: string; limit?: number; offset?: number }) {
   try {
-    const url = new URL(`${API_BASE}/api/v1/headout/v2/collections`);
+    const url = buildUrl("/api/v1/headout/v2/collections");
     url.searchParams.set("cityCode", cityCode);
     if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
     if (options?.limit !== undefined) url.searchParams.set("limit", String(options.limit));
@@ -441,7 +455,7 @@ export async function getCollections(cityCode: string, options?: { languageCode?
 }
 
 export async function getCityExperiences(city: string, params: SearchParams = {}) {
-  const url = new URL(`${API_BASE}/api/v1/experiences`);
+  const url = buildUrl("/api/v1/experiences");
   url.searchParams.set("location", city.replace(/-/g, " "));
   url.searchParams.set("page", params.page ?? "1");
   url.searchParams.set("limit", params.limit ?? "24");
@@ -452,7 +466,7 @@ export async function getCityExperiences(city: string, params: SearchParams = {}
 }
 
 export async function searchExperiences(params: SearchParams) {
-  const url = new URL(`${API_BASE}/api/v1/experiences/search`);
+  const url = buildUrl("/api/v1/experiences/search");
   Object.entries(params).forEach(([key, value]) => {
     if (value) {
       if (key === "currency") {
@@ -469,7 +483,7 @@ export async function searchExperiences(params: SearchParams) {
 
 export async function getExperience(city: string, slug: string, currencyCode?: string): Promise<ApiResult<Experience>> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/experiences/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`);
+    const url = buildUrl(`/api/v1/experiences/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`);
     if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
     const res = await fetch(url.toString(), {
       cache: "no-store",
@@ -486,7 +500,7 @@ export async function getExperience(city: string, slug: string, currencyCode?: s
 
 export async function getExperienceById(id: string, currencyCode?: string): Promise<ApiResult<Experience>> {
   try {
-    const url = new URL(`${API_BASE}/api/v1/experiences/id/${encodeURIComponent(id)}`);
+    const url = buildUrl(`/api/v1/experiences/id/${encodeURIComponent(id)}`);
     if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
     const res = await fetch(url.toString(), {
       cache: "no-store",
@@ -503,7 +517,7 @@ export async function getExperienceById(id: string, currencyCode?: string): Prom
 
 export async function getJSONLD(headoutId: string): Promise<ApiResult<string>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/gttd/jsonld/${encodeURIComponent(headoutId)}`, {
+    const res = await fetch(apiUrl(`/api/v1/gttd/jsonld/${encodeURIComponent(headoutId)}`), {
       next: { revalidate: PDP_REVALIDATE_SECONDS },
     });
     const payload = await readJson<BackendJSONLDResponse>(res);
@@ -522,7 +536,7 @@ export async function getJSONLD(headoutId: string): Promise<ApiResult<string>> {
 export async function getAvailability(experienceId: string, date: string): Promise<ApiResult<Record<string, unknown>>> {
   try {
     const res = await fetch(
-      `${API_BASE}/api/v1/experiences-availability/${encodeURIComponent(experienceId)}?date=${encodeURIComponent(date)}`,
+      apiUrl(`/api/v1/experiences-availability/${encodeURIComponent(experienceId)}?date=${encodeURIComponent(date)}`),
       { cache: "no-store" },
     );
     return readJson<Record<string, unknown>>(res);
@@ -568,6 +582,7 @@ export interface CartItemPayload {
   lastName?: string;
   email?: string;
   phone?: string;
+  inputFields?: Record<string, unknown>[];
 }
 
 interface CartItemResponse {
@@ -591,6 +606,11 @@ interface CartItemResponse {
   currency: string;
   title: string;
   imageUrl: string;
+  inputFields?: Record<string, unknown>[];
+  paxMin?: number;
+  paxMax?: number;
+  originalPriceAmount?: number;
+  originalCurrency?: string;
   addedAt: string;
 }
 
@@ -616,7 +636,7 @@ export function getCartSessionId(): string {
 
 export async function getCart(sessionId: string): Promise<ApiResult<CartResponse>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/cart`, {
+    const res = await fetch(apiUrl("/api/v1/cart"), {
       headers: { "X-Session-ID": sessionId },
       cache: "no-store",
     });
@@ -628,7 +648,7 @@ export async function getCart(sessionId: string): Promise<ApiResult<CartResponse
 
 export async function addCartItem(sessionId: string, item: CartItemPayload): Promise<ApiResult<CartResponse>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/cart/items`, {
+    const res = await fetch(apiUrl("/api/v1/cart/items"), {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Session-ID": sessionId },
       body: JSON.stringify(item),
@@ -640,9 +660,21 @@ export async function addCartItem(sessionId: string, item: CartItemPayload): Pro
   }
 }
 
+export async function getCartItem(sessionId: string, itemUuid: string): Promise<ApiResult<CartItemResponse>> {
+  try {
+    const res = await fetch(apiUrl(`/api/v1/cart/items/${encodeURIComponent(itemUuid)}`), {
+      headers: { "X-Session-ID": sessionId },
+      cache: "no-store",
+    });
+    return readJson<CartItemResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
 export async function removeCartItem(sessionId: string, itemId: string): Promise<ApiResult<CartResponse>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/cart/items/${encodeURIComponent(itemId)}`, {
+    const res = await fetch(apiUrl(`/api/v1/cart/items/${encodeURIComponent(itemId)}`), {
       method: "DELETE",
       headers: { "X-Session-ID": sessionId },
       cache: "no-store",
@@ -655,7 +687,7 @@ export async function removeCartItem(sessionId: string, itemId: string): Promise
 
 export async function clearCart(sessionId: string): Promise<ApiResult<{ message: string }>> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/cart`, {
+    const res = await fetch(apiUrl("/api/v1/cart"), {
       method: "DELETE",
       headers: { "X-Session-ID": sessionId },
       cache: "no-store",
