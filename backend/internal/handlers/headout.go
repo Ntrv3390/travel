@@ -706,9 +706,16 @@ func (h *HeadoutHandler) syncProductToDB(c *gin.Context, productID string) {
 		return
 	}
 
-	h.saveProductToDB(productID, pData)
-
 	h.writeUpstreamResponse(c, upstream)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("Panic saving product %s to DB: %v", productID, r)
+			}
+		}()
+		h.saveProductToDB(productID, pData)
+	}()
 }
 
 func (h *HeadoutHandler) saveProductToDB(headoutID string, pData map[string]interface{}) {
