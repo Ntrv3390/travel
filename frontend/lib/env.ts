@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const defaultApiUrl = process.env.NEXT_PUBLIC_API_URL ?? process.env.API_URL ?? "https://api-stage.triipzy.com";
+const defaultApiUrl = process.env.NEXT_PUBLIC_API_URL ?? process.env.API_URL ?? "http://localhost:8080";
 const defaultHeadoutPublicApiUrl = process.env.NEXT_PUBLIC_HEADOUT_PUBLIC_API_URL ?? process.env.HEADOUT_PUBLIC_API_URL ?? "https://www.headout.com/api/public";
 
 const envSchema = z.object({

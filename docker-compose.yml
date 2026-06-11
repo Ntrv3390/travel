@@ -54,7 +54,7 @@ services:
       GTTD_PROD_SFTP_USERNAME: ${GTTD_PROD_SFTP_USERNAME:-traviia-prod}
       GTTD_PROD_SFTP_REMOTE_DIR: ${GTTD_PROD_SFTP_REMOTE_DIR:-/uploads/traviia}
       GTTD_PROD_SSH_PRIVATE_KEY_PATH: /run/secrets/gttd_prod_ssh_key
-      GTTD_BASE_URL: ${GTTD_BASE_URL:-https://traviia.com}
+      GTTD_BASE_URL: ${GTTD_BASE_URL:-https://triipzy.com}
       GTTD_FEED_OUTPUT_DIR: ${GTTD_FEED_OUTPUT_DIR:-/tmp/gttd_feeds}
       GTTD_CRON_SCHEDULE: ${GTTD_CRON_SCHEDULE:-0 2 * * *}
       GTTD_ENV: ${GTTD_ENV:-production}
@@ -76,6 +76,7 @@ services:
       ADMIN_BASE_URL: ${ADMIN_BASE_URL:-http://localhost:3000}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      AVAILABILITY_SYNC_CRON_SCHEDULE: ${AVAILABILITY_SYNC_CRON_SCHEDULE:-0 * * * *}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

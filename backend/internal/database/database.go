@@ -451,6 +451,32 @@ func ensureTable(name, ddl string) {
 }
 
 func Migrate() error {
+	// Pre-migration fixes: clean up data that would block GORM's ALTER TABLE casts.
+
+	// carts.user_id was stored as text in an older schema; empty strings can't be
+	// cast to bigint, so zero them out before AutoMigrate changes the column type.
+	if db.Migrator().HasTable("carts") && db.Migrator().HasColumn("carts", "user_id") {
+		db.Exec(`UPDATE carts SET user_id = '0' WHERE user_id::text = '' OR user_id IS NULL`)
+	}
+
+	// GORM auto-names the unique index on users.email as "uni_users_email" and tries
+	// to DROP it before re-creating it. If the constraint exists under a different name
+	// (e.g. "users_email_key" from a raw CREATE TABLE), the DROP fails. Create the
+	// expected name idempotently so GORM can manage it cleanly.
+	if db.Migrator().HasTable("users") {
+		db.Exec(`DO $$ BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint
+				WHERE conname = 'uni_users_email'
+				  AND conrelid = 'users'::regclass
+			) THEN
+				ALTER TABLE users ADD CONSTRAINT uni_users_email UNIQUE (email);
+			END IF;
+		EXCEPTION WHEN others THEN
+			NULL; -- email uniqueness already enforced another way; GORM will handle it
+		END $$`)
+	}
+
 	return db.AutoMigrate(
 		&models.Experience{},
 		&models.ExperienceGTTD{},
