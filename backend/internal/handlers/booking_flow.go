@@ -1816,6 +1816,9 @@ func (h *BookingFlowHandler) saveBookingToDB(ctx context.Context, req createBook
 		SpecialRequests:       req.SpecialRequests,
 		ConfirmationEmailSent: true,
 
+		CancellationPolicy: "{}",
+		PaxPricing:         "{}",
+
 		BookingDate:    time.Now(),
 		ExperienceDate: expDate,
 	}
