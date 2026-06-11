@@ -124,7 +124,7 @@ export function CheckoutForm() {
             </h2>
 
             <p className="mt-3 text-muted-foreground">
-              The experience you're trying to book is unavailable, expired,
+              The experience you&apos;re trying to book is unavailable, expired,
               or the session has been cleared.
             </p>
 
@@ -147,7 +147,7 @@ export function CheckoutForm() {
             <p className="mt-6 text-sm text-muted-foreground">
               Need help? Contact our <Link href="/help" className="underline">
                 support team
-              </Link> and we'll assist you.
+              </Link> and we&apos;ll assist you.
             </p>
           </div>
         </div>
