@@ -11,6 +11,7 @@ import { createBooking, getCartSessionId } from "@/lib/api";
 import { removeFromRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import { useCheckout } from "@/context/CheckoutContext";
 import { useCartContext } from "@/context/CartContext";
+import Link from "next/link";
 import { useToast } from "@/components/ui/toaster";
 
 const STANDARD_CUSTOMER_FIELDS = new Set(["NAME", "EMAIL", "PHONE"]);
@@ -35,8 +36,8 @@ export function CheckoutForm() {
 
     const variantInputFields = isDynamic
       ? info.inputFields
-          .filter((f) => !STANDARD_CUSTOMER_FIELDS.has(f.id))
-          .map((f) => ({ id: f.id, value: String(values[f.id] ?? "") }))
+        .filter((f) => !STANDARD_CUSTOMER_FIELDS.has(f.id))
+        .map((f) => ({ id: f.id, value: String(values[f.id] ?? "") }))
       : undefined;
 
     const firstName = isDynamic
@@ -86,7 +87,7 @@ export function CheckoutForm() {
     toast({ title: "Booking confirmed!", description: "Your booking has been confirmed.", variant: "success" });
     const booking = result.data;
     removeFromRecentlyViewed(info.productId || info.experienceId);
-    if (info.cartItemId) removeItem(info.cartItemId).catch(() => {});
+    if (info.cartItemId) removeItem(info.cartItemId).catch(() => { });
 
     const bookingId = booking?.bookingId;
     if (!bookingId) {
@@ -106,6 +107,53 @@ export function CheckoutForm() {
     priceAmount: info.bookingPrice,
     guestCounts: info.guestCounts ?? { ADULT: 1 },
   };
+
+  if (info.experienceId === '') {
+    if (!info.experienceId) {
+      return (
+        <div className="container flex min-h-[70vh] items-center justify-center px-4">
+          <div className="w-full max-w-lg text-center">
+            <div className="mb-6 inline-flex h-24 w-24 items-center justify-center rounded-full bg-muted">
+              <span className="text-4xl">🎟️</span>
+            </div>
+
+            <h1 className="text-6xl font-extrabold tracking-tight">404</h1>
+
+            <h2 className="mt-4 text-2xl font-semibold">
+              Experience Not Found
+            </h2>
+
+            <p className="mt-3 text-muted-foreground">
+              The experience you're trying to book is unavailable, expired,
+              or the session has been cleared.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={() => router.push("/")}
+                className="rounded-xl bg-primary px-6 py-3 font-medium text-primary-foreground transition hover:opacity-90"
+              >
+                Go Home
+              </button>
+
+              <button
+                onClick={() => router.push("/products")}
+                className="rounded-xl border px-6 py-3 font-medium transition hover:bg-muted"
+              >
+                Browse Experiences
+              </button>
+            </div>
+
+            <p className="mt-6 text-sm text-muted-foreground">
+              Need help? Contact our <Link href="/help" className="underline">
+                support team
+              </Link> and we'll assist you.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="container py-8 sm:py-10 pb-10">
