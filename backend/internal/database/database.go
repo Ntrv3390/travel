@@ -450,29 +450,6 @@ func ensureTable(name, ddl string) {
 	}
 }
 
-// ensureConstraint creates a UNIQUE constraint with the GORM-expected name if it
-// doesn't already exist. Tables created via raw DDL get Postgres default names
-// (e.g. "users_email_key") which differ from GORM's convention ("uni_users_email").
-// AutoMigrate tries to DROP the GORM-named constraint before re-adding it, so this
-// must run before AutoMigrate.
-func ensureConstraint(table, column, constraintName string) {
-	db.Exec(`DO $$ BEGIN
-		IF NOT EXISTS (
-			SELECT 1 FROM pg_constraint
-			WHERE conname = '`+constraintName+`'
-			  AND conrelid = '`+table+`'::regclass
-		) THEN
-			BEGIN
-				ALTER TABLE `+table+` ADD CONSTRAINT `+constraintName+` UNIQUE (`+column+`);
-			EXCEPTION WHEN duplicate_table THEN
-				NULL;
-			END;
-		END IF;
-	EXCEPTION WHEN others THEN
-		NULL;
-	END $$`)
-}
-
 func Migrate() error {
 	// Pre-migration fixes: must run before AutoMigrate to prevent crash-loop.
 
@@ -482,15 +459,47 @@ func Migrate() error {
 		db.Exec(`UPDATE carts SET user_id = '0' WHERE user_id::text = '' OR user_id IS NULL`)
 	}
 
-	// Tables created via raw DDL have Postgres-default constraint names which differ
-	// from GORM's "uni_<table>_<column>" convention. AutoMigrate drops the GORM name
-	// before re-adding it, so create the expected names first.
-	ensureConstraint("users", "email", "uni_users_email")
-	ensureConstraint("password_reset_tokens", "token", "uni_password_reset_tokens_token")
-	ensureConstraint("refresh_tokens", "token", "uni_refresh_tokens_token")
-	ensureConstraint("settings", "key", "uni_settings_key")
-	ensureConstraint("cities", "code", "uni_cities_code")
-	ensureConstraint("products", "headout_id", "uni_products_headout_id")
+	// Tables created via raw DDL have Postgres-default constraint names (e.g.
+	// "users_email_key") that differ from GORM's convention ("uni_users_email").
+	// AutoMigrate drops the GORM name before re-adding it; if the GORM name doesn't
+	// exist the DROP fails and the server crash-loops.
+	// Fix: scan every single-column UNIQUE constraint in the public schema that isn't
+	// already GORM-named, and create an alias with the GORM name so AutoMigrate can
+	// drop/re-create it cleanly. Errors are swallowed — if the alias already exists
+	// or the column already has two UNIQUE constraints we just move on.
+	db.Exec(`DO $$
+	DECLARE
+		r      RECORD;
+		gname  TEXT;
+		exists INT;
+	BEGIN
+		FOR r IN (
+			SELECT DISTINCT t.relname AS tbl, a.attname AS col
+			FROM   pg_constraint c
+			JOIN   pg_class     t ON t.oid = c.conrelid
+			JOIN   pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(c.conkey)
+			WHERE  c.contype = 'u'
+			AND    array_length(c.conkey, 1) = 1
+			AND    t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+			AND    c.conname NOT LIKE 'uni_%'
+		)
+		LOOP
+			gname := 'uni_' || r.tbl || '_' || r.col;
+			SELECT COUNT(*) INTO exists
+			FROM   pg_constraint
+			WHERE  conname = gname
+			AND    conrelid = r.tbl::regclass;
+
+			IF exists = 0 THEN
+				BEGIN
+					EXECUTE 'ALTER TABLE ' || r.tbl ||
+					        ' ADD CONSTRAINT ' || gname ||
+					        ' UNIQUE (' || r.col || ')';
+				EXCEPTION WHEN others THEN NULL;
+				END;
+			END IF;
+		END LOOP;
+	END $$`)
 
 	return db.AutoMigrate(
 		&models.Experience{},
