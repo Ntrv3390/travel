@@ -59,6 +59,7 @@ export function CheckoutForm() {
         variantName: info.variantName,
         inventoryId: info.inventoryId,
         inventoryType: info.inventoryType,
+        inventorySeatIds: info.inventorySeatIds,
         date: info.date,
         startDateTime: info.startDateTime,
         endDateTime: info.endDateTime,

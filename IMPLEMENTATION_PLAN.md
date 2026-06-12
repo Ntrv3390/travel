@@ -1,248 +1,187 @@
-# Cart, Checkout & Confirmation — UI Redesign Plan
+# Headout DB-First Mode — Implementation Plan
 
-## Design Principles
-
-- **Mobile-first, always.** Every layout starts at 375px and scales up. No horizontal overflow ever.
-- **Consistent token usage.** Brand blue (`brand-500 = #0ea5e9`), Geist Sans, `--radius` from CSS vars, custom shadows from tailwind config.
-- **Generous whitespace.** Cards get `p-6` minimum, sections breathe with `gap-6`/`gap-8`.
-- **Rounded, soft.** Upgrade from `rounded-lg` to `rounded-2xl` on all experience cards.
-- **Trust-first.** Secure checkout badges, instant confirmation copy, cancellation policy visible before booking.
-- **Animate sparingly.** `fade-in-up` on mount, `slide-in-bottom` for mobile sticky bars.
+## Summary of Non-Negotiable Rules
+- **Rule A**: When `fetch_fresh = false`, ZERO Headout booking/inventory API calls
+- **Rule B**: Admin has ONE sync control only — "Sync Inventory" on Settings page; all other sync buttons removed
+- **Rule C**: Full sync must complete within 5 minutes (40 Tier-2 + 80 Tier-3 workers)
 
 ---
 
-## Page 1: Cart (`/cart`)
+## Status of Phases
 
-### Layout structure
-
-```
-Mobile                          Desktop (lg+)
-─────────────────────           ───────────────────────────────────────
-[Header: "Your Cart" (n items)] [Header]
-[Currency alert (if stale)]     [Currency alert]
-[Experience Group Card]         [Experience Group Card] │ [Order Summary
-[Experience Group Card]         [Experience Group Card] │  sticky card ]
-                                                        │
-[Sticky bottom bar: total + CTA]
-```
-
-### Header
-- `"Your Cart"` as `text-display-sm font-bold`
-- Grey pill badge showing item count: `n items`
-- "Clear all" ghost button — right-aligned, only shown if cart has items
-- `mb-8` separation from content
-
-### Experience Group Cards
-Each experience gets a `rounded-2xl border bg-card shadow-glass` card:
-
-**Card top:** Horizontal strip
-- Left: `80×80` experience image, `rounded-xl object-cover` — linked to PDP
-- Center: Experience title (bold, `line-clamp-2`), then muted variant name if different
-- Right: Trash icon button (`hover:text-destructive`, ghost)
-
-**Booking rows** (one per date/variant combo) — inside `divide-y`:
-- **Date + time pill:** `rounded-full bg-muted px-3 py-1 text-xs font-medium` — e.g. "Jun 25 · 9:00 AM"
-- **Guest stepper:** Per type (ADULT/CHILD), pill-style inline stepper `[−] 2 [+]`, `h-8 w-8` touch targets
-- **Price:** Right-aligned — unit price small muted below, **total bold** above
-- **"Book this" CTA:** Full-width on mobile, `w-auto` on sm+, placed bottom-right of row
-
-**Card footer:** Light grey `bg-muted/30` strip — "Activity total: $XXX" right-aligned
-
-### Desktop Order Summary Sidebar (lg+ only)
-Sticky `top-24` card:
-- "Order Summary" heading
-- Each item: title + date + price in a compact list
-- Divider
-- **Cart total** large + bold
-- **"Checkout All" primary button** full-width `h-12`
-- "🔒 All payments secured" caption
-
-### Mobile Sticky Bottom Bar
-`fixed bottom-0 inset-x-0` bar with `shadow-sticky bg-background/95 backdrop-blur-md`:
-- "Total: $XXX" left
-- "Checkout All →" primary button right, `h-12`
-- Only shown when cart has items, `slide-in-bottom` animation
-
-### Empty State
-Centered, with a luggage/compass SVG icon (inline, brand-colored), "Your cart is empty" heading, "Browse experiences" CTA button.
-
-### Loading Skeleton
-3× skeleton cards with image placeholder + text lines.
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Three-tier streaming sync pipeline (cities → variants → availability) | ✅ DONE |
+| 2 | DB-first reads: GetCalendar, GetAvailability | ✅ DONE |
+| 3 | DB-first reads: GetProductByIDV2, ListNormalAvailabilities | ✅ DONE |
+| 4 | Capacity model (SELECT FOR UPDATE decrement) | ✅ DONE |
+| 5+6 | Local booking path (booking_flow_db.go) | ✅ DONE |
+| 7 | Admin sync button cleanup (Rule B) | ✅ DONE |
+| 8 | price_from fix: sync writes MIN(price_amount) to products | ✅ DONE |
+| 9 | NULL escape hatch fix in listProductsFromDB | ✅ DONE |
 
 ---
 
-## Page 2: Checkout — Single Item (`/checkout`)
+## Root Cause Analysis: Sync Not Storing Slots (June 11)
 
-### Layout structure
+### Bug 1 — Wrong inventory endpoint
+- **Symptom**: `slots_stored: 0` after full sync
+- **Root cause**: `fetchAndStoreAvailability` called `/v2/products/{id}/variants/{variantId}/availabilities/` — date-level data with no `inventoryId` field. The guard `if inventoryID == "" { return false }` in `storeAvailabilitySlot` silently rejected every row.
+- **Fix**: Switch to `/v2/inventory/list-by/tour/?tourId={variantId}` which returns items with `id` (inventoryId), per-person pricing, and `startDateTime`/`endDateTime`.
 
-```
-Mobile                         Desktop (lg+)
-──────────────────             ──────────────────────────────────────
-[Step bar: ① Cart ② Checkout]  [Step bar]
-[Order Summary card]           [Traveller Details form] │ [Order Summary
-[Traveller Details form]                                │  sticky card ]
-[Trust signals strip]          [Trust signals strip]    │
-[Submit CTA]
-```
+### Bug 2 — Missing `date` field in inventory items
+- **Symptom**: Rows not upserted even after endpoint fix
+- **Root cause**: Inventory API items use `startDateTime`, not `date`. `ExtractString(slotData, "date")` returned `""`, causing the upsert to fail.
+- **Fix**: Added fallback: `if date == "" { date = startDT[:10] }`
 
-### Step Progress Bar
-3 steps inline: `Cart → Checkout → Confirmed`
-Each step is a labelled dot. Active = filled brand circle. Done = filled green checkmark. Future = grey outline.
-Full-width, `mb-8`.
-
-### Order Summary card (visible top on mobile, sidebar on desktop)
-Card `rounded-2xl border shadow-glass p-6`:
-- Image: `aspect-video w-full rounded-xl object-cover` — or `h-48` fixed height
-- Title: `text-xl font-bold mt-4`
-- Metadata row: `Calendar icon + date`, `Clock icon + time` (if set), `Users icon + "N guests"`
-  — each as a `flex items-center gap-1.5 text-sm text-muted-foreground` pill
-- Divider
-- Guest breakdown: per type, count × unit price = subtotal, listed rows
-- Divider
-- **Total row:** "Total" left, bold price right — `text-lg font-bold`
-- Small muted: "Price confirmed at booking time"
-
-### Traveller Details Form
-Section card `rounded-2xl border p-6`:
-- Heading: `text-lg font-semibold` "Traveller Details"
-- Subheading: muted small text "Enter details for the lead traveller"
-- All inputs: `h-12 rounded-xl text-base` (larger than default for mobile comfort)
-- Labels: `text-sm font-medium mb-1.5` above each field
-- Two-column grid for First Name / Last Name on sm+
-- Two-column grid for Email / Phone on sm+
-- Error states: red border + red helper text below
-- "Special Requests" (optional) collapsible `<details>` / accordion at bottom of form
-- **Submit button:** `w-full h-14 rounded-xl text-base font-semibold` with Loader2 spinner when submitting
-
-### Trust Signals Strip (below form)
-3 columns on sm+, stacked on mobile:
-```
-🔒 Secure Payment    ✓ Instant Confirmation    📧 Voucher by Email
-```
-Each column: icon (brand colour) + bold label + muted sub-label
-`rounded-xl border bg-muted/30 px-4 py-3`
+### Bug 3 — Counter semantics: processed_products > total_products
+- **Symptom**: Sync job showed `processed_products: 5198` vs `total_products: 4033`
+- **Root cause**: `processed.Add(1)` was in Tier-3 (variant level). A product with N variants added N to the counter, but `total_products` was counted at product level (Tier-1).
+- **Fix**: Moved `processed.Add(1)` to Tier-2 (product level). Both counters now measure at the same granularity.
 
 ---
 
-## Page 3: Checkout — Multi Item (`/checkout?multi=true`)
+## Root Cause Analysis: Product Page Issues for Product 20206 (June 12)
 
-Same two-column layout as single checkout. Differences:
+### Finding 1 — Price discrepancy: "Starts at" shows 36.26, calendar shows 36.25
 
-### Order Summary
-- Collapsible per-item sections (`<details>` accordion): title, date, guests, price
-- "N items" heading at top
-- Mixed-currency warning if applicable (amber alert, better designed)
-- Grand total at bottom
+**Source divergence:**
+| Field | Source API field | Value |
+|-------|-----------------|-------|
+| `products.price_from` | `listingPrice.minimumPrice.finalPrice` | 36.26 |
+| `product_availabilities.price_amount` | `pricing.headoutSellingPrice` | 36.25 |
 
-### Form
-Same `CustomerDetailsForm`. Different submit label: "Confirm & Book All (N)"
+Two different Headout API fields with a 1-cent divergence. The product listing displays `price_from`, but the calendar/availability queries read `price_amount`.
 
-### After Booking (completion state)
-Replaces the page content:
+**Fix**: After storing availability slots per product, update `products.price_from = MIN(price_amount) WHERE remaining_capacity > 0`. This ensures the "Starts at" price shown in listing always matches the cheapest real bookable slot.
 
-**All succeeded:**
-- Animated green checkmark (scale-in)
-- "All Bookings Confirmed!" heading
-- Booking results table: title | booking ID | status badge
-- Two CTAs: "Explore More" (primary) + "Download Vouchers" (if applicable)
-
-**Partial failure:**
-- Amber icon
-- Table shows success (green badge) and failed (red badge) rows
-- "Retry failed" link for failed items
-- "Go to cart" secondary CTA
+**Implementation location**: `sync/service.go` — `fetchAndStoreAvailability`, at line ~603 where `is_available` is already written back.
 
 ---
 
-## Page 4: Booking Confirmation (`/checkout/confirmation`)
+### Finding 2 — GetProductByIDV2 bypasses fetch_fresh (DB path commented out)
 
-### Confirmed State Layout
+**Location**: `handlers/headout.go:606-618`
 
-```
-──────────────────────────────────────────
-[Ambient confetti particles — CSS only]
+When `fetch_fresh = false`, `GetProductByIDV2` should read from `products` table. The DB path was implemented but commented out. The live path calls `syncProductToDB` which unconditionally calls Headout.
 
-         ✓ (animated circle → checkmark)
-    "Booking Confirmed!"   text-display-sm
-    "Thanks [name], you're all set."
+**Additional problem**: Even if uncommented, `writeProductFromDB` uses `product.PriceFrom` (36.26 from `listingPrice`), not the corrected price derived from `product_availabilities`. After Finding 1's fix, `price_from` will be updated correctly during sync, so `product.PriceFrom` will reflect the correct price.
 
-┌───────────────────────────────────────┐
-│  BOOKING REFERENCE                    │
-│  ████████████   (monospace, large)    │
-│                                       │
-│  Experience: [title]                  │
-│  Date:       Jun 25, 2026             │
-│  Status:     ● Confirmed              │
-│  Email:      Confirmation sent ✓      │
-└───────────────────────────────────────┘
-
-    [Explore More Experiences] [Home]
-──────────────────────────────────────────
-```
-
-**Animated checkmark:** 
-- Outer ring: `animate-ping` brand green circle, one pulse then stops
-- Inner circle: `scale-in` animation, filled green
-- Checkmark: SVG `stroke-dashoffset` animation draws the path in
-
-**Reference number:**
-- `font-mono text-2xl font-bold tracking-widest` inside a `rounded-2xl bg-muted/40 p-4` block
-- Copy-to-clipboard button (icon only, ghost)
-
-**Booking detail card `rounded-2xl border shadow-glass p-6`:**
-- Each row: label (muted, uppercase xs) + value (bold), separated by subtle divider
-- Status shown as coloured badge: green "Confirmed", amber "Pending", grey "Processing"
-
-**Confetti (CSS-only, no library):**
-- 12 absolutely-positioned `before:` / `after:` pseudo-elements or small `span` elements
-- `@keyframes confetti-fall` — random rotations + fall from top
-- `pointer-events-none overflow-hidden` wrapper, height `160px`
-- Only rendered when `isConfirmed === true`
-
-### Error/Pending State
-- Amber pulsing ring icon
-- "Booking Reference Unavailable" heading
-- Helpful copy explaining what to do
-- Support contact link
+**Fix**: Uncomment lines 606-618. The DB path reads `products` by `headout_id`, then calls `writeProductFromDB` which now uses the corrected `price_from`.
 
 ---
 
-## Files to Create / Modify
+### Finding 3 — ListNormalAvailabilities bypasses fetch_fresh (DB path commented out)
 
-| File | Action | Summary |
-|---|---|---|
-| `frontend/app/cart/page.tsx` | Rewrite | New layout with groups, desktop sidebar, mobile sticky bar |
-| `frontend/components/booking/CartItemCard.tsx` | Rewrite | Rounded card, better stepper, price layout |
-| `frontend/components/booking/CheckoutForm.tsx` | Rewrite | Wrap with two-column layout + OrderSummary |
-| `frontend/components/booking/MultiCheckoutView.tsx` | Rewrite | Two-column layout, collapsible order summary, better result state |
-| `frontend/app/checkout/confirmation/page.tsx` | Rewrite | Animated checkmark, confetti, copy reference, full detail card |
-| `frontend/components/booking/CustomerDetailsForm.tsx` | Enhance | Larger inputs (`h-12`), better field layout, trust strip |
-| `frontend/components/booking/OrderSummary.tsx` | New/enhance | Reusable card used in both single and multi checkout |
-| `frontend/components/booking/StepBar.tsx` | Create | Reusable 3-step progress indicator |
-| `frontend/components/booking/TrustSignals.tsx` | Create | Reusable trust signals strip |
+**Location**: `handlers/headout.go:631-634`
+
+Same pattern as Finding 2. When `fetch_fresh = false`, should read from `product_availabilities`. The implementation `listAvailabilitiesFromDB` exists and is correct (lines 1139-1235) but is never called.
+
+**Fix**: Uncomment lines 631-634.
 
 ---
 
-## Component Design Tokens (consistent across all 3 pages)
+### Finding 4 — NULL escape hatch in listProductsFromDB
 
+**Location**: `handlers/headout.go:456`
+
+```go
+query = query.Where("is_available = ? OR is_available IS NULL", true)
 ```
-Card shell:        rounded-2xl border bg-card shadow-glass
-Section heading:   text-lg font-semibold text-foreground
-Metadata pill:     rounded-full bg-muted/60 px-3 py-1 text-xs font-medium
-Primary CTA:       h-12 sm:h-14 w-full rounded-xl text-base font-semibold
-Ghost/delete:      text-muted-foreground hover:text-destructive transition-colors
-Image thumbnail:   rounded-xl object-cover (80×80 cart, full-width checkout)
-Price display:     text-lg font-bold (total), text-sm text-muted-foreground (unit)
-Status badge:      rounded-full px-2.5 py-0.5 text-xs font-semibold + colour
-```
+
+Products that have never been availability-synced have `is_available = NULL`. This escape hatch was added to avoid hiding products before the first sync. Now that sync is complete (4033 products synced), this clause allows stale products with no inventory data to appear in user-facing listings.
+
+**Fix**: Remove the `OR is_available IS NULL` clause. Change to `WHERE is_available = true` only. Products without a successful availability sync will have `is_available = false` after sync completes.
+
+**Edge case**: First-run before sync completes — product list will be empty until sync runs once. This is acceptable: it prevents showing products with no availability data.
 
 ---
 
-## Mobile-Specific Patterns
+### Finding 5 — No package-level filtering for remaining_capacity > 0
 
-- All cards: `mx-0 rounded-none` on xs, `rounded-2xl` on sm+ (edge-to-edge on small phones)
-- Checkout form stacks above order summary on mobile (summary collapses to top)
-- Cart sticky bar: `fixed bottom-0 inset-x-0 z-50 p-4` with safe-area inset
-- Touch targets: minimum `h-10 w-10` (44px) for all interactive elements
-- Font size: `text-base` minimum for all inputs (prevents iOS zoom)
-- `gap-4` between sections on mobile, `gap-8` on lg+
+**Current behavior**: `ListNormalInventory` already has the DB path active and uses `listInventoryFromDB`. However, if a slot has `remaining_capacity = 0`, it is returned with `availability = "CLOSED"`. The frontend calendar will show these dates as unavailable, but they still appear in the response payload.
+
+The correct behavior (when `fetch_fresh = false`) is: only return slots where `remaining_capacity > 0`. Zero-capacity slots contribute nothing to the calendar and slow the query.
+
+**Fix**: Add `AND remaining_capacity > 0` to the WHERE clause in `listInventoryFromDB` and `listAvailabilitiesFromDB`.
+
+---
+
+## Proposed Solutions (All gated on fetch_fresh = false)
+
+### Fix 1 — Sync writes corrected price_from
+
+In `sync/service.go`, `fetchAndStoreAvailability`, after the `is_available` update (line ~603):
+
+```go
+// Update price_from to reflect cheapest available slot price
+s.db.WithContext(ctx).Exec(`
+    UPDATE products SET price_from = (
+        SELECT MIN(price_amount) FROM product_availabilities
+        WHERE product_id = ? AND remaining_capacity > 0
+    ) WHERE id = ? AND EXISTS (
+        SELECT 1 FROM product_availabilities
+        WHERE product_id = ? AND remaining_capacity > 0
+    )`, product.ID, product.ID, product.ID)
+```
+
+The `EXISTS` guard prevents overwriting `price_from` with NULL when no slots exist.
+
+### Fix 2 — Uncomment GetProductByIDV2 DB path
+
+Remove comment markers from `headout.go:606-618`. No logic change needed beyond uncomment — `price_from` will be correct after Fix 1.
+
+### Fix 3 — Uncomment ListNormalAvailabilities DB path
+
+Remove comment markers from `headout.go:631-634`. `listAvailabilitiesFromDB` already exists and is correct.
+
+### Fix 4 — Remove NULL escape hatch
+
+Change `headout.go:456`:
+```go
+// Before
+query = query.Where("is_available = ? OR is_available IS NULL", true)
+// After
+query = query.Where("is_available = ?", true)
+```
+
+### Fix 5 — Filter zero-capacity slots in DB reads
+
+Add `AND remaining_capacity > 0` to both `listInventoryFromDB` and `listAvailabilitiesFromDB` WHERE clauses.
+
+---
+
+## Edge Cases
+
+| Case | Behavior |
+|------|----------|
+| Product in DB, no availability slots | `GetProductByIDV2` returns product data, calendar returns all-UNAVAILABLE |
+| Product NOT in DB, `fetch_fresh=false` | Returns 404 — correct, don't call Headout |
+| All slots at capacity=0 | Product shows with no available dates — user must select a different date or product |
+| Sync runs while users browse | Price can update mid-session; next page load reflects updated price |
+| `price_adult` is NULL (no per-person pricing) | `effectivePrice` falls back to `price_amount` — already handled in booking_flow_db.go |
+| Two variants have different min prices | `MIN(price_amount)` across all variants — shows global minimum, same as Headout's behavior |
+
+---
+
+## Rollout Plan
+
+1. Apply Fix 1 (sync price_from update) — takes effect on next sync run
+2. Apply Fix 4 (NULL escape hatch) — safe immediately post-sync
+3. Apply Fix 2 + Fix 3 (uncomment DB paths) — eliminates Headout calls for product detail
+4. Apply Fix 5 (zero-capacity filter) — performance improvement, no functional change visible to user
+5. Run one full inventory sync to populate corrected `price_from` values for all 4033 products
+
+---
+
+## Testing Plan
+
+| Test | Expected |
+|------|----------|
+| `fetch_fresh=false`, GET /api/products/{20206} | Returns from DB, price=36.25 (corrected) |
+| `fetch_fresh=false`, GET calendar for product 20206 | Returns available dates from DB |
+| `fetch_fresh=false`, GET availability for product 20206 + date | Returns slots from DB |
+| `fetch_fresh=false`, GET /api/products listing | No products with is_available=NULL appear |
+| `fetch_fresh=true`, all above | Passes through to Headout unchanged |
+| Sync run after fixes | products.price_from updated to MIN(price_amount) |
+| Book a slot at remaining_capacity=1 | capacity decrements to 0, second booking rejected |

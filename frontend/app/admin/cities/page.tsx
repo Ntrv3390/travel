@@ -2,11 +2,10 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, MapPin, Loader2, RefreshCw } from "lucide-react";
+import { Search, ChevronDown, MapPin } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/admin/Pagination";
-import { SyncModal } from "@/components/admin/SyncModal";
 import { cn } from "@/lib/utils";
 import { useAdminPagination } from "@/hooks/useAdminPagination";
 
@@ -36,7 +35,6 @@ const ITEMS_PER_PAGE = 50;
 export default function AdminCitiesPage() {
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
   const [search, setSearch] = useState("");
   const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -66,17 +64,6 @@ export default function AdminCitiesPage() {
     setPage(1);
   }, [setPage]);
 
-  const handleSync = useCallback(async () => {
-    setSyncModal({ open: true, running: true, progress: null, error: null });
-    try {
-      const res = await api.post<{ total: number; added: number; updated: number; failed: number }>("/api/v1/admin/cities/sync");
-      setSyncModal({ open: true, running: false, progress: res, error: null });
-      fetchCities(page, search);
-    } catch (err) {
-      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
-    }
-  }, [page, search, fetchCities]);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -86,20 +73,8 @@ export default function AdminCitiesPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Cities</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage cities synced from Headout</p>
+          <p className="mt-1 text-sm text-slate-500">Cities synced from Headout</p>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncModal.running}
-          className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {syncModal.running ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          {syncModal.running ? "Syncing..." : "Sync Cities"}
-        </button>
       </div>
 
       {/* Search */}
@@ -130,14 +105,7 @@ export default function AdminCitiesPage() {
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white py-16">
           <MapPin className="h-12 w-12 text-slate-300" />
           <p className="mt-4 text-sm font-medium text-slate-500">No cities found</p>
-          <button
-            onClick={handleSync}
-            disabled={syncModal.running}
-            className="mt-4 flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Sync from Headout
-          </button>
+          <p className="mt-1 text-xs text-slate-400">Use "Sync Inventory" in Settings to populate cities.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -259,14 +227,6 @@ export default function AdminCitiesPage() {
 
       <Pagination className="border-t border-slate-100 mt-6" {...paginationProps} />
 
-      <SyncModal
-        open={syncModal.open}
-        onClose={() => setSyncModal({ open: false, running: false, progress: null, error: null })}
-        title="Cities"
-        progress={syncModal.progress}
-        error={syncModal.error}
-        running={syncModal.running}
-      />
     </motion.div>
   );
 }

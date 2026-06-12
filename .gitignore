@@ -14,6 +14,7 @@ dist/
 build/
 bin/
 postgres_data/
+.claude
 
 # GTTD SSH Keys (keep README, exclude keys)
 secrets/gttd_*_ssh_key*

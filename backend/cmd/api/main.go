@@ -159,25 +159,15 @@ func main() {
 		adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
 		adminGroup.GET("/visitors", visitorHandler.ListVisitors)
 		adminGroup.GET("/cities", adminHandler.ListCities)
-		adminGroup.POST("/cities/sync", adminHandler.SyncCities)
 		adminGroup.GET("/products", adminHandler.ListProducts)
-		adminGroup.POST("/products/sync", adminHandler.SyncProducts)
-		adminGroup.POST("/products/sync-all-individual", adminHandler.SyncAllIndividualProducts)
-		adminGroup.GET("/products/sync-status", adminHandler.GetSyncStatus)
-		adminGroup.POST("/products/:id/sync", adminHandler.SyncSingleProduct)
-		adminGroup.POST("/products/:id/sync-availability", adminHandler.SyncProductAvailability)
 		adminGroup.GET("/products/:id/availabilities", adminHandler.GetProductAvailabilities)
 		adminGroup.GET("/products/availability-insights", adminHandler.GetAvailabilityInsights)
-		adminGroup.POST("/products/sync-availability-all", adminHandler.SyncAllAvailability)
 		adminGroup.GET("/settings", adminHandler.GetSetting)
 		adminGroup.PUT("/settings", adminHandler.UpdateSetting)
 		adminGroup.GET("/status", adminHandler.GetStatus)
 		adminGroup.GET("/categories", adminHandler.ListCategoriesAdmin)
-		adminGroup.POST("/categories/sync", adminHandler.SyncCategoriesAdmin)
 		adminGroup.GET("/subcategories", adminHandler.ListSubcategoriesAdmin)
-		adminGroup.POST("/subcategories/sync", adminHandler.SyncSubcategoriesAdmin)
 		adminGroup.GET("/collections", adminHandler.ListCollectionsAdmin)
-		adminGroup.POST("/collections/sync", adminHandler.SyncCollectionsAdmin)
 		adminGroup.GET("/testimonials", adminHandler.ListTestimonialsAdmin)
 		adminGroup.POST("/testimonials", adminHandler.CreateTestimonial)
 		adminGroup.PUT("/testimonials/:id", adminHandler.UpdateTestimonial)
@@ -188,28 +178,20 @@ func main() {
 	// Docker logs SSE stream (outside middleware — uses query-param token auth)
 	router.GET("/api/v1/admin/logs/stream", adminHandler.StreamDockerLogs)
 
-	// Sync API routes (new concurrent worker-based system)
+	// Sync API routes — single inventory sync endpoint + job status
 	syncHandler := handlers.NewSyncHandler(syncService)
 	syncGroup := router.Group("/api/v1/admin/sync")
 	syncGroup.Use(middleware.AdminAuthJWT())
 	{
+		syncGroup.POST("/inventory", syncHandler.StartInventorySync)
 		syncGroup.POST("/metadata", syncHandler.StartMetadataSync)
-		syncGroup.POST("/availability", syncHandler.StartAvailabilitySync)
-		syncGroup.POST("/full", syncHandler.StartFullSync)
+		syncGroup.GET("/inventory/stats", syncHandler.GetInventoryStats)
 		syncGroup.GET("/jobs", syncHandler.ListJobs)
 		syncGroup.GET("/jobs/:job_id", syncHandler.GetJobStatus)
 		syncGroup.GET("/jobs/:job_id/progress", syncHandler.GetSyncProgress)
 		syncGroup.GET("/jobs/:job_id/failed", syncHandler.GetFailedProducts)
 		syncGroup.GET("/jobs/:job_id/metrics", syncHandler.GetMetrics)
 		syncGroup.POST("/jobs/:job_id/cancel", syncHandler.CancelJob)
-	}
-
-	// Admin sync routes (protected by admin key - keep for backwards compatibility)
-	adminSyncGroup := router.Group("/api/v1/admin")
-	adminSyncGroup.Use(middleware.AdminAuth())
-	{
-		adminSyncGroup.POST("/sync", expHandler.SyncExperiences)
-		adminSyncGroup.POST("/sync/:id", expHandler.SyncExperienceByID)
 	}
 
 	// Search endpoint
@@ -246,6 +228,8 @@ func main() {
 		headoutGroup.GET("/v2/products", headoutHandler.ListProductsV2)
 		headoutGroup.GET("/v2/products/:productId", headoutHandler.GetProductByIDV2)
 		headoutGroup.GET("/v2/products/:productId/variants/:variantId/availabilities", headoutHandler.ListNormalAvailabilities)
+		headoutGroup.GET("/v2/seatmap/products/:productId/variants/:variantId/availabilities", headoutHandler.ListSeatmapAvailabilities)
+		headoutGroup.GET("/v2/seatmap/products/:productId/variants/:variantId/inventories", headoutHandler.ListSeatmapInventory)
 		headoutGroup.GET("/v2/categories", headoutHandler.ListCategoriesV2)
 		headoutGroup.GET("/v2/collections", headoutHandler.ListCollectionsV2)
 		headoutGroup.GET("/v2/inventory", headoutHandler.ListNormalInventory)
@@ -469,27 +453,20 @@ func setupCronJobs(cfg *config.Config, gttdServices *GTTDServices, syncService *
 		}
 	}
 
-	// Availability sync cron job — configurable via AVAILABILITY_SYNC_CRON_SCHEDULE env
-	// Uses the new concurrent worker-based sync service
-	availabilitySyncCronFn := func() {
-		ctx := context.Background()
-		logger.Info("Starting scheduled availability sync...")
-		jobID, err := syncService.StartAvailabilitySync(ctx)
-		if err != nil {
-			logger.Errorf("Failed to start scheduled availability sync: %v", err)
-			return
+	// Stale slot cleanup — delete past-date availability rows daily at 02:00 UTC
+	_, err = c.AddFunc("0 2 * * *", func() {
+		db := database.GetDB()
+		result := db.Exec(`DELETE FROM product_availabilities WHERE date < TO_CHAR(CURRENT_DATE - INTERVAL '1 day', 'YYYY-MM-DD')`)
+		if result.Error != nil {
+			logger.Errorf("Stale slot cleanup failed: %v", result.Error)
+		} else {
+			logger.Infof("Stale slot cleanup: removed %d rows", result.RowsAffected)
 		}
-		logger.Infof("Scheduled availability sync started as job %s", jobID)
-	}
-	availabilityCronSchedule := os.Getenv("AVAILABILITY_SYNC_CRON_SCHEDULE")
-	if availabilityCronSchedule == "" {
-		availabilityCronSchedule = "0 * * * *" // Default: every hour
-	}
-	_, err = c.AddFunc(availabilityCronSchedule, availabilitySyncCronFn)
+	})
 	if err != nil {
-		logger.Warnf("Failed to schedule availability sync cron job: %v", err)
+		logger.Warnf("Failed to schedule stale slot cleanup cron: %v", err)
 	} else {
-		logger.Infof("Availability sync cron job scheduled: %s", availabilityCronSchedule)
+		logger.Info("Stale slot cleanup cron scheduled: 0 2 * * *")
 	}
 
 	c.Start()

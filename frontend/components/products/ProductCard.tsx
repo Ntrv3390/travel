@@ -114,11 +114,14 @@ export function ProductCard({ product }: { product: Product }) {
             </div>
           )}
 
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-lg font-bold">{formatPrice(finalPrice, priceCurrency)}</span>
-            {hasDiscount && originalPrice && (
-              <span className="text-sm text-muted-foreground line-through">{formatPrice(originalPrice, priceCurrency)}</span>
-            )}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Starting at</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-bold">{formatPrice(finalPrice, priceCurrency)}</span>
+              {hasDiscount && originalPrice && (
+                <span className="text-sm text-muted-foreground line-through">{formatPrice(originalPrice, priceCurrency)}</span>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-1.5">

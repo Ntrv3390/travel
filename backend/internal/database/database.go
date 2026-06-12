@@ -116,6 +116,9 @@ func Init(cfg *config.Config) error {
 	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS original_currency VARCHAR(10) DEFAULT '';`).Error; err != nil {
 		logger.Warnf("Could not add original_currency column to cart_items: %v", err)
 	}
+	if err := db.Exec(`ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS inventory_seat_ids jsonb DEFAULT '[]';`).Error; err != nil {
+		logger.Warnf("Could not add inventory_seat_ids column to cart_items: %v", err)
+	}
 	if err := db.Exec(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guest_counts jsonb DEFAULT '{}';`).Error; err != nil {
 		logger.Warnf("Could not add guest_counts column to bookings: %v", err)
 	}
@@ -297,6 +300,109 @@ func Init(cfg *config.Config) error {
 	if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS metadata_synced_at TIMESTAMP WITH TIME ZONE`).Error; err != nil {
 		logger.Warnf("Could not add metadata_synced_at column: %v", err)
 	}
+
+	// Phase 0: extended product metadata columns
+	for _, stmt := range []string{
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS slug VARCHAR(500) DEFAULT ''`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS country_code VARCHAR(10) DEFAULT ''`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS country_name VARCHAR(255) DEFAULT ''`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory VARCHAR(255) DEFAULT ''`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS images jsonb DEFAULT '[]'`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS cancellation_policy TEXT DEFAULT ''`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS languages jsonb DEFAULT '[]'`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS meeting_point TEXT DEFAULT ''`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS inclusions jsonb DEFAULT '[]'`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS exclusions jsonb DEFAULT '[]'`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS highlights jsonb DEFAULT '[]'`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			logger.Warnf("products migration: %v", err)
+		}
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS ix_products_city_avail ON products(city_code, is_available) WHERE deleted_at IS NULL`)
+	db.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS ix_products_title_trgm ON products USING gin (title gin_trgm_ops)`)
+
+	// Phase 0: capacity + per-type pricing + metadata columns on product_availabilities
+	for _, stmt := range []string{
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS total_capacity INT NOT NULL DEFAULT 300`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS remaining_capacity INT NOT NULL DEFAULT 300`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS price_adult NUMERIC(12,4)`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS price_child NUMERIC(12,4)`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS price_youth NUMERIC(12,4)`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS price_infant NUMERIC(12,4)`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS price_senior NUMERIC(12,4)`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS taxes_fees NUMERIC(12,4)`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS duration_minutes INT`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS languages jsonb DEFAULT '[]'`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS cancellation_type VARCHAR(50) DEFAULT ''`,
+		`ALTER TABLE product_availabilities ADD COLUMN IF NOT EXISTS booking_cutoff_hrs INT`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			logger.Warnf("product_availabilities migration: %v", err)
+		}
+	}
+	// Deduplicate product_availabilities before creating the unique index.
+	// Old sync data may have duplicate (variant_id, date, start_time) tuples which
+	// would cause CREATE UNIQUE INDEX to fail, breaking the ON CONFLICT upsert path.
+	db.Exec(`
+		WITH ranked AS (
+			SELECT id,
+				ROW_NUMBER() OVER (
+					PARTITION BY variant_id, COALESCE(date,''), COALESCE(start_time,'')
+					ORDER BY id DESC
+				) AS rn
+			FROM product_availabilities
+		)
+		DELETE FROM product_availabilities WHERE id IN (SELECT id FROM ranked WHERE rn > 1)
+	`)
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_pa_variant_date_start ON product_availabilities(variant_id, date, start_time)`).Error; err != nil {
+		logger.Warnf("Could not create unique index ux_pa_variant_date_start (duplicates may still exist): %v", err)
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS ix_pa_variant_date ON product_availabilities(variant_id, date)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS ix_pa_product_date ON product_availabilities(headout_product_id, date)`)
+
+	// Phase 0: sync_jobs extra counters
+	for _, stmt := range []string{
+		`ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS products_discovered INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS slots_stored INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS products_skipped INT NOT NULL DEFAULT 0`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			logger.Warnf("sync_jobs migration: %v", err)
+		}
+	}
+
+	// Phase 0: local_bookings table (fetch_fresh=false booking records)
+	ensureTable("local_bookings", `CREATE TABLE IF NOT EXISTS local_bookings (
+		id               BIGSERIAL PRIMARY KEY,
+		booking_ref      VARCHAR(50)  NOT NULL,
+		headout_product_id VARCHAR(100) NOT NULL,
+		product_name     VARCHAR(500) DEFAULT '',
+		variant_id       VARCHAR(100) DEFAULT '',
+		variant_name     VARCHAR(500) DEFAULT '',
+		availability_id  BIGINT REFERENCES product_availabilities(id),
+		date             VARCHAR(20)  NOT NULL,
+		start_time       VARCHAR(20)  DEFAULT '',
+		total_pax        INT          NOT NULL,
+		guest_counts     jsonb        DEFAULT '{}',
+		first_name       VARCHAR(128) DEFAULT '',
+		last_name        VARCHAR(128) DEFAULT '',
+		email            VARCHAR(320) NOT NULL,
+		phone            VARCHAR(50)  DEFAULT '',
+		special_requests TEXT         DEFAULT '',
+		total_amount     NUMERIC(12,4) DEFAULT 0,
+		currency_code    VARCHAR(10)  DEFAULT '',
+		status           VARCHAR(30)  NOT NULL DEFAULT 'CONFIRMED',
+		idempotency_key  VARCHAR(255) DEFAULT '',
+		confirmation_sent BOOLEAN     NOT NULL DEFAULT FALSE,
+		created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+		updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_local_bookings_ref  ON local_bookings(booking_ref)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS ix_local_bookings_email ON local_bookings(email)`)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ix_local_bookings_idem ON local_bookings(idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key != ''`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS ix_local_bookings_avail ON local_bookings(availability_id)`)
 
 	// Ensure api_cache table exists (for caching list endpoints like categories, collections, subcategories)
 	ensureTable("api_caches", `CREATE TABLE IF NOT EXISTS api_caches (
@@ -529,6 +635,7 @@ func Migrate() error {
 		&models.RecentlyViewed{},
 		&models.Product{},
 		&models.ProductAvailability{},
+		&models.LocalBooking{},
 	)
 }
 

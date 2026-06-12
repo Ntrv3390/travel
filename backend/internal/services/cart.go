@@ -18,8 +18,9 @@ type CartItem struct {
 	ExperienceID  string  `json:"experienceId"`
 	ProductID     string  `json:"productId,omitempty"`
 	VariantID     string  `json:"variantId"`
-	InventoryID   string  `json:"inventoryId,omitempty"`
-	InventoryType string  `json:"inventoryType,omitempty"`
+	InventoryID      string   `json:"inventoryId,omitempty"`
+	InventoryType    string   `json:"inventoryType,omitempty"`
+	InventorySeatIDs []string `json:"inventorySeatIds,omitempty"`
 	Date          string  `json:"date"`
 	StartDateTime string  `json:"startDateTime,omitempty"`
 	EndDateTime   string  `json:"endDateTime,omitempty"`
@@ -135,30 +136,31 @@ func (s *CartService) AddItem(ctx context.Context, sessionID string, item CartIt
 
 		itemID := uuid.New().String()
 		cartItem := models.CartItem{
-			CartID:        model.ID,
-			UUID:          itemID,
-			ExperienceID:  item.ExperienceID,
-			ProductID:     item.ProductID,
-			VariantID:     item.VariantID,
-			InventoryID:   item.InventoryID,
-			InventoryType: item.InventoryType,
-			Date:          item.Date,
-			StartDateTime: item.StartDateTime,
-			EndDateTime:   item.EndDateTime,
-			Adults:        item.Adults,
-			Children:      item.Children,
-			GuestCounts:   encodeGuestCounts(item.GuestCounts),
-			FirstName:     item.FirstName,
-			LastName:      item.LastName,
-			Email:         item.Email,
-			Phone:         item.Phone,
-			PriceAmount:   item.PriceAmount,
-			Currency:      item.Currency,
-			Title:         item.Title,
-			ImageURL:      item.ImageURL,
-			InputFields:   encodeInputFields(item.InputFields),
-			PaxMin:        item.PaxMin,
-			PaxMax:        item.PaxMax,
+			CartID:           model.ID,
+			UUID:             itemID,
+			ExperienceID:     item.ExperienceID,
+			ProductID:        item.ProductID,
+			VariantID:        item.VariantID,
+			InventoryID:      item.InventoryID,
+			InventoryType:    item.InventoryType,
+			InventorySeatIDs: encodeSeatIDs(item.InventorySeatIDs),
+			Date:             item.Date,
+			StartDateTime:    item.StartDateTime,
+			EndDateTime:      item.EndDateTime,
+			Adults:           item.Adults,
+			Children:         item.Children,
+			GuestCounts:      encodeGuestCounts(item.GuestCounts),
+			FirstName:        item.FirstName,
+			LastName:         item.LastName,
+			Email:            item.Email,
+			Phone:            item.Phone,
+			PriceAmount:      item.PriceAmount,
+			Currency:         item.Currency,
+			Title:            item.Title,
+			ImageURL:         item.ImageURL,
+			InputFields:      encodeInputFields(item.InputFields),
+			PaxMin:           item.PaxMin,
+			PaxMax:           item.PaxMax,
 			OriginalPriceAmount: item.OriginalPriceAmount,
 			OriginalCurrency:    item.OriginalCurrency,
 		}
@@ -314,13 +316,14 @@ func (s *CartService) GetCartItem(ctx context.Context, sessionID string, itemUUI
 	}
 
 	item := &CartItem{
-		ID:            cartItem.UUID,
-		ExperienceID:  cartItem.ExperienceID,
-		ProductID:     cartItem.ProductID,
-		VariantID:     cartItem.VariantID,
-		InventoryID:   cartItem.InventoryID,
-		InventoryType: cartItem.InventoryType,
-		Date:          cartItem.Date,
+		ID:               cartItem.UUID,
+		ExperienceID:     cartItem.ExperienceID,
+		ProductID:        cartItem.ProductID,
+		VariantID:        cartItem.VariantID,
+		InventoryID:      cartItem.InventoryID,
+		InventoryType:    cartItem.InventoryType,
+		InventorySeatIDs: parseSeatIDs(cartItem.InventorySeatIDs),
+		Date:             cartItem.Date,
 		StartDateTime: cartItem.StartDateTime,
 		EndDateTime:   cartItem.EndDateTime,
 		Adults:        cartItem.Adults,
@@ -378,9 +381,10 @@ func (s *CartService) modelToCart(m *models.Cart) *Cart {
 			ExperienceID:  item.ExperienceID,
 			ProductID:     item.ProductID,
 			VariantID:     item.VariantID,
-			InventoryID:   item.InventoryID,
-			InventoryType: item.InventoryType,
-			Date:          item.Date,
+			InventoryID:      item.InventoryID,
+			InventoryType:    item.InventoryType,
+			InventorySeatIDs: parseSeatIDs(item.InventorySeatIDs),
+			Date:             item.Date,
 			StartDateTime: item.StartDateTime,
 			EndDateTime:   item.EndDateTime,
 			Adults:        item.Adults,
@@ -454,4 +458,29 @@ func parseInputFields(data string) []map[string]interface{} {
 	}
 	json.Unmarshal([]byte(data), &fields)
 	return fields
+}
+
+func encodeSeatIDs(ids []string) string {
+	if len(ids) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func parseSeatIDs(data string) []string {
+	if data == "" || data == "[]" {
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(data), &ids); err != nil {
+		return nil
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }

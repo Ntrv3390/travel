@@ -4,7 +4,7 @@ import { toSlug } from "@/lib/utils";
 import type { SearchParams } from "@/types/api";
 import type { BookingRequest, BookingResponse } from "@/types/booking";
 import type { Experience, ExperienceOption } from "@/types/experience";
-import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse } from "@/types/product";
+import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse, SeatmapAvailabilityResponse, SeatmapInventoryResponse } from "@/types/product";
 import type { SearchAllResponse } from "@/types/search";
 
 const API_BASE = env.API_URL;
@@ -545,6 +545,42 @@ export async function getAvailability(experienceId: string, date: string): Promi
   }
 }
 
+export async function getSeatmapAvailabilities(
+  productId: string,
+  variantId: string | number,
+  options?: { currencyCode?: string; startDate?: string; endDate?: string },
+): Promise<ApiResult<SeatmapAvailabilityResponse>> {
+  try {
+    const url = buildUrl(`/api/v1/headout/v2/seatmap/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/availabilities`);
+    if (options?.currencyCode) url.searchParams.set("currencyCode", options.currencyCode);
+    if (options?.startDate) url.searchParams.set("startDate", options.startDate);
+    if (options?.endDate) url.searchParams.set("endDate", options.endDate);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return readJson<SeatmapAvailabilityResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function getSeatmapInventory(
+  productId: string,
+  variantId: string | number,
+  date: string,
+  startTime: string,
+  currencyCode?: string,
+): Promise<ApiResult<SeatmapInventoryResponse>> {
+  try {
+    const url = buildUrl(`/api/v1/headout/v2/seatmap/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/inventories`);
+    url.searchParams.set("date", date);
+    url.searchParams.set("startTime", startTime);
+    if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return readJson<SeatmapInventoryResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
 export async function createBooking(payload: BookingRequest, sessionId?: string, idempotencyKey?: string): Promise<ApiResult<BookingResponse>> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -568,6 +604,7 @@ export interface CartItemPayload {
   variantId: string;
   inventoryId?: string;
   inventoryType?: string;
+  inventorySeatIds?: string[];
   date: string;
   startDateTime?: string;
   endDateTime?: string;
@@ -592,6 +629,7 @@ interface CartItemResponse {
   variantId: string;
   inventoryId: string;
   inventoryType: string;
+  inventorySeatIds?: string[];
   date: string;
   startDateTime: string;
   endDateTime: string;

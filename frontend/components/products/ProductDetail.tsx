@@ -7,6 +7,7 @@ import { useCartContext } from "@/context/CartContext";
 import { ProductHero } from "./pdp/ProductHero";
 import { PackageCards } from "./pdp/PackageCards";
 import { AvailabilitySection } from "./pdp/AvailabilitySection";
+import { SeatMapSection } from "./pdp/SeatMapSection";
 import { HighlightsSection } from "./pdp/HighlightsSection";
 import { AboutSection } from "./pdp/AboutSection";
 import { FaqSection } from "./pdp/FaqSection";
@@ -134,7 +135,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
               />
             </motion.div>
 
-            {/* Full Availability Calendar */}
+            {/* Full Availability Calendar — NORMAL products */}
             {product.inventorySelectionType === "NORMAL" &&
               selectedVariantId != null &&
               product.id && (
@@ -157,6 +158,34 @@ export function ProductDetail({ product }: ProductDetailProps) {
                       inputFields={selectedVariant?.inputFields}
                     >
                       <AvailabilitySection />
+                    </ProductDetailProvider>
+                  </motion.div>
+                </div>
+              )}
+
+            {/* Seat map selection — SVG / SEATMAP products */}
+            {(product.inventorySelectionType === "SVG" || product.inventorySelectionType === "SEATMAP") &&
+              selectedVariantId != null &&
+              product.id && (
+                <div ref={availabilityRef}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.35 }}
+                  >
+                    <ProductDetailProvider
+                      productId={String(product.id)}
+                      productName={product.name}
+                      variantId={selectedVariantId}
+                      variantName={selectedVariant?.name ?? ""}
+                      imageUrl={imageUrl}
+                      cartItemId={cartItem?.id ?? null}
+                      initialDate={cartItem?.date ?? null}
+                      initialGuests={cartItem?.guestCounts ?? null}
+                      pax={pax}
+                      inputFields={selectedVariant?.inputFields}
+                    >
+                      <SeatMapSection />
                     </ProductDetailProvider>
                   </motion.div>
                 </div>

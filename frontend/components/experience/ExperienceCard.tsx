@@ -61,7 +61,7 @@ export function ExperienceCard({
 
           <div className="flex items-center justify-between pt-1">
             <div>
-              <span className="text-xs text-muted-foreground">From</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Starting at</span>
               <PriceDisplay
                 amount={experience.options[0]?.price ?? 0}
                 currency={experience.options[0]?.currency ?? "USD"}

@@ -5,6 +5,7 @@ export interface BookingRequest {
   variantName: string;
   inventoryId: string;
   inventoryType: string;
+  inventorySeatIds?: string[];
   date: string;
   startDateTime: string;
   endDateTime: string;
@@ -39,6 +40,7 @@ export interface CartItem {
   variantId: string;
   inventoryId: string;
   inventoryType: string;
+  inventorySeatIds?: string[];
   date: string;
   startDateTime: string;
   endDateTime: string;

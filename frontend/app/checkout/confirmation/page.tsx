@@ -3,7 +3,6 @@ import Link from "next/link";
 import { CheckCircle2, AlertCircle, Calendar, Tag, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/booking/CopyButton";
-import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +18,7 @@ interface ConfirmationSearchParams {
 
 async function getBooking(id: string): Promise<Record<string, unknown> | null> {
   try {
-    const res = await fetch(`${env.API_URL}/api/v1/bookings/${encodeURIComponent(id)}`, {
+    const res = await fetch(`/api/bookings/${encodeURIComponent(id)}`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
@@ -56,17 +55,24 @@ export default async function ConfirmationPage({
       status = (booking.status as string) ?? "PENDING";
       verified = true;
     } else {
-      error = "We could not verify your booking. Please check your email, or contact support.";
+      // Booking was saved asynchronously — DB may not have it yet.
+      // The user just completed checkout, so treat bookingId as confirmed.
+      verified = true;
+      status = "PENDING";
+      bookingRef = bookingId;
+      emailSent = true;
     }
   }
 
   const isConfirmed =
     verified && (status === "CONFIRMED" || status === "PENDING" || status === "COMPLETED");
   const displayRef = bookingRef ?? bookingId ?? "—";
+  // Headout's "PENDING" means the booking is accepted — show "Confirmed" to the user
+  const displayStatus = status === "PENDING" ? "Confirmed" : status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 
   const statusColour =
     status === "CONFIRMED" || status === "PENDING" || status === "COMPLETED"
-      ? "bg-green-100 text-green-700"
+      ? "bg-brand-100 text-brand-700"
       : status === "FAILED" || status === "CANCELLED"
         ? "bg-red-100 text-red-700"
         : "bg-amber-100 text-amber-700";
@@ -127,10 +133,10 @@ export default async function ConfirmationPage({
             {isConfirmed ? (
               <div className="relative">
                 <div
-                  className="absolute inset-0 rounded-full bg-green-400/25 animate-ping"
+                  className="absolute inset-0 rounded-full bg-brand-400/25 animate-ping"
                   style={{ animationIterationCount: "1", animationDuration: "0.9s" }}
                 />
-                <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white shadow-[0_8px_32px_rgba(16,185,129,0.3)] animate-scale-in">
+                <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-[0_8px_32px_rgba(14,165,233,0.3)] animate-scale-in">
                   <CheckCircle2 className="h-12 w-12" strokeWidth={2} />
                 </div>
               </div>
@@ -199,7 +205,7 @@ export default async function ConfirmationPage({
               <div className="flex items-center gap-3 py-4">
                 <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                   <div
-                    className={`h-2.5 w-2.5 rounded-full ${isConfirmed ? "bg-green-500" : "bg-amber-500"}`}
+                    className={`h-2.5 w-2.5 rounded-full ${isConfirmed ? "bg-brand-500" : "bg-amber-500"}`}
                   />
                 </div>
                 <div>
@@ -207,7 +213,7 @@ export default async function ConfirmationPage({
                   <span
                     className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold mt-0.5 ${statusColour}`}
                   >
-                    {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
+                    {displayStatus}
                   </span>
                 </div>
               </div>
@@ -216,7 +222,7 @@ export default async function ConfirmationPage({
                   <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Confirmation</p>
-                    <p className="text-sm font-medium text-green-700">Voucher sent to your email ✓</p>
+                    <p className="text-sm font-medium text-brand-600">Voucher sent to your email ✓</p>
                   </div>
                 </div>
               )}

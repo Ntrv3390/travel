@@ -108,12 +108,15 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
           {/* Bottom zone — price + badges, always flush to bottom */}
           <div className="mt-auto flex flex-col gap-1.5 pt-1">
             {price > 0 && (
-              <PriceDisplay
-                amount={price}
-                currency={currency}
-                className="text-lg font-bold"
-                showSkeleton={isChanging}
-              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Starting at</span>
+                <PriceDisplay
+                  amount={price}
+                  currency={currency}
+                  className="text-lg font-bold"
+                  showSkeleton={isChanging}
+                />
+              </div>
             )}
             <div className="flex items-center gap-1.5 overflow-hidden">
               {hasFreeCancel && (

@@ -21,8 +21,9 @@ type CartItem struct {
 	ExperienceID  string    `json:"experience_id"`
 	ProductID     string    `json:"product_id"`
 	VariantID     string    `json:"variant_id"`
-	InventoryID   string    `json:"inventory_id"`
-	InventoryType string    `json:"inventory_type"`
+	InventoryID      string    `json:"inventory_id"`
+	InventoryType    string    `json:"inventory_type"`
+	InventorySeatIDs string    `gorm:"type:jsonb" json:"inventory_seat_ids"`
 	Date          string    `json:"date"`
 	StartDateTime string    `json:"start_date_time"`
 	EndDateTime   string    `json:"end_date_time"`

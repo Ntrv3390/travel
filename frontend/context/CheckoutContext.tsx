@@ -15,6 +15,7 @@ export interface CheckoutInfo {
   variantName: string
   inventoryId: string
   inventoryType: string
+  inventorySeatIds?: string[]
   date: string
   startDateTime: string
   endDateTime: string
@@ -100,6 +101,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
         variantName: (bi.title as string) ?? "Standard",
         inventoryId: (bi.inventoryId as string) ?? "",
         inventoryType: (bi.inventoryType as string) ?? "NORMAL",
+        inventorySeatIds: Array.isArray(bi.inventorySeatIds) ? (bi.inventorySeatIds as string[]) : undefined,
         date: (bi.date as string) ?? "",
         startDateTime: (bi.startDateTime as string) ?? "",
         endDateTime: (bi.endDateTime as string) ?? "",

@@ -15,7 +15,6 @@ import (
 	"github.com/travel/backend/internal/models"
 	"github.com/travel/backend/internal/services"
 	synclib "github.com/travel/backend/internal/sync"
-	"github.com/travel/backend/pkg/config"
 	"github.com/travel/backend/pkg/logger"
 	"gorm.io/gorm"
 )
@@ -31,17 +30,14 @@ type AdminHandler struct {
 	db             *gorm.DB
 	emailService   *services.EmailService
 	headoutService *services.HeadoutProxyService
-	availSyncSvc   *services.AvailabilitySyncService
 	syncService    *synclib.Service
 }
 
 func NewAdminHandler(db *gorm.DB, emailService *services.EmailService, headoutService *services.HeadoutProxyService, syncService *synclib.Service) *AdminHandler {
-	cfg := config.Load()
 	return &AdminHandler{
 		db:             db,
 		emailService:   emailService,
 		headoutService: headoutService,
-		availSyncSvc:   services.NewAvailabilitySyncService(cfg),
 		syncService:    syncService,
 	}
 }
@@ -686,7 +682,7 @@ func (h *AdminHandler) SyncProducts(c *gin.Context) {
 	}
 
 	if h.syncService != nil {
-		jobID, err := h.syncService.StartFullSync(c.Request.Context())
+		jobID, err := h.syncService.StartInventorySync(c.Request.Context())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -1419,7 +1415,7 @@ func (h *AdminHandler) SyncAllIndividualProducts(c *gin.Context) {
 	}
 
 	if h.syncService != nil {
-		jobID, err := h.syncService.StartFullSync(c.Request.Context())
+		jobID, err := h.syncService.StartInventorySync(c.Request.Context())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -2204,24 +2200,16 @@ func (h *AdminHandler) SyncProductAvailability(c *gin.Context) {
 		}
 	}
 
-	available, err := h.availSyncSvc.SyncSingleProductAvailability(c.Request.Context(), product)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to sync availability: %v", err)})
+	if h.syncService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sync service not available"})
 		return
 	}
-
-	now := time.Now()
-	h.db.Model(&product).Updates(map[string]interface{}{
-		"is_available":               available,
-		"last_availability_sync_at": now,
-	})
-
-	c.JSON(http.StatusOK, gin.H{
-		"product_id":  product.HeadoutID,
-		"title":       product.Title,
-		"is_available": available,
-		"synced_at":   now.Format(time.RFC3339),
-	})
+	jobID, err := h.syncService.StartInventorySync(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"status": "started", "job_id": jobID})
 }
 
 // SyncAllAvailability triggers a full availability sync for all products
@@ -2232,7 +2220,7 @@ func (h *AdminHandler) SyncAllAvailability(c *gin.Context) {
 	}
 
 	if h.syncService != nil {
-		jobID, err := h.syncService.StartAvailabilitySync(c.Request.Context())
+		jobID, err := h.syncService.StartInventorySync(c.Request.Context())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -2244,38 +2232,10 @@ func (h *AdminHandler) SyncAllAvailability(c *gin.Context) {
 		return
 	}
 
-	// Fallback to legacy sync
-	syncID := fmt.Sprintf("avail_%d", time.Now().UnixNano())
-
-	syncMu.Lock()
-	syncProgress[syncID] = map[string]interface{}{
-		"status": "running",
-		"type":   "sync_availability",
+	jobID, err := h.syncService.StartInventorySync(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	syncMu.Unlock()
-
-	go func(id string) {
-		result, err := h.availSyncSvc.SyncAllProductAvailability(context.Background())
-		syncMu.Lock()
-		if err != nil {
-			syncProgress[id] = map[string]interface{}{
-				"status": "failed",
-				"error":  err.Error(),
-			}
-		} else {
-			syncProgress[id] = map[string]interface{}{
-				"status":      "completed",
-				"total":       result.TotalProducts,
-				"available":   result.Available,
-				"unavailable": result.Unavailable,
-				"failed":      result.Failed,
-			}
-		}
-		syncMu.Unlock()
-	}(syncID)
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"status":  "started",
-		"sync_id": syncID,
-	})
+	c.JSON(http.StatusAccepted, gin.H{"status": "started", "job_id": jobID})
 }

@@ -161,6 +161,30 @@ func (h *BookingFlowHandler) GetCalendar(c *gin.Context) {
 	}
 
 	dayEnd := startDate.AddDate(0, 0, days-1)
+
+	// DB-first path: read from product_availabilities, zero Headout calls
+	if !isFetchFresh() {
+		variantIDs := h.resolveVariantIDsFromDB(c.Request.Context(), variantID, headoutID)
+		orderedDays, resolvedID := h.getCalendarFromDB(c.Request.Context(), variantIDs, startDate, days)
+		resolvedVariantID := firstNonEmptyString(resolvedID, variantID, headoutID)
+		resolvedCurrency := "USD"
+		for _, day := range orderedDays {
+			if strings.TrimSpace(day.Currency) != "" && day.Currency != "USD" {
+				resolvedCurrency = day.Currency
+				break
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"days":                orderedDays,
+			"rangeStart":          toDateKey(startDate),
+			"rangeEnd":            toDateKey(dayEnd),
+			"currency":            resolvedCurrency,
+			"maxBookableQuantity": nil,
+			"resolvedVariantId":   resolvedVariantID,
+		})
+		return
+	}
+
 	candidates := h.resolveVariantCandidates(c, variantID, headoutID)
 
 	resolvedVariantID := ""
@@ -319,6 +343,19 @@ func (h *BookingFlowHandler) GetAvailability(c *gin.Context) {
 	}
 	now := time.Now()
 	todayKey := toDateKey(startOfDay(now))
+
+	// DB-first path
+	if !isFetchFresh() {
+		slots, maxBookable := h.getAvailabilityFromDB(c.Request.Context(), variantID, dateParam)
+		c.JSON(http.StatusOK, gin.H{
+			"variantId":           variantID,
+			"date":                dateParam,
+			"count":               len(slots),
+			"maxBookableQuantity": maxBookable,
+			"slots":               slots,
+		})
+		return
+	}
 
 	items, err := h.fetchInventoryByVariant(c, variantID, dateValue, dateValue, currencyCode)
 	if err != nil {
@@ -479,6 +516,12 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	}
 	if totalPaxCheck > 1000 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "guest count exceeds maximum (1000)"})
+		return
+	}
+
+	// DB-first path: zero Headout calls when fetch_fresh=false
+	if !isFetchFresh() {
+		h.handleDBBooking(c, req)
 		return
 	}
 
@@ -671,10 +714,7 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 
 	headoutResp := parseHeadoutBookingResponse(upstream.Body)
 
-	if err := h.saveBookingToDB(c.Request.Context(), req, headoutResp); err != nil {
-		logger.Errorf("Booking created on Headout but local save failed: %v", err)
-	}
-
+	// Capture must complete before responding — we need the final status and voucher URL.
 	capturePayload := map[string]interface{}{
 		"status":             "PENDING",
 		"partnerReferenceId": "",
@@ -698,55 +738,55 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 	}
 	capturedResp := parseHeadoutBookingResponse(captureUpstream.Body)
 	if capturedResp.Status != "" {
-		database.GetDB().WithContext(c.Request.Context()).Model(&models.Booking{}).
-			Where("booking_id = ?", headoutResp.BookingID).
-			Updates(map[string]interface{}{
-				"status":      capturedResp.Status,
-				"voucher_url": capturedResp.VoucherURL,
-			})
 		headoutResp.Status = capturedResp.Status
 		if capturedResp.VoucherURL != "" {
 			headoutResp.VoucherURL = capturedResp.VoucherURL
 		}
 	}
 
+	// Save booking to DB and send emails in the background — don't hold up the response.
+	savedReq, savedResp := req, headoutResp
 	go func() {
+		if err := h.saveBookingToDB(context.Background(), savedReq, savedResp); err != nil {
+			logger.Errorf("Booking created on Headout but local save failed: %v", err)
+		}
+
 		ticketText := ""
-		if headoutResp.VoucherURL != "" && headoutResp.VoucherURL != "embedded" {
-			ticketText = fmt.Sprintf("\nYour ticket is available at: %s", headoutResp.VoucherURL)
+		if savedResp.VoucherURL != "" && savedResp.VoucherURL != "embedded" {
+			ticketText = fmt.Sprintf("\nYour ticket is available at: %s", savedResp.VoucherURL)
 		}
 		if h.emailSvc != nil {
 			if err := h.emailSvc.SendBookingConfirmation(services.BookingConfirmationData{
-				BookingID:        headoutResp.BookingID,
-				HeadoutReference: headoutResp.HeadoutReference,
-				CustomerName:     req.FirstName + " " + req.LastName,
-				CustomerEmail:    req.Email,
-				ExperienceName:   req.ProductName,
-				ExperienceDate:   req.Date,
-				TotalAmount:      headoutResp.TotalAmount,
-				Currency:         headoutResp.Currency,
+				BookingID:        savedResp.BookingID,
+				HeadoutReference: savedResp.HeadoutReference,
+				CustomerName:     savedReq.FirstName + " " + savedReq.LastName,
+				CustomerEmail:    savedReq.Email,
+				ExperienceName:   savedReq.ProductName,
+				ExperienceDate:   savedReq.Date,
+				TotalAmount:      savedResp.TotalAmount,
+				Currency:         savedResp.Currency,
 				Quantity:         totalPax,
-				TicketURL:        headoutResp.VoucherURL,
+				TicketURL:        savedResp.VoucherURL,
 				TicketData:       ticketText,
 			}); err != nil {
-				logger.Errorf("Failed to send booking confirmation to %s: %v", req.Email, err)
+				logger.Errorf("Failed to send booking confirmation to %s: %v", savedReq.Email, err)
 			}
 			if err := h.emailSvc.SendBookingAdminNotification(services.BookingAdminNotificationData{
-				BookingID:        headoutResp.BookingID,
-				HeadoutReference: headoutResp.HeadoutReference,
-				CustomerName:     req.FirstName + " " + req.LastName,
-				CustomerEmail:    req.Email,
-				ExperienceName:   req.ProductName,
-				ExperienceDate:   req.Date,
-				TotalAmount:      headoutResp.TotalAmount,
-				Currency:         headoutResp.Currency,
-				AdminURL:         fmt.Sprintf("http://localhost:3000/admin/bookings?highlight=%s", headoutResp.BookingID),
+				BookingID:        savedResp.BookingID,
+				HeadoutReference: savedResp.HeadoutReference,
+				CustomerName:     savedReq.FirstName + " " + savedReq.LastName,
+				CustomerEmail:    savedReq.Email,
+				ExperienceName:   savedReq.ProductName,
+				ExperienceDate:   savedReq.Date,
+				TotalAmount:      savedResp.TotalAmount,
+				Currency:         savedResp.Currency,
+				AdminURL:         fmt.Sprintf("http://localhost:3000/admin/bookings?highlight=%s", savedResp.BookingID),
 			}); err != nil {
-				logger.Errorf("Failed to send admin booking notification for %s: %v", headoutResp.BookingID, err)
+				logger.Errorf("Failed to send admin booking notification for %s: %v", savedResp.BookingID, err)
 			}
-			if len(headoutResp.TicketData) > 0 {
-				if err := h.emailSvc.SendBookingTicket(req.Email, req.FirstName+" "+req.LastName, headoutResp.BookingID, headoutResp.TicketData); err != nil {
-					logger.Errorf("Failed to send ticket email to %s: %v", req.Email, err)
+			if len(savedResp.TicketData) > 0 {
+				if err := h.emailSvc.SendBookingTicket(savedReq.Email, savedReq.FirstName+" "+savedReq.LastName, savedResp.BookingID, savedResp.TicketData); err != nil {
+					logger.Errorf("Failed to send ticket email to %s: %v", savedReq.Email, err)
 				}
 			}
 		}

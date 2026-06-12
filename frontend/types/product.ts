@@ -175,7 +175,7 @@ export interface Product {
   primarySubCategory: ProductSubCategory;
   primaryCollection: ProductCollection;
   variants: ProductVariant[];
-  inventorySelectionType: "NORMAL" | "SEATMAP";
+  inventorySelectionType: "NORMAL" | "SEATMAP" | "SVG";
   cancellationPolicy: ProductCancellationPolicy;
   reschedulePolicy: ProductReschedulePolicy;
 }
@@ -249,6 +249,65 @@ export interface SlotInventoryResponse {
   prevUrl: string | null;
   total: number;
   nextOffset: number | null;
+}
+
+// ── Seatmap availability ──────────────────────────────────────────────────────
+
+export interface SeatmapAvailabilitySlot {
+  startTime: string; // "HH:mm"
+  pricing: {
+    currency: string;
+    profileType: "PER_PERSON";
+    headoutSellingPrice: number;
+    netPrice: number;
+  };
+  remaining: number;
+}
+
+export interface SeatmapAvailabilityDate {
+  date: string;
+  slots: SeatmapAvailabilitySlot[];
+}
+
+export interface SeatmapAvailabilityResponse {
+  productId: number;
+  variantId: number;
+  currencyCode: string;
+  availabilities: SeatmapAvailabilityDate[];
+}
+
+// ── Seatmap inventory ─────────────────────────────────────────────────────────
+
+export interface SeatmapSeatPrice {
+  currency: string;
+  profileType: string;
+  headoutSellingPrice: number;
+  netPrice: number | null;
+}
+
+export interface SeatmapSeat {
+  seatCode: string;
+  row: string | null;
+  seatNumber: string | null;
+  seatType: string | null;
+  pricing: SeatmapSeatPrice | null;
+}
+
+export interface SeatmapSection {
+  sectionName: string | null;
+  remaining: number;
+  seats: SeatmapSeat[];
+}
+
+export interface SeatmapInventoryResponse {
+  productId: number;
+  variantId: number;
+  inventoryId: number;
+  currencyCode: string;
+  date: string;
+  startTime: string;
+  remaining: number;
+  sections: SeatmapSection[];
 }
 
 export interface ProductsQueryParams {

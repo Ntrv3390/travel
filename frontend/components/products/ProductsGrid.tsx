@@ -72,8 +72,9 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   const isFetching = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const ITEM_LIMIT = 40;
-  const TRIGGER_INDEX = 25;
+  const ITEM_LIMIT = 60;
+  // Trigger loading when this many items remain before the end of the list.
+  const ITEMS_BEFORE_END = 8;
 
   const fetchProducts = useCallback(
     async (append: boolean, overrideOffset?: number) => {
@@ -144,7 +145,9 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
   useEffect(() => {
     if (state.initialLoading || state.loading || state.nextOffset === null || state.done || state.error) return;
     if (state.products.length === 0) return;
-    const triggerIndex = Math.min(TRIGGER_INDEX - 1, state.products.length - 1);
+    // Trigger index advances with each page load so it never lands on an
+    // already-scrolled-past element (the old fixed-index-24 bug).
+    const triggerIndex = Math.max(0, state.products.length - ITEMS_BEFORE_END);
     const triggerEl = document.getElementById(`product-card-${state.products[triggerIndex]?.id}`);
     if (!triggerEl) return;
     const observer = new IntersectionObserver(
@@ -153,7 +156,7 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
           fetchProducts(true);
         }
       },
-      { rootMargin: "200px" },
+      { rootMargin: "600px" },
     );
     observer.observe(triggerEl);
     return () => observer.disconnect();

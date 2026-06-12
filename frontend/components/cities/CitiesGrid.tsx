@@ -5,8 +5,8 @@ import { CityCard } from "@/components/cities/CityCard";
 import { getCities } from "@/lib/api";
 import type { City, CitiesResponse } from "@/types/api";
 
-const PAGE_SIZE = 40;
-const TRIGGER_INDEX = 25;
+const PAGE_SIZE = 60;
+const ITEMS_BEFORE_END = 8;
 
 function CityCardSkeleton() {
   return (
@@ -54,7 +54,8 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
 
   useEffect(() => {
     if (loading || nextOffset === null || done || error || cities.length === 0) return;
-    const triggerIndex = Math.min(TRIGGER_INDEX - 1, cities.length - 1);
+    // Trigger advances with each page so it never lands on an already-scrolled-past element.
+    const triggerIndex = Math.max(0, cities.length - ITEMS_BEFORE_END);
     const triggerEl = document.getElementById(`city-card-${triggerIndex}`);
     if (!triggerEl) return;
     const observer = new IntersectionObserver(
@@ -63,7 +64,7 @@ export function CitiesGrid({ initialCities, initialNextOffset }: {
           loadMore();
         }
       },
-      { rootMargin: "300px" },
+      { rootMargin: "600px" },
     );
     observer.observe(triggerEl);
     return () => observer.disconnect();

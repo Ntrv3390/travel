@@ -18,6 +18,12 @@ type RateLimiter struct {
 // ratePerSec: sustained requests per second.
 // burst: maximum burst size (allows short spikes above the sustained rate).
 func NewRateLimiter(ratePerSec float64, burst int) *RateLimiter {
+	if ratePerSec <= 0 {
+		ratePerSec = 200
+	}
+	if burst < 1 {
+		burst = 40
+	}
 	return &RateLimiter{
 		limiter: rate.NewLimiter(rate.Limit(ratePerSec), burst),
 	}

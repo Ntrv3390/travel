@@ -40,6 +40,8 @@ type Config struct {
 
 	// Sync Worker Pool
 	SyncWorkerCount      int
+	SyncDiscoveryWorkers int // Tier-2: variant resolver workers (default 40)
+	SyncAvailWorkers     int // Tier-3: availability fetcher workers (default 80)
 	SyncRateLimitPerSec  float64
 	SyncRateBurst        int
 	SyncMaxRetries       int
@@ -86,10 +88,12 @@ func Load() *Config {
 
 	// Sync worker pool config
 	cfg.SyncWorkerCount = getEnvInt("SYNC_WORKER_COUNT", 30)
-	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 10)
-	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 20)
-	cfg.SyncMaxRetries = getEnvInt("SYNC_MAX_RETRIES", 0)
-	cfg.SyncRetryBaseDelayMs = getEnvInt("SYNC_RETRY_BASE_DELAY_MS", 0)
+	cfg.SyncDiscoveryWorkers = getEnvInt("SYNC_DISCOVERY_WORKERS", 40)
+	cfg.SyncAvailWorkers = getEnvInt("SYNC_AVAIL_WORKERS", 80)
+	cfg.SyncRateLimitPerSec = getEnvFloat("SYNC_RATE_LIMIT_PER_SEC", 200)
+	cfg.SyncRateBurst = getEnvInt("SYNC_RATE_BURST", 40)
+	cfg.SyncMaxRetries = getEnvInt("SYNC_MAX_RETRIES", 3)
+	cfg.SyncRetryBaseDelayMs = getEnvInt("SYNC_RETRY_BASE_DELAY_MS", 500)
 
 	return cfg
 }

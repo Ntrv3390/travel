@@ -2,11 +2,10 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, Package, RefreshCw, Loader2, ExternalLink, X, Check, Ban, AlertTriangle, BarChart3 } from "lucide-react";
+import { Search, ChevronDown, Package, Loader2, ExternalLink, X, Check, Ban, AlertTriangle } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination } from "@/components/admin/Pagination";
-import { SyncModal } from "@/components/admin/SyncModal";
 import { AvailabilityCalendarView } from "@/components/admin/AvailabilityCalendarView";
 import { cn } from "@/lib/utils";
 import { useAdminPagination } from "@/hooks/useAdminPagination";
@@ -78,7 +77,6 @@ const ITEMS_PER_PAGE = 50;
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
   const [search, setSearch] = useState("");
   const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -89,7 +87,6 @@ export default function AdminProductsPage() {
   const [headoutModal, setHeadoutModal] = useState<{ data: Record<string, unknown> | null; loading: boolean; error: string } | null>(null);
   const [availabilityInsights, setAvailabilityInsights] = useState<AvailabilityInsights | null>(null);
   const [showUnavailableList, setShowUnavailableList] = useState(false);
-  const [syncingAvailability, setSyncingAvailability] = useState<Record<number, boolean>>({});
 
   const fetchProducts = useCallback((p: number, q: string) => {
     setLoading(true);
@@ -129,142 +126,6 @@ export default function AdminProductsPage() {
     setPage(1);
   }, [setPage]);
 
-  const pollSyncStatus = useCallback(async (syncId: string, interval = 2000): Promise<Record<string, unknown>> => {
-    while (true) {
-      const status = await api.get<Record<string, unknown>>(`/api/v1/admin/products/sync-status?sync_id=${syncId}`);
-      if (status.status !== "running") return status;
-      await new Promise((r) => setTimeout(r, interval));
-    }
-  }, []);
-
-  const pollJobStatus = useCallback(async (jobId: string, interval = 2000): Promise<Record<string, unknown>> => {
-    while (true) {
-      const job = await api.get<Record<string, unknown>>(`/api/v1/admin/sync/jobs/${jobId}`);
-      if (job.status !== "running" && job.status !== "pending") return job;
-      await new Promise((r) => setTimeout(r, interval));
-    }
-  }, []);
-
-  const handleSyncAllIndividual = useCallback(async () => {
-    setSyncModal({ open: true, running: true, progress: null, error: null });
-    try {
-      const res = await api.post<{ sync_id?: string; job_id?: string; status?: string }>("/api/v1/admin/products/sync-all-individual");
-      let result: Record<string, unknown>;
-      if (res.job_id) {
-        result = await pollJobStatus(res.job_id);
-        setSyncModal({
-          open: true,
-          running: false,
-          progress: {
-            total: (result.total_products as number) || 0,
-            added: (result.successful_products as number) || 0,
-            updated: 0,
-            failed: (result.failed_products as number) || 0,
-            product_added: result.successful_products,
-            product_failed: result.failed_products,
-          },
-          error: result.status === "failed" ? (result.error_message as string) || "Sync failed" : null,
-        });
-      } else {
-        const syncId = res.sync_id;
-        if (!syncId) throw new Error("No sync identifier returned");
-        result = await pollSyncStatus(syncId);
-        setSyncModal({
-          open: true,
-          running: false,
-          progress: {
-            total: (result.product_added as number || 0) + (result.product_updated as number || 0) + (result.product_failed as number || 0) + (result.avail_added as number || 0) + (result.avail_updated as number || 0) + (result.avail_failed as number || 0),
-            added: (result.product_added as number || 0) + (result.avail_added as number || 0),
-            updated: (result.product_updated as number || 0) + (result.avail_updated as number || 0),
-            failed: (result.product_failed as number || 0) + (result.avail_failed as number || 0),
-            product_added: result.product_added,
-            product_updated: result.product_updated,
-            product_failed: result.product_failed,
-            avail_added: result.avail_added,
-            avail_updated: result.avail_updated,
-            avail_failed: result.avail_failed,
-          },
-          error: null,
-        });
-      }
-      fetchProducts(page, search);
-    } catch (err) {
-      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
-    }
-  }, [page, search, fetchProducts, pollSyncStatus, pollJobStatus]);
-
-  const handleSyncAllAvailability = useCallback(async () => {
-    setSyncModal({ open: true, running: true, progress: null, error: null });
-    try {
-      const res = await api.post<{ sync_id?: string; job_id?: string; status?: string }>("/api/v1/admin/products/sync-availability-all");
-      if (res.job_id) {
-        const result = await pollJobStatus(res.job_id);
-        setSyncModal({
-          open: true,
-          running: false,
-          progress: {
-            total: (result.total_products as number) || 0,
-            added: (result.successful_products as number) || 0,
-            updated: 0,
-            failed: (result.failed_products as number) || 0,
-          },
-          error: result.status === "failed" ? (result.error_message as string) || "Availability sync failed" : null,
-        });
-      } else {
-        const syncId = res.sync_id;
-        if (!syncId) throw new Error("No sync identifier returned");
-        const result = await pollSyncStatus(syncId);
-        setSyncModal({
-          open: true,
-          running: false,
-          progress: {
-            total: (result.total_products as number) || 0,
-            added: (result.availabilities_added as number) || 0,
-            updated: 0,
-            failed: (result.failed as number) || 0,
-            available: result.available,
-            unavailable: result.unavailable,
-          },
-          error: null,
-        });
-      }
-      fetchProducts(page, search);
-      fetchAvailabilityInsights();
-    } catch (err) {
-      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Availability sync failed" });
-    }
-  }, [page, search, fetchProducts, fetchAvailabilityInsights, pollSyncStatus, pollJobStatus]);
-
-  const handleSyncSingle = useCallback(async (headoutId: string) => {
-    setSyncModal({ open: true, running: true, progress: null, error: null });
-    try {
-      const res = await api.post<{
-        product: { added: boolean; updated: boolean };
-        availabilities: { added: number; updated: number; failed: number };
-        total: number;
-      }>(`/api/v1/admin/products/${headoutId}/sync`);
-      setSyncModal({
-        open: true,
-        running: false,
-        progress: {
-          total: res.total || 0,
-          added: res.product.added ? 1 : 0,
-          updated: res.product.updated ? 1 : 0,
-          failed: res.availabilities.failed || 0,
-          product_added: res.product.added ? 1 : 0,
-          product_updated: res.product.updated ? 1 : 0,
-          avail_added: res.availabilities.added || 0,
-          avail_updated: res.availabilities.updated || 0,
-          avail_failed: res.availabilities.failed || 0,
-        },
-        error: null,
-      });
-      fetchProducts(page, search);
-    } catch (err) {
-      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
-    }
-  }, [page, search, fetchProducts]);
-
   const loadAvailabilities = useCallback(async (prodId: number, force = false) => {
     if (!force && availabilities[prodId]) return;
     setLoadingAvail((prev) => ({ ...prev, [prodId]: true }));
@@ -277,18 +138,6 @@ export default function AdminProductsPage() {
       setLoadingAvail((prev) => ({ ...prev, [prodId]: false }));
     }
   }, [availabilities]);
-
-  const handleSyncAvailability = useCallback(async (headoutId: string, prodId: number) => {
-    setSyncingAvailability((prev) => ({ ...prev, [prodId]: true }));
-    try {
-      await api.post(`/api/v1/admin/products/${headoutId}/sync-availability`);
-      await loadAvailabilities(prodId, true);
-    } catch {
-      // silently fail
-    } finally {
-      setSyncingAvailability((prev) => ({ ...prev, [prodId]: false }));
-    }
-  }, [loadAvailabilities]);
 
   const loadProductDetail = useCallback(async (headoutId: string, prodId: number) => {
     if (productDetails[prodId]) return;
@@ -330,33 +179,7 @@ export default function AdminProductsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Products</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage products synced from Headout</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSyncAllAvailability}
-            disabled={syncModal.running}
-            className="flex items-center gap-2 rounded-xl border border-amber-200 px-4 py-2.5 text-sm font-medium text-amber-600 transition-colors hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncModal.running ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <BarChart3 className="h-4 w-4" />
-            )}
-            {syncModal.running ? "Syncing..." : "Sync Availability"}
-          </button>
-          <button
-            onClick={handleSyncAllIndividual}
-            disabled={syncModal.running}
-            className="flex items-center gap-2 rounded-xl border border-sky-200 px-4 py-2.5 text-sm font-medium text-sky-600 transition-colors hover:bg-sky-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncModal.running ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {syncModal.running ? "Syncing..." : "Sync All Individual Products"}
-          </button>
+          <p className="mt-1 text-sm text-slate-500">Products synced from Headout</p>
         </div>
       </div>
 
@@ -375,7 +198,8 @@ export default function AdminProductsPage() {
           <div className="grid grid-cols-3 gap-4">
             <div className="rounded-xl bg-slate-50 p-4">
               <p className="text-2xl font-bold text-slate-900">{availabilityInsights.total}</p>
-              <p className="text-xs text-slate-500">Total Products</p>
+              <p className="text-xs text-slate-500">Total in DB</p>
+              <p className="text-xs text-slate-400 mt-0.5">all syncs combined</p>
             </div>
             <div className="rounded-xl bg-emerald-50 p-4">
               <p className="text-2xl font-bold text-emerald-600">{availabilityInsights.available}</p>
@@ -387,7 +211,6 @@ export default function AdminProductsPage() {
             </div>
           </div>
 
-          {/* Unavailable Products List */}
           <AnimatePresence>
             {showUnavailableList && availabilityInsights.products && availabilityInsights.products.length > 0 && (
               <motion.div
@@ -472,14 +295,7 @@ export default function AdminProductsPage() {
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white py-16">
           <Package className="h-12 w-12 text-slate-300" />
           <p className="mt-4 text-sm font-medium text-slate-500">No products found</p>
-          <button
-            onClick={handleSyncAllIndividual}
-            disabled={syncModal.running}
-            className="mt-4 flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Sync from Headout
-          </button>
+          <p className="mt-1 text-xs text-slate-400">Use "Sync Inventory" in Settings to populate products.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -493,7 +309,6 @@ export default function AdminProductsPage() {
                   <th className="px-4 py-3 text-left font-medium text-slate-500 hidden md:table-cell">City</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500 hidden lg:table-cell">Category</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500 hidden sm:table-cell">Price</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-500 hidden sm:table-cell">Sync</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500 hidden sm:table-cell">Status</th>
                   <th className="px-4 py-3 text-right font-medium text-slate-500"> </th>
                 </tr>
@@ -511,15 +326,6 @@ export default function AdminProductsPage() {
                       <td className="px-4 py-3 text-slate-500 hidden lg:table-cell max-w-[120px] truncate">{product.category || "—"}</td>
                       <td className="px-4 py-3 text-slate-700 hidden sm:table-cell font-mono text-xs">
                         {product.price_from > 0 ? `${product.currency || "USD"} ${product.price_from.toFixed(2)}` : "—"}
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleSyncSingle(product.headout_id); }}
-                          disabled={syncModal.running}
-                          className="text-xs font-medium text-sky-700 whitespace-nowrap"
-                        >
-                          {syncModal.running ? "..." : "Sync"}
-                        </button>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
                         <span className={cn(
@@ -740,22 +546,10 @@ export default function AdminProductsPage() {
 
                               {/* Availabilities section */}
                               <div className="col-span-full rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                                <div className="mb-3 flex items-center justify-between">
+                                <div className="mb-3">
                                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                                     Availabilities & Pricing
                                   </p>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleSyncAvailability(product.headout_id, product.id); }}
-                                    disabled={syncingAvailability[product.id]}
-                                    className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {syncingAvailability[product.id] ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <RefreshCw className="h-3 w-3" />
-                                    )}
-                                    {syncingAvailability[product.id] ? "Syncing..." : "Sync Availability"}
-                                  </button>
                                 </div>
                                 {loadingAvail[product.id] ? (
                                   <div className="flex items-center justify-center py-4">
@@ -768,17 +562,7 @@ export default function AdminProductsPage() {
                                   />
                                 ) : (
                                   <div className="flex items-center justify-center py-4">
-                                    <div className="text-center">
-                                      <p className="text-xs text-slate-400">No availability data synced yet</p>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleSyncSingle(product.headout_id); }}
-                                        disabled={syncModal.running}
-                                        className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-sky-600 transition-colors hover:bg-sky-100 disabled:opacity-50"
-                                      >
-                                        <RefreshCw className="h-3 w-3" />
-                                        Sync now
-                                      </button>
-                                    </div>
+                                    <p className="text-xs text-slate-400">No availability data — run Sync Inventory from Settings.</p>
                                   </div>
                                 )}
                               </div>
@@ -796,22 +580,16 @@ export default function AdminProductsPage() {
           {/* Mobile cards */}
           <div className="block sm:hidden divide-y divide-slate-100">
             {products.map((product) => (
-              <div key={product.id} className="p-4">
+              <div
+                key={product.id}
+                className="p-4 cursor-pointer hover:bg-slate-50"
+                onClick={() => handleExpand(product.id)}
+              >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-slate-900 truncate max-w-[180px]">{product.title}</span>
                   <span className="font-mono text-xs text-slate-500">{product.headout_id}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">{product.city_name || product.city_code}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <button
-                    onClick={() => handleSyncSingle(product.headout_id)}
-                    disabled={syncModal.running}
-                    className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-xs font-medium text-sky-600 transition-colors hover:bg-sky-100 disabled:opacity-50"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Sync
-                  </button>
-                </div>
               </div>
             ))}
           </div>
@@ -821,15 +599,6 @@ export default function AdminProductsPage() {
       <Pagination
         className="border-t border-slate-100 mt-6"
         {...paginationProps}
-      />
-
-      <SyncModal
-        open={syncModal.open}
-        onClose={() => setSyncModal({ open: false, running: false, progress: null, error: null })}
-        title="Products"
-        progress={syncModal.progress}
-        error={syncModal.error}
-        running={syncModal.running}
       />
 
       {/* Full Response Modal */}

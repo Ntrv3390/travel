@@ -55,16 +55,6 @@ func NewSearchHandler(db *gorm.DB) *SearchHandler {
 	}
 }
 
-func (h *SearchHandler) isFetchFresh() bool {
-	if h.db == nil {
-		return true
-	}
-	var setting models.Setting
-	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err != nil {
-		return true
-	}
-	return setting.Value != "false"
-}
 
 type SearchProduct struct {
 	ID          string  `json:"id"`
@@ -211,10 +201,29 @@ func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode str
 	matchedCities := searchFilterAndRankCities(allCities, lower)
 
 	var allProducts []SearchProduct
-	if !h.isFetchFresh() && h.db != nil {
+	if !isFetchFresh() && h.db != nil {
 		allProducts = h.fetchProductsFromDB()
 	} else {
-		allProducts = h.fetchProductsLive(c.Request.Context(), currencyCode)
+		// fetch_fresh=true: check the in-memory product cache first (instant if warm).
+		// On a cache miss, serve from DB immediately so the user isn't blocked on
+		// multi-city Headout fetches; repopulate the live cache in the background.
+		cacheKeyForCheck := strings.ToUpper(strings.TrimSpace(currencyCode))
+		if cacheKeyForCheck == "" {
+			cacheKeyForCheck = "USD"
+		}
+		searchProductsCacheMu.RLock()
+		if cached, ok := searchProductsCache[cacheKeyForCheck]; ok && time.Now().Before(cached.expiresAt) {
+			allProducts = append([]SearchProduct(nil), cached.products...)
+		}
+		searchProductsCacheMu.RUnlock()
+
+		if len(allProducts) == 0 && h.db != nil {
+			allProducts = h.fetchProductsFromDB()
+			// Warm the live cache in the background so subsequent searches hit it.
+			go h.fetchProductsLive(context.Background(), currencyCode)
+		} else if len(allProducts) == 0 {
+			allProducts = h.fetchProductsLive(c.Request.Context(), currencyCode)
+		}
 	}
 
 	matchedProducts := searchFilterAndRankProducts(allProducts, lower)
@@ -224,7 +233,7 @@ func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode str
 		if h.db != nil {
 			matchedProducts = h.searchProductsFallbackDB(lower)
 		}
-		if len(matchedProducts) == 0 && h.isFetchFresh() {
+		if len(matchedProducts) == 0 && isFetchFresh() {
 			matchedProducts = h.searchProductsFallbackHeadout(c.Request.Context(), lower, currencyCode)
 		}
 	}
@@ -423,7 +432,7 @@ func (h *SearchHandler) fetchAllCitiesFromDB(c *gin.Context) []SearchCity {
 }
 
 func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
-	if !h.isFetchFresh() && h.db != nil {
+	if !isFetchFresh() && h.db != nil {
 		return h.fetchAllCitiesFromDB(c)
 	}
 
@@ -434,6 +443,13 @@ func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
 		return cached
 	}
 	searchCitiesCacheMu.RUnlock()
+
+	// Live cache is cold: try DB first so users aren't blocked on Headout pagination.
+	if h.db != nil {
+		if dbCities := h.fetchAllCitiesFromDB(c); len(dbCities) > 0 {
+			return dbCities
+		}
+	}
 
 	var cities []SearchCity
 	limit := 200

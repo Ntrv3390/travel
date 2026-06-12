@@ -2,12 +2,11 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, RefreshCw, Loader2, ExternalLink, X } from "lucide-react";
+import { Search, ChevronDown, ExternalLink, X } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Pagination } from "@/components/admin/Pagination";
-import { SyncModal } from "@/components/admin/SyncModal";
 import { useAdminPagination } from "@/hooks/useAdminPagination";
 
 interface SubcategoryItem {
@@ -34,7 +33,6 @@ export default function AdminSubcategoriesPage() {
   const { page, setPage, updateFromResponse, paginationProps } = useAdminPagination({ itemsPerPage: ITEMS_PER_PAGE });
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [headoutModal, setHeadoutModal] = useState<Record<string, unknown> | null>(null);
-  const [syncModal, setSyncModal] = useState({ open: false, running: false, progress: null as Record<string, unknown> | null, error: null as string | null });
 
   const fetchItems = useCallback((p: number, q: string) => {
     setLoading(true);
@@ -54,28 +52,13 @@ export default function AdminSubcategoriesPage() {
     return () => clearTimeout(timer);
   }, [page, search, fetchItems]);
 
-  const handleSync = useCallback(async () => {
-    setSyncModal({ open: true, running: true, progress: null, error: null });
-    try {
-      const res = await api.post<Record<string, unknown>>("/api/v1/admin/subcategories/sync");
-      setSyncModal({ open: true, running: false, progress: res, error: null });
-      fetchItems(page, search);
-    } catch (err) {
-      setSyncModal({ open: true, running: false, progress: null, error: err instanceof Error ? err.message : "Unknown error" });
-    }
-  }, [page, search, fetchItems]);
-
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Subcategories</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage Headout subcategories synced from API</p>
+          <p className="mt-1 text-sm text-slate-500">Headout subcategories synced from API</p>
         </div>
-        <button onClick={handleSync} disabled={syncModal.running} className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50">
-          {syncModal.running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {syncModal.running ? "Syncing..." : "Sync Subcategories"}
-        </button>
       </div>
 
       <div className="relative mb-6">
@@ -92,7 +75,7 @@ export default function AdminSubcategoriesPage() {
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white py-16">
           <p className="text-sm font-medium text-slate-500">No subcategories found</p>
-          <button onClick={handleSync} disabled={syncModal.running} className="mt-4 flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Sync from Headout</button>
+          <p className="mt-1 text-xs text-slate-400">Use "Sync Inventory" in Settings to populate subcategories.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -175,7 +158,6 @@ export default function AdminSubcategoriesPage() {
         )}
       </AnimatePresence>
 
-      <SyncModal open={syncModal.open} onClose={() => setSyncModal({ open: false, running: false, progress: null, error: null })} title="Subcategories" progress={syncModal.progress} error={syncModal.error} running={syncModal.running} />
     </motion.div>
   );
 }

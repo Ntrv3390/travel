@@ -5,7 +5,7 @@ import { useExperiences } from "@/context/ExperiencesContext";
 import { ExperienceCard } from "@/components/experience/ExperienceCard";
 import { ExperienceCardSkeleton } from "@/components/experience/ExperienceCardSkeleton";
 
-const TRIGGER_INDEX = 25;
+const ITEMS_BEFORE_END = 8;
 
 export function ExperienceGrid({ loadMore, hasMore, loadingMore }: {
   loadMore?: () => void;
@@ -16,8 +16,10 @@ export function ExperienceGrid({ loadMore, hasMore, loadingMore }: {
   const isFetching = useRef(false);
 
   useEffect(() => {
-    if (!loadMore || !hasMore || loadingMore || state.experiences.length < TRIGGER_INDEX) return;
-    const triggerEl = document.getElementById(`exp-card-${state.experiences[TRIGGER_INDEX - 1]?.id}`);
+    if (!loadMore || !hasMore || loadingMore || state.experiences.length === 0) return;
+    // Trigger advances with each page so it never lands on an already-scrolled-past element.
+    const triggerIndex = Math.max(0, state.experiences.length - ITEMS_BEFORE_END);
+    const triggerEl = document.getElementById(`exp-card-${state.experiences[triggerIndex]?.id}`);
     if (!triggerEl) return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -26,7 +28,7 @@ export function ExperienceGrid({ loadMore, hasMore, loadingMore }: {
           loadMore();
         }
       },
-      { rootMargin: "200px" },
+      { rootMargin: "600px" },
     );
     observer.observe(triggerEl);
     return () => {

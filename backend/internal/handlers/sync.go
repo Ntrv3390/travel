@@ -18,8 +18,8 @@ func NewSyncHandler(syncService *synclib.Service) *SyncHandler {
 	return &SyncHandler{syncService: syncService}
 }
 
-// StartMetadataSync triggers an asynchronous metadata sync for all products
-// whose metadata is older than 24 hours.
+// StartMetadataSync triggers a metadata-only sync (cities → products → variant stubs).
+// No availability is fetched from Headout; safe to call while fetch_fresh = false.
 // POST /api/v1/admin/sync/metadata
 func (h *SyncHandler) StartMetadataSync(c *gin.Context) {
 	jobID, err := h.syncService.StartMetadataSync(c.Request.Context())
@@ -27,19 +27,17 @@ func (h *SyncHandler) StartMetadataSync(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusAccepted, gin.H{
 		"status":  "started",
 		"job_id":  jobID,
-		"message": "Metadata sync started. Poll status with GET /api/v1/admin/sync/jobs/{job_id}",
+		"message": "Metadata sync started. Poll GET /api/v1/admin/sync/jobs/{job_id} for progress.",
 	})
 }
 
-// StartAvailabilitySync triggers an asynchronous availability sync for all products
-// whose availability is older than 1 hour.
-// POST /api/v1/admin/sync/availability
-func (h *SyncHandler) StartAvailabilitySync(c *gin.Context) {
-	jobID, err := h.syncService.StartAvailabilitySync(c.Request.Context())
+// StartInventorySync triggers a full discovery + availability import.
+// POST /api/v1/admin/sync/inventory
+func (h *SyncHandler) StartInventorySync(c *gin.Context) {
+	jobID, err := h.syncService.StartInventorySync(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -48,23 +46,7 @@ func (h *SyncHandler) StartAvailabilitySync(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"status":  "started",
 		"job_id":  jobID,
-		"message": "Availability sync started. Poll status with GET /api/v1/admin/sync/jobs/{job_id}",
-	})
-}
-
-// StartFullSync triggers an asynchronous full sync (metadata + availability) for all products.
-// POST /api/v1/admin/sync/full
-func (h *SyncHandler) StartFullSync(c *gin.Context) {
-	jobID, err := h.syncService.StartFullSync(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"status":  "started",
-		"job_id":  jobID,
-		"message": "Full sync started. Poll status with GET /api/v1/admin/sync/jobs/{job_id}",
+		"message": "Inventory sync started. Poll GET /api/v1/admin/sync/jobs/{job_id} for progress.",
 	})
 }
 
@@ -82,11 +64,7 @@ func (h *SyncHandler) CancelJob(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "cancelled",
-		"job_id":  jobID,
-		"message": "Sync job has been cancelled",
-	})
+	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "job_id": jobID})
 }
 
 // GetJobStatus returns the current status of a sync job.
@@ -122,10 +100,7 @@ func (h *SyncHandler) GetSyncProgress(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"job_id":       jobID,
-		"progress_pct": progress,
-	})
+	c.JSON(http.StatusOK, gin.H{"job_id": jobID, "progress_pct": progress})
 }
 
 // GetFailedProducts returns products that failed during a sync job.
@@ -143,11 +118,7 @@ func (h *SyncHandler) GetFailedProducts(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"job_id":          jobID,
-		"failed_products": failures,
-		"total":           len(failures),
-	})
+	c.JSON(http.StatusOK, gin.H{"job_id": jobID, "failed_products": failures, "total": len(failures)})
 }
 
 // GetMetrics returns aggregate processing metrics for a job.
@@ -184,8 +155,16 @@ func (h *SyncHandler) ListJobs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"jobs":  jobs,
-		"total": len(jobs),
-	})
+	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "total": len(jobs)})
+}
+
+// GetInventoryStats returns aggregate inventory stats for the settings page.
+// GET /api/v1/admin/sync/inventory/stats
+func (h *SyncHandler) GetInventoryStats(c *gin.Context) {
+	stats, err := h.syncService.GetInventoryStats(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }

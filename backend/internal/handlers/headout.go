@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,37 @@ import (
 	"github.com/travel/backend/pkg/logger"
 	"gorm.io/gorm"
 )
+
+// headoutTTLCache caches Headout API responses in memory to absorb repeated identical requests.
+// Used for seatmap endpoints which Headout can serve slowly (5–10 s).
+var headoutTTLCache sync.Map // key: string → *headoutCacheEntry
+
+type headoutCacheEntry struct {
+	body      []byte
+	status    int
+	expiresAt time.Time
+}
+
+func headoutCacheGet(key string) (*headoutCacheEntry, bool) {
+	v, ok := headoutTTLCache.Load(key)
+	if !ok {
+		return nil, false
+	}
+	entry := v.(*headoutCacheEntry)
+	if time.Now().After(entry.expiresAt) {
+		headoutTTLCache.Delete(key)
+		return nil, false
+	}
+	return entry, true
+}
+
+func headoutCacheSet(key string, status int, body []byte, ttl time.Duration) {
+	headoutTTLCache.Store(key, &headoutCacheEntry{
+		body:      body,
+		status:    status,
+		expiresAt: time.Now().Add(ttl),
+	})
+}
 
 type HeadoutHandler struct {
 	service       *services.HeadoutProxyService
@@ -56,8 +88,72 @@ func (h *HeadoutHandler) ListBookings(c *gin.Context) {
 }
 
 func (h *HeadoutHandler) GetBookingByID(c *gin.Context) {
+	if !isFetchFresh() {
+		h.getBookingFromDB(c)
+		return
+	}
 	path := fmt.Sprintf("/v1/booking/%s", url.PathEscape(c.Param("id")))
 	h.proxyGet(c, path, true)
+}
+
+func (h *HeadoutHandler) getBookingFromDB(c *gin.Context) {
+	bookingID := c.Param("id")
+	if bookingID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "booking id is required"})
+		return
+	}
+
+	// Try local_bookings first (fetch_fresh=false path)
+	var local models.LocalBooking
+	if err := h.db.Where("booking_ref = ?", bookingID).First(&local).Error; err == nil {
+		startDT := local.Date
+		if local.StartTime != "" && local.StartTime != "00:00" {
+			startDT = local.Date + "T" + local.StartTime + ":00"
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"bookingId":             local.BookingRef,
+			"partnerReferenceId":    local.BookingRef,
+			"status":                "CONFIRMED",
+			"firstName":             local.FirstName,
+			"lastName":              local.LastName,
+			"productName":           local.ProductName,
+			"variantName":           local.VariantName,
+			"confirmationEmailSent": local.ConfirmationSent,
+			"startDateTime":         startDT,
+			"price": gin.H{
+				"amount":       local.TotalAmount,
+				"currencyCode": local.CurrencyCode,
+			},
+		})
+		return
+	}
+
+	// Fall back to main bookings table
+	var booking models.Booking
+	if err := h.db.Where("booking_id = ?", bookingID).First(&booking).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "booking not found"})
+		return
+	}
+
+	startDT := ""
+	if !booking.StartDateTime.IsZero() {
+		startDT = booking.StartDateTime.Format(time.RFC3339)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"bookingId":             booking.BookingID,
+		"partnerReferenceId":    booking.PartnerReferenceID,
+		"status":                "CONFIRMED",
+		"firstName":             booking.FirstName,
+		"lastName":              booking.LastName,
+		"productName":           booking.ProductName,
+		"variantName":           booking.VariantName,
+		"confirmationEmailSent": booking.ConfirmationEmailSent,
+		"startDateTime":         startDT,
+		"price": gin.H{
+			"amount":       booking.TotalAmount,
+			"currencyCode": booking.CurrencyCode,
+		},
+	})
 }
 
 func (h *HeadoutHandler) CreateBooking(c *gin.Context) {
@@ -79,16 +175,9 @@ func (h *HeadoutHandler) ListCategoriesByCityV1(c *gin.Context) {
 
 // v2 endpoints
 
-func (h *HeadoutHandler) isFetchFresh() bool {
-	var setting models.Setting
-	if err := h.db.Where("key = ?", "fetch_fresh").First(&setting).Error; err != nil {
-		return true
-	}
-	return setting.Value != "false"
-}
 
 func (h *HeadoutHandler) ListCitiesV2(c *gin.Context) {
-	if h.isFetchFresh() {
+	if isFetchFresh() {
 		h.listCitiesFromHeadout(c)
 		return
 	}
@@ -310,7 +399,7 @@ var productPopularCities = []string{
 func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 	q := c.Request.URL.Query()
 
-	if !h.isFetchFresh() {
+	if !isFetchFresh() {
 		h.listProductsFromDB(c, q)
 		return
 	}
@@ -389,7 +478,7 @@ func (h *HeadoutHandler) listProductsFromDB(c *gin.Context, q url.Values) {
 		query = query.Where("category ILIKE ?", "%"+category+"%")
 	}
 	// Filter out unavailable products from user-facing listings
-	query = query.Where("is_available = ? OR is_available IS NULL", true)
+	query = query.Where("is_available = ?", true)
 
 	var total int64
 	query.Count(&total)
@@ -511,7 +600,7 @@ func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset
 }
 
 func (h *HeadoutHandler) ListCategoriesV2(c *gin.Context) {
-	if !h.isFetchFresh() {
+	if !isFetchFresh() {
 		if h.writeCachedResponse(c, "/v2/categories") {
 			return
 		}
@@ -522,7 +611,7 @@ func (h *HeadoutHandler) ListCategoriesV2(c *gin.Context) {
 }
 
 func (h *HeadoutHandler) ListCollectionsV2(c *gin.Context) {
-	if !h.isFetchFresh() {
+	if !isFetchFresh() {
 		if h.writeCachedResponse(c, "/v2/collections") {
 			return
 		}
@@ -539,19 +628,32 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		return
 	}
 
-	// if !h.isFetchFresh() {
-	// 	var product models.Product
-	// 	if err := h.db.Where("headout_id = ?", productID).First(&product).Error; err == nil {
-	// 		if len(product.RawHeadoutData) > 0 {
-	// 			h.writeRawJSON(c, product.RawHeadoutData)
-	// 		} else {
-	// 			h.writeProductFromDB(c, &product)
-	// 		}
-	// 		return
-	// 	}
-	// 	c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
-	// 	return
-	// }
+	if !isFetchFresh() {
+		var product models.Product
+		if err := h.db.Where("headout_id = ?", productID).First(&product).Error; err == nil {
+			if len(product.RawHeadoutData) > 0 {
+				// Patch listingPrice with the synced price_from so the PDP and listings agree
+				var pData map[string]interface{}
+				if json.Unmarshal(product.RawHeadoutData, &pData) == nil && product.PriceFrom > 0 {
+					if lp, ok := pData["listingPrice"].(map[string]interface{}); ok {
+						if mp, ok := lp["minimumPrice"].(map[string]interface{}); ok {
+							mp["finalPrice"] = product.PriceFrom
+						}
+					}
+					if patched, err := json.Marshal(pData); err == nil {
+						h.writeRawJSON(c, patched)
+						return
+					}
+				}
+				h.writeRawJSON(c, product.RawHeadoutData)
+			} else {
+				h.writeProductFromDB(c, &product)
+			}
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
 
 	h.syncProductToDB(c, productID)
 }
@@ -564,10 +666,10 @@ func (h *HeadoutHandler) ListNormalAvailabilities(c *gin.Context) {
 		return
 	}
 
-	// if !h.isFetchFresh() {
-	// 	h.listAvailabilitiesFromDB(c, productID, variantID)
-	// 	return
-	// }
+	if !isFetchFresh() {
+		h.listAvailabilitiesFromDB(c, productID, variantID)
+		return
+	}
 
 	path := fmt.Sprintf("/v2/products/%s/variants/%s/availabilities/", url.PathEscape(productID), url.PathEscape(variantID))
 	upstream, err := h.service.Get(c.Request.Context(), path, c.Request.URL.Query(), true)
@@ -594,7 +696,7 @@ func (h *HeadoutHandler) ListNormalInventory(c *gin.Context) {
 		return
 	}
 
-	if !h.isFetchFresh() {
+	if !isFetchFresh() {
 		h.listInventoryFromDB(c)
 		return
 	}
@@ -602,8 +704,70 @@ func (h *HeadoutHandler) ListNormalInventory(c *gin.Context) {
 	h.proxyGet(c, "/v2/inventory/list-by/tour/", true)
 }
 
+// ListSeatmapAvailabilities proxies GET /v2/seatmap/products/{productId}/variants/{variantId}/availabilities/
+// Returns date-level availability (with per-date time slots) for seatmap products.
+// Responses are cached in-memory for 5 minutes to absorb repeated calls.
+func (h *HeadoutHandler) ListSeatmapAvailabilities(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	variantID := strings.TrimSpace(c.Param("variantId"))
+	if productID == "" || variantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId and variantId are required"})
+		return
+	}
+	q := c.Request.URL.Query()
+	path := fmt.Sprintf("/v2/seatmap/products/%s/variants/%s/availabilities/",
+		url.PathEscape(productID), url.PathEscape(variantID))
+	cacheKey := path + "?" + q.Encode()
+	if entry, ok := headoutCacheGet(cacheKey); ok {
+		c.Data(entry.status, "application/json", entry.body)
+		return
+	}
+	upstream, err := h.service.Get(c.Request.Context(), path, q, true)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 5*time.Minute)
+	}
+	h.writeUpstreamResponse(c, upstream)
+}
+
+// ListSeatmapInventory proxies GET /v2/seatmap/products/{productId}/variants/{variantId}/inventories/
+// Returns the inventoryId and all available seats (by section) for a specific show (date + startTime).
+// Responses are cached in-memory for 2 minutes.
+func (h *HeadoutHandler) ListSeatmapInventory(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	variantID := strings.TrimSpace(c.Param("variantId"))
+	if productID == "" || variantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId and variantId are required"})
+		return
+	}
+	q := c.Request.URL.Query()
+	if q.Get("date") == "" || q.Get("startTime") == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "date and startTime are required"})
+		return
+	}
+	path := fmt.Sprintf("/v2/seatmap/products/%s/variants/%s/inventories/",
+		url.PathEscape(productID), url.PathEscape(variantID))
+	cacheKey := path + "?" + q.Encode()
+	if entry, ok := headoutCacheGet(cacheKey); ok {
+		c.Data(entry.status, "application/json", entry.body)
+		return
+	}
+	upstream, err := h.service.Get(c.Request.Context(), path, q, true)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 2*time.Minute)
+	}
+	h.writeUpstreamResponse(c, upstream)
+}
+
 func (h *HeadoutHandler) ListSubcategoriesV2(c *gin.Context) {
-	if !h.isFetchFresh() {
+	if !isFetchFresh() {
 		if h.writeCachedResponse(c, "/v2/subcategories") {
 			return
 		}
@@ -1090,7 +1254,7 @@ func (h *HeadoutHandler) listAvailabilitiesFromDB(c *gin.Context, productID, var
 	}
 
 	var records []models.ProductAvailability
-	h.db.Where("product_id = ? AND variant_id = ? AND date >= ? AND date <= ?",
+	h.db.Where("product_id = ? AND variant_id = ? AND date >= ? AND date <= ? AND remaining_capacity > 0",
 		product.ID, variantID, startDate, endDate).
 		Order("date asc, start_time asc").
 		Find(&records)
@@ -1191,7 +1355,7 @@ func (h *HeadoutHandler) listInventoryFromDB(c *gin.Context) {
 	}
 
 	var records []models.ProductAvailability
-	h.db.Where("variant_id = ? AND date >= ? AND date <= ?",
+	h.db.Where("variant_id = ? AND date >= ? AND date <= ? AND remaining_capacity > 0",
 		tourID, startDate, endDate).
 		Order("date asc, start_time asc").
 		Find(&records)

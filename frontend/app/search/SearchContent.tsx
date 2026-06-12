@@ -13,7 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { toExperience } from "@/lib/experience-utils";
 import type { Experience } from "@/types/experience";
 
-const LIMIT = 40;
+const LIMIT = 60;
 
 export function SearchContent() {
   const searchParams = useSearchParams();
