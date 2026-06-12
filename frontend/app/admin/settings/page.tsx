@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
-import { RefreshCw, Settings as SettingsIcon, Database, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { RefreshCw, Database, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -41,12 +41,14 @@ function useSyncJob(endpoint: string) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onDoneRef = useRef<(() => void) | undefined>(undefined);
 
-  const onComplete = useCallback((completedJob: SyncJob, onDone?: () => void) => {
+  const onComplete = useCallback(() => {
     setSuccess(true);
     setJobId(null);
     setTimeout(() => setSuccess(false), 8000);
-    onDone?.();
+    onDoneRef.current?.();
+    onDoneRef.current = undefined;
   }, []);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ function useSyncJob(endpoint: string) {
         if (j.status === "completed") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
-          onComplete(j);
+          onComplete();
         } else if (j.status === "failed" || j.status === "cancelled") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
@@ -76,6 +78,7 @@ function useSyncJob(endpoint: string) {
   }, [jobId, onComplete]);
 
   const start = useCallback(async (onDone?: () => void) => {
+    onDoneRef.current = onDone;
     setStarting(true);
     setError(null);
     setSuccess(false);

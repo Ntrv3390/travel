@@ -75,7 +75,7 @@ export default function AdminCategoriesPage() {
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white py-16">
           <p className="text-sm font-medium text-slate-500">No categories found</p>
-          <p className="mt-1 text-xs text-slate-400">Use "Sync Inventory" in Settings to populate categories.</p>
+          <p className="mt-1 text-xs text-slate-400">Use &quot;Sync Inventory&quot; in Settings to populate categories.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
