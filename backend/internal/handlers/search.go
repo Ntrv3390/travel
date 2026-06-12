@@ -20,9 +20,7 @@ import (
 )
 
 const (
-	searchCitiesCacheTTL    = 6 * time.Hour
-	searchProductsCacheTTL  = 10 * time.Minute
-	searchProductCityLimit  = 10
+	searchCitiesCacheTTL = 6 * time.Hour
 )
 
 type SearchHandler struct {
@@ -31,21 +29,49 @@ type SearchHandler struct {
 }
 
 type cachedCitiesResult struct {
-	cities     []SearchCity
-	expiresAt  time.Time
-}
-
-type cachedProductsResult struct {
-	products   []SearchProduct
-	expiresAt  time.Time
+	cities    []SearchCity
+	expiresAt time.Time
 }
 
 var (
 	searchCitiesCacheMu sync.RWMutex
 	searchCitiesCache   cachedCitiesResult
-	searchProductsCacheMu sync.RWMutex
-	searchProductsCache = make(map[string]cachedProductsResult)
+
+	headoutSearchCacheMu sync.RWMutex
+	headoutSearchCache   = make(map[string]headoutSearchCacheEntry)
 )
+
+const headoutSearchAPITTL = 2 * time.Minute
+
+type headoutSearchCacheEntry struct {
+	products  []SearchProduct
+	cities    []SearchCity
+	expiresAt time.Time
+}
+
+type headoutSearchAPIValue struct {
+	ID               int    `json:"id"`
+	DisplayName      string `json:"displayName"`
+	City             *struct {
+		Code        string `json:"code"`
+		DisplayName string `json:"displayName"`
+	} `json:"city"`
+	Country *struct {
+		Code        string `json:"code"`
+		DisplayName string `json:"displayName"`
+	} `json:"country"`
+	ImageURL         string `json:"imageUrl"`
+	URLSlug          string `json:"urlSlug"`
+}
+
+type headoutSearchAPIResult struct {
+	Type   string                  `json:"type"`
+	Values []headoutSearchAPIValue `json:"values"`
+}
+
+type headoutSearchAPIResponse struct {
+	Results []headoutSearchAPIResult `json:"results"`
+}
 
 func NewSearchHandler(db *gorm.DB) *SearchHandler {
 	cfg := config.Load()
@@ -196,45 +222,28 @@ func (h *SearchHandler) fetchProductsFromDB() []SearchProduct {
 
 func (h *SearchHandler) performSearch(c *gin.Context, q string, currencyCode string) *SearchResponse {
 	lower := strings.ToLower(q)
-	allCities := h.fetchAllCities(c)
 
-	matchedCities := searchFilterAndRankCities(allCities, lower)
+	var matchedProducts []SearchProduct
+	var matchedCities []SearchCity
 
-	var allProducts []SearchProduct
-	if !isFetchFresh() && h.db != nil {
-		allProducts = h.fetchProductsFromDB()
+	if isFetchFresh() {
+		// Use Headout's dedicated search API — single call, fast, accurate results.
+		products, cities := h.searchViaHeadoutAPI(c.Request.Context(), q)
+		matchedProducts = products
+		matchedCities = cities
+		// If Headout returned no cities, supplement from DB.
+		if len(matchedCities) == 0 {
+			allCities := h.fetchAllCities(c)
+			matchedCities = searchFilterAndRankCities(allCities, lower)
+		}
 	} else {
-		// fetch_fresh=true: check the in-memory product cache first (instant if warm).
-		// On a cache miss, serve from DB immediately so the user isn't blocked on
-		// multi-city Headout fetches; repopulate the live cache in the background.
-		cacheKeyForCheck := strings.ToUpper(strings.TrimSpace(currencyCode))
-		if cacheKeyForCheck == "" {
-			cacheKeyForCheck = "USD"
-		}
-		searchProductsCacheMu.RLock()
-		if cached, ok := searchProductsCache[cacheKeyForCheck]; ok && time.Now().Before(cached.expiresAt) {
-			allProducts = append([]SearchProduct(nil), cached.products...)
-		}
-		searchProductsCacheMu.RUnlock()
+		allCities := h.fetchAllCities(c)
+		matchedCities = searchFilterAndRankCities(allCities, lower)
 
-		if len(allProducts) == 0 && h.db != nil {
-			allProducts = h.fetchProductsFromDB()
-			// Warm the live cache in the background so subsequent searches hit it.
-			go h.fetchProductsLive(context.Background(), currencyCode)
-		} else if len(allProducts) == 0 {
-			allProducts = h.fetchProductsLive(c.Request.Context(), currencyCode)
-		}
-	}
-
-	matchedProducts := searchFilterAndRankProducts(allProducts, lower)
-
-	// Fallback: if no products matched, try harder
-	if len(matchedProducts) == 0 {
-		if h.db != nil {
+		allProducts := h.fetchProductsFromDB()
+		matchedProducts = searchFilterAndRankProducts(allProducts, lower)
+		if len(matchedProducts) == 0 && h.db != nil {
 			matchedProducts = h.searchProductsFallbackDB(lower)
-		}
-		if len(matchedProducts) == 0 && isFetchFresh() {
-			matchedProducts = h.searchProductsFallbackHeadout(c.Request.Context(), lower, currencyCode)
 		}
 	}
 
@@ -287,127 +296,6 @@ func (h *SearchHandler) searchProductsFallbackDB(query string) []SearchProduct {
 	return products
 }
 
-func (h *SearchHandler) searchProductsFallbackHeadout(ctx context.Context, q string, currencyCode string) []SearchProduct {
-	allCities := productPopularCities
-	maxCities := searchProductCityLimit * 2
-	if len(allCities) > maxCities {
-		allCities = allCities[:maxCities]
-	}
-
-	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 6)
-	results := make([][]SearchProduct, 0, len(allCities))
-
-	for _, cityCode := range allCities {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(code string) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			vals := url.Values{}
-			vals.Set("cityCode", code)
-			if currencyCode != "" {
-				vals.Set("currencyCode", strings.ToUpper(currencyCode))
-			} else {
-				vals.Set("currencyCode", "USD")
-			}
-			vals.Set("languageCode", "EN")
-			vals.Set("limit", "100")
-			vals.Set("offset", "0")
-
-			upstream, err := h.headoutProxySvc.Get(fetchCtx, "/v2/products/", vals, true)
-			if err != nil || upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
-				return
-			}
-
-			var rawPayload interface{}
-			if err := json.Unmarshal(upstream.Body, &rawPayload); err != nil {
-				return
-			}
-			items := extractProductsArray(rawPayload)
-
-			products := make([]SearchProduct, 0, len(items))
-			for _, item := range items {
-				id := extractID(item)
-				if id == "" {
-					continue
-				}
-				name := getString(item, "name", "title")
-				if name == "" || !strings.Contains(strings.ToLower(name), q) {
-					continue
-				}
-				var imageURL string
-				if img, ok := item["image"].(map[string]interface{}); ok {
-					imageURL = getString(img, "url")
-				}
-				if imageURL == "" {
-					imageURL = getString(item, "image_url", "thumbnail", "hero_image")
-				}
-				if imageURL == "" {
-					if media, ok := item["media"].([]interface{}); ok && len(media) > 0 {
-						if first, ok := media[0].(map[string]interface{}); ok {
-							imageURL = getString(first, "url")
-						}
-					}
-				}
-				cityName := getNestedString(item, "city", "name")
-				if cityName == "" {
-					cityName = getString(item, "location", "city_name")
-				}
-				if cityName == "" {
-					cityName = code
-				}
-				categoryName := ""
-				if pc, ok := item["primaryCategory"].(map[string]interface{}); ok {
-					categoryName = getString(pc, "name")
-				}
-				if categoryName == "" {
-					categoryName = getString(item, "category", "primary_category")
-				}
-				productType := getString(item, "productType")
-				curr, price := searchExtractPriceInfo(item, currencyCode)
-				rating := float32(getFloat(item, "rating", "average_rating"))
-				reviewCount := int(getFloat(item, "review_count", "ratings_count"))
-				if rating == 0 {
-					if rs, ok := item["reviewsSummary"].(map[string]interface{}); ok {
-						rating = float32(getFloat(rs, "averageRating"))
-						reviewCount = int(getFloat(rs, "ratingsCount"))
-					}
-				}
-				sl := slugify(name)
-				products = append(products, SearchProduct{
-					ID: id, Name: name, Slug: sl, City: cityName,
-					CityCode: code, Category: categoryName,
-					ImageURL: imageURL, Price: price, Currency: curr,
-					Rating: rating, ReviewCount: reviewCount,
-					ProductType: productType, URL: "/products/" + sl + "-" + id,
-				})
-			}
-
-			mu.Lock()
-			results = append(results, products)
-			mu.Unlock()
-		}(cityCode)
-	}
-	wg.Wait()
-
-	allProducts := make([]SearchProduct, 0)
-	seen := make(map[string]bool)
-	for _, cityProducts := range results {
-		for _, p := range cityProducts {
-			if !seen[p.ID] {
-				seen[p.ID] = true
-				allProducts = append(allProducts, p)
-			}
-		}
-	}
-
-	return allProducts
-}
 
 func (h *SearchHandler) fetchAllCitiesFromDB(c *gin.Context) []SearchCity {
 	var dbCities []models.City
@@ -516,213 +404,123 @@ func (h *SearchHandler) fetchAllCities(c *gin.Context) []SearchCity {
 	return cities
 }
 
-func (h *SearchHandler) fetchProductsLive(ctx context.Context, currencyCode string) []SearchProduct {
-	cacheKey := strings.ToUpper(strings.TrimSpace(currencyCode))
-	if cacheKey == "" {
-		cacheKey = "USD"
+func headoutSearchBaseURL() string {
+	cfg := config.Load()
+	headoutEnv := cfg.HeadoutEnvironment
+	if headoutEnv == "" {
+		switch cfg.Environment {
+		case "production":
+			headoutEnv = "production"
+		default:
+			headoutEnv = "sandbox"
+		}
 	}
-
-	searchProductsCacheMu.RLock()
-	if cached, ok := searchProductsCache[cacheKey]; ok && time.Now().Before(cached.expiresAt) {
-		products := append([]SearchProduct(nil), cached.products...)
-		searchProductsCacheMu.RUnlock()
-		return products
+	if headoutEnv == "prod" || headoutEnv == "production" {
+		return "https://search.headout.com/api/v3/search/"
 	}
-	searchProductsCacheMu.RUnlock()
+	return "https://search.sandbox-headout.com/api/v3/search/"
+}
 
-	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func (h *SearchHandler) searchViaHeadoutAPI(ctx context.Context, q string) ([]SearchProduct, []SearchCity) {
+	cacheKey := strings.ToLower(strings.TrimSpace(q))
+
+	headoutSearchCacheMu.RLock()
+	if entry, ok := headoutSearchCache[cacheKey]; ok && time.Now().Before(entry.expiresAt) {
+		products := append([]SearchProduct(nil), entry.products...)
+		cities := append([]SearchCity(nil), entry.cities...)
+		headoutSearchCacheMu.RUnlock()
+		return products, cities
+	}
+	headoutSearchCacheMu.RUnlock()
+
+	params := url.Values{}
+	params.Set("query", q)
+	params.Set("language", "en")
+	fullURL := headoutSearchBaseURL() + "?" + params.Encode()
+
+	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 6)
-	results := make([][]SearchProduct, 0, searchProductCityLimit)
-
-	cityCodes := productPopularCities
-	if len(cityCodes) > searchProductCityLimit {
-		cityCodes = cityCodes[:searchProductCityLimit]
-	}
-
-	for _, cityCode := range cityCodes {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(code string) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			products := h.fetchProductsForCity(fetchCtx, code, currencyCode)
-			mu.Lock()
-			results = append(results, products)
-			mu.Unlock()
-		}(cityCode)
-	}
-	wg.Wait()
-
-	allProducts := make([]SearchProduct, 0)
-	seen := make(map[string]bool)
-	for _, cityProducts := range results {
-		for _, p := range cityProducts {
-			if !seen[p.ID] {
-				seen[p.ID] = true
-				allProducts = append(allProducts, p)
-			}
-		}
-	}
-
-	searchProductsCacheMu.Lock()
-	searchProductsCache[cacheKey] = cachedProductsResult{
-		products: append([]SearchProduct(nil), allProducts...),
-		expiresAt: time.Now().Add(searchProductsCacheTTL),
-	}
-	searchProductsCacheMu.Unlock()
-
-	return allProducts
-}
-
-func (h *SearchHandler) fetchProductsForCity(ctx context.Context, cityCode string, currencyCode string) []SearchProduct {
-	query := url.Values{}
-	query.Set("cityCode", cityCode)
-	if currencyCode != "" {
-		query.Set("currencyCode", strings.ToUpper(currencyCode))
-	} else {
-		query.Set("currencyCode", "USD")
-	}
-	query.Set("languageCode", "EN")
-	query.Set("limit", "100")
-	query.Set("offset", "0")
-
-	upstream, err := h.headoutProxySvc.Get(ctx, "/v2/products/", query, true)
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, fullURL, nil)
 	if err != nil {
-		return nil
-	}
-	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
-		return nil
+		logger.Errorf("Headout search request error: %v", err)
+		return nil, nil
 	}
 
-	var payload interface{}
-	if err := json.Unmarshal(upstream.Body, &payload); err != nil {
-		return nil
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		logger.Errorf("Headout search API error: %v", err)
+		return nil, nil
 	}
-	items := extractProductsArray(payload)
-	products := make([]SearchProduct, 0, len(items))
-	for _, item := range items {
-		id := extractID(item)
-		if id == "" {
-			continue
-		}
-		name := getString(item, "name", "title")
-		if name == "" {
-			continue
-		}
+	defer resp.Body.Close()
 
-		var imageURL string
-		if img, ok := item["image"].(map[string]interface{}); ok {
-			imageURL = getString(img, "url")
-		}
-		if imageURL == "" {
-			imageURL = getString(item, "image_url", "thumbnail", "hero_image")
-		}
-		if imageURL == "" {
-			if media, ok := item["media"].([]interface{}); ok && len(media) > 0 {
-				if first, ok := media[0].(map[string]interface{}); ok {
-					imageURL = getString(first, "url")
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logger.Errorf("Headout search API returned status %d", resp.StatusCode)
+		return nil, nil
+	}
+
+	var apiResp headoutSearchAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		logger.Errorf("Headout search decode error: %v", err)
+		return nil, nil
+	}
+
+	var products []SearchProduct
+	var cities []SearchCity
+	seenProducts := make(map[string]bool)
+
+	for _, result := range apiResp.Results {
+		switch result.Type {
+		case "PRODUCT":
+			for _, v := range result.Values {
+				id := fmt.Sprintf("%d", v.ID)
+				if seenProducts[id] {
+					continue
 				}
+				seenProducts[id] = true
+				sl := slugify(v.DisplayName)
+				cityName, cityCode := "", ""
+				if v.City != nil {
+					cityName = v.City.DisplayName
+					cityCode = v.City.Code
+				}
+				products = append(products, SearchProduct{
+					ID:       id,
+					Name:     v.DisplayName,
+					Slug:     sl,
+					City:     cityName,
+					CityCode: cityCode,
+					ImageURL: v.ImageURL,
+					URL:      "/products/" + sl + "-" + id,
+				})
 			}
-		}
-
-		cityName := getNestedString(item, "city", "name")
-		if cityName == "" {
-			cityName = getString(item, "location", "city_name")
-		}
-		if cityName == "" {
-			cityName = cityCode
-		}
-
-		categoryName := ""
-		if pc, ok := item["primaryCategory"].(map[string]interface{}); ok {
-			categoryName = getString(pc, "name")
-		}
-		if categoryName == "" {
-			categoryName = getString(item, "category", "primary_category")
-		}
-
-		productType := getString(item, "productType")
-
-		currency, price := searchExtractPriceInfo(item, currencyCode)
-
-		rating := float32(getFloat(item, "rating", "average_rating"))
-		reviewCount := int(getFloat(item, "review_count", "ratings_count"))
-		if rating == 0 {
-			if rs, ok := item["reviewsSummary"].(map[string]interface{}); ok {
-				rating = float32(getFloat(rs, "averageRating"))
-				reviewCount = int(getFloat(rs, "ratingsCount"))
-			}
-		}
-
-		sl := slugify(name)
-		products = append(products, SearchProduct{
-			ID: id, Name: name, Slug: sl, City: cityName,
-			CityCode: cityCode, Category: categoryName,
-			ImageURL: imageURL, Price: price, Currency: currency,
-			Rating: rating, ReviewCount: reviewCount,
-			ProductType: productType, URL: "/products/" + sl + "-" + id,
-		})
-	}
-	return products
-}
-
-func searchExtractPriceInfo(item map[string]interface{}, requestedCurrency string) (string, float64) {
-	currency := strings.ToUpper(strings.TrimSpace(requestedCurrency))
-	if currency == "" {
-		currency = "USD"
-	}
-
-	price := 0.0
-	if pricing, ok := item["pricing"].(map[string]interface{}); ok {
-		if value := getString(pricing, "currency", "currencyCode"); value != "" {
-			currency = value
-		}
-		price = getFloat(pricing, "headoutSellingPrice", "price", "amount")
-	}
-
-	if listingPrice, ok := item["listingPrice"].(map[string]interface{}); ok {
-		if value := getString(listingPrice, "currencyCode", "currency"); value != "" {
-			currency = value
-		}
-		if minPrice, ok := listingPrice["minimumPrice"].(map[string]interface{}); ok {
-			if final := getFloat(minPrice, "finalPrice", "price", "amount"); final > 0 {
-				price = final
-			} else if original := getFloat(minPrice, "originalPrice"); original > 0 && price == 0 {
-				price = original
+		case "CITY":
+			for _, v := range result.Values {
+				sl := slugify(v.DisplayName)
+				countryName := ""
+				if v.Country != nil {
+					countryName = v.Country.DisplayName
+				}
+				cities = append(cities, SearchCity{
+					Name:    v.DisplayName,
+					Country: countryName,
+					Image:   v.ImageURL,
+					Slug:    sl,
+					URL:     "/cities/" + sl,
+				})
 			}
 		}
 	}
 
-	if listingPrice, ok := item["listing_price"].(map[string]interface{}); ok {
-		if value := getString(listingPrice, "currencyCode", "currency", "currency_code"); value != "" {
-			currency = value
-		}
-		if minPrice, ok := listingPrice["minimumPrice"].(map[string]interface{}); ok {
-			if final := getFloat(minPrice, "finalPrice", "price", "amount"); final > 0 {
-				price = final
-			}
-		}
-		if minPrice, ok := listingPrice["minimum_price"].(map[string]interface{}); ok {
-			if final := getFloat(minPrice, "finalPrice", "price", "amount", "final_price"); final > 0 {
-				price = final
-			}
-		}
+	headoutSearchCacheMu.Lock()
+	headoutSearchCache[cacheKey] = headoutSearchCacheEntry{
+		products:  append([]SearchProduct(nil), products...),
+		cities:    append([]SearchCity(nil), cities...),
+		expiresAt: time.Now().Add(headoutSearchAPITTL),
 	}
+	headoutSearchCacheMu.Unlock()
 
-	if amount := getFloat(item, "price", "amount", "fromPrice", "from_price"); amount > 0 && price == 0 {
-		price = amount
-	}
-
-	currency = strings.ToUpper(strings.TrimSpace(currency))
-	if currency == "" {
-		currency = "USD"
-	}
-
-	return currency, price
+	return products, cities
 }
 
 func searchFilterAndRankProducts(products []SearchProduct, query string) []SearchProduct {

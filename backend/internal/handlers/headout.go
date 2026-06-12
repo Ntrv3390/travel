@@ -434,8 +434,20 @@ func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 	if cityCode != "" && cityCode != "undefined" && cityCode != "null" {
 		q.Set("offset", strconv.Itoa(offset))
 		q.Set("limit", strconv.Itoa(limit))
-		c.Request.URL.RawQuery = q.Encode()
-		h.proxyGet(c, "/v2/products", true)
+		cacheKey := "products-v2-city:" + q.Encode()
+		if entry, ok := headoutCacheGet(cacheKey); ok {
+			c.Data(entry.status, "application/json", entry.body)
+			return
+		}
+		upstream, err := h.service.Get(c.Request.Context(), "/v2/products", q, true)
+		if err != nil {
+			h.handleProxyError(c, err)
+			return
+		}
+		if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 5*time.Minute)
+		}
+		h.writeUpstreamResponse(c, upstream)
 		return
 	}
 
@@ -556,16 +568,26 @@ func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset
 	query.Set("limit", strconv.Itoa(limit))
 	query.Set("offset", "0")
 
-	upstream, err := h.service.Get(c.Request.Context(), "/v2/products", query, true)
-	if err != nil {
-		logger.Errorf("Failed to fetch products for %s: %v", cityName, err)
-		var nextOffsetVal *int
-		if cityIndex+1 < len(productPopularCities) {
-			val := offset + limit
-			nextOffsetVal = &val
+	cacheKey := "products-random:" + query.Encode()
+	var upstream *services.UpstreamResponse
+	if entry, ok := headoutCacheGet(cacheKey); ok {
+		upstream = &services.UpstreamResponse{StatusCode: entry.status, Body: entry.body}
+	} else {
+		var err error
+		upstream, err = h.service.Get(c.Request.Context(), "/v2/products", query, true)
+		if err != nil {
+			logger.Errorf("Failed to fetch products for %s: %v", cityName, err)
+			var nextOffsetVal *int
+			if cityIndex+1 < len(productPopularCities) {
+				val := offset + limit
+				nextOffsetVal = &val
+			}
+			c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nextOffsetVal})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"products": []json.RawMessage{}, "total": 0, "nextOffset": nextOffsetVal})
-		return
+		if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 5*time.Minute)
+		}
 	}
 
 	var body struct {
@@ -655,7 +677,26 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		return
 	}
 
-	h.syncProductToDB(c, productID)
+	cacheKey := "product-v2:" + productID
+	if entry, ok := headoutCacheGet(cacheKey); ok {
+		c.Data(entry.status, "application/json", entry.body)
+		return
+	}
+
+	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(productID))
+	upstream, err := h.service.Get(c.Request.Context(), path, url.Values{}, true)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 10*time.Minute)
+		var pData map[string]interface{}
+		if json.Unmarshal(upstream.Body, &pData) == nil {
+			go h.saveProductToDB(productID, pData)
+		}
+	}
+	h.writeUpstreamResponse(c, upstream)
 }
 
 func (h *HeadoutHandler) ListNormalAvailabilities(c *gin.Context) {

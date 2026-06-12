@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,8 +17,8 @@ import (
 )
 
 const (
-    headoutDefaultTimeout = 60 * time.Second
-    headoutAuthHeaderName = "Headout-Auth"
+	headoutDefaultTimeout = 15 * time.Second
+	headoutAuthHeaderName = "Headout-Auth"
 )
 
 var ErrMissingHeadoutAPIKey = errors.New("headout api key is not configured")
@@ -35,18 +36,42 @@ type HeadoutProxyService struct {
 }
 
 func NewHeadoutProxyService(cfg *config.Config) *HeadoutProxyService {
-	transport := &http.Transport{
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DisableKeepAlives:   false,
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 60 * time.Second,
 	}
-	return &HeadoutProxyService{
-		httpClient: &http.Client{
-			Transport: transport,
-		},
-		baseURL: strings.TrimRight(cfg.HeadoutURL, "/"),
-		apiKey:  strings.TrimSpace(cfg.HeadoutAPIKey),
+	transport := &http.Transport{
+		DialContext:           dialer.DialContext,
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       120 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 12 * time.Second,
+		DisableKeepAlives:     false,
+		ForceAttemptHTTP2:     true,
+	}
+	svc := &HeadoutProxyService{
+		httpClient: &http.Client{Transport: transport},
+		baseURL:    strings.TrimRight(cfg.HeadoutURL, "/"),
+		apiKey:     strings.TrimSpace(cfg.HeadoutAPIKey),
+	}
+	// Pre-warm the connection so the first real request doesn't pay TLS setup cost.
+	go svc.warmConnection()
+	return svc
+}
+
+func (s *HeadoutProxyService) warmConnection() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/v2/cities/?limit=1", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := s.httpClient.Do(req)
+	if err == nil {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 	}
 }
 
