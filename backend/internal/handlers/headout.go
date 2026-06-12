@@ -20,9 +20,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// headoutTTLCache caches Headout API responses in memory to absorb repeated identical requests.
-// Used for seatmap endpoints which Headout can serve slowly (5–10 s).
-var headoutTTLCache sync.Map // key: string → *headoutCacheEntry
+// headoutCacheTTL is the TTL applied to all Headout API responses cached in memory.
+// The first request populates the cache; subsequent requests within this window are
+// served instantly without hitting Headout. The cleanup goroutine purges expired
+// entries every 30 minutes to reclaim memory.
+const headoutCacheTTL = 30 * time.Minute
+
+var (
+	headoutTTLCache sync.Map  // key: string → *headoutCacheEntry
+	cacheCleanOnce  sync.Once // ensures the cleanup goroutine starts exactly once
+)
 
 type headoutCacheEntry struct {
 	body      []byte
@@ -51,6 +58,41 @@ func headoutCacheSet(key string, status int, body []byte, ttl time.Duration) {
 	})
 }
 
+// startCacheCleanup starts a single background goroutine that evicts expired entries
+// from all in-memory Headout caches every 30 minutes.
+func startCacheCleanup() {
+	cacheCleanOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(30 * time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
+				now := time.Now()
+				headoutTTLCache.Range(func(k, v interface{}) bool {
+					if e, ok := v.(*headoutCacheEntry); ok && now.After(e.expiresAt) {
+						headoutTTLCache.Delete(k)
+					}
+					return true
+				})
+				// Clean search cache
+				headoutSearchCacheMu.Lock()
+				for k, e := range headoutSearchCache {
+					if now.After(e.expiresAt) {
+						delete(headoutSearchCache, k)
+					}
+				}
+				headoutSearchCacheMu.Unlock()
+				// Clean cities cache
+				searchCitiesCacheMu.Lock()
+				if now.After(searchCitiesCache.expiresAt) {
+					searchCitiesCache = cachedCitiesResult{}
+				}
+				searchCitiesCacheMu.Unlock()
+				logger.Infof("Headout cache purge complete")
+			}
+		}()
+	})
+}
+
 type HeadoutHandler struct {
 	service       *services.HeadoutProxyService
 	publicService *services.HeadoutProxyService
@@ -58,6 +100,7 @@ type HeadoutHandler struct {
 }
 
 func NewHeadoutHandler(cfg *config.Config, db *gorm.DB) *HeadoutHandler {
+	startCacheCleanup()
 	return &HeadoutHandler{
 		service:       services.NewHeadoutProxyService(cfg),
 		publicService: services.NewHeadoutProxyService(cfg),
@@ -445,7 +488,7 @@ func (h *HeadoutHandler) ListProductsV2(c *gin.Context) {
 			return
 		}
 		if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
-			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 5*time.Minute)
+			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
 		}
 		h.writeUpstreamResponse(c, upstream)
 		return
@@ -586,7 +629,7 @@ func (h *HeadoutHandler) fetchRandomProductsV2(c *gin.Context, limit int, offset
 			return
 		}
 		if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
-			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 5*time.Minute)
+			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
 		}
 	}
 
@@ -690,7 +733,7 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		return
 	}
 	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
-		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 10*time.Minute)
+		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
 		var pData map[string]interface{}
 		if json.Unmarshal(upstream.Body, &pData) == nil {
 			go h.saveProductToDB(productID, pData)
@@ -769,7 +812,7 @@ func (h *HeadoutHandler) ListSeatmapAvailabilities(c *gin.Context) {
 		return
 	}
 	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
-		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 5*time.Minute)
+		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
 	}
 	h.writeUpstreamResponse(c, upstream)
 }
@@ -802,7 +845,7 @@ func (h *HeadoutHandler) ListSeatmapInventory(c *gin.Context) {
 		return
 	}
 	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
-		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, 2*time.Minute)
+		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
 	}
 	h.writeUpstreamResponse(c, upstream)
 }
@@ -1086,12 +1129,32 @@ func (h *HeadoutHandler) proxyGet(c *gin.Context, path string, requiresAuth bool
 }
 
 func (h *HeadoutHandler) proxyGetWithService(c *gin.Context, service *services.HeadoutProxyService, path string, requiresAuth bool) {
+	// Don't cache per-user booking data.
+	skipCache := strings.Contains(path, "booking")
+
+	if !skipCache {
+		cacheKey := "proxy:" + path + "?" + c.Request.URL.RawQuery
+		if entry, ok := headoutCacheGet(cacheKey); ok {
+			c.Data(entry.status, "application/json", entry.body)
+			return
+		}
+		upstream, err := service.Get(c.Request.Context(), path, c.Request.URL.Query(), requiresAuth)
+		if err != nil {
+			h.handleProxyError(c, err)
+			return
+		}
+		if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+			headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
+		}
+		h.writeUpstreamResponse(c, upstream)
+		return
+	}
+
 	upstream, err := service.Get(c.Request.Context(), path, c.Request.URL.Query(), requiresAuth)
 	if err != nil {
 		h.handleProxyError(c, err)
 		return
 	}
-
 	h.writeUpstreamResponse(c, upstream)
 }
 

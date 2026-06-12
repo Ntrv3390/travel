@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	searchCitiesCacheTTL = 6 * time.Hour
+	searchCitiesCacheTTL = headoutCacheTTL
 )
 
 type SearchHandler struct {
@@ -41,7 +41,7 @@ var (
 	headoutSearchCache   = make(map[string]headoutSearchCacheEntry)
 )
 
-const headoutSearchAPITTL = 2 * time.Minute
+const headoutSearchAPITTL = headoutCacheTTL
 
 type headoutSearchCacheEntry struct {
 	products  []SearchProduct
