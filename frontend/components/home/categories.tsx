@@ -22,19 +22,50 @@ const iconMap: Record<string, LucideIcon> = {
   music: Music,
 };
 
-const colorMap: Record<string, { gradient: string; bg: string; iconColor: string }> = {
-  adventure: { gradient: "from-orange-500 to-red-500", bg: "bg-orange-50", iconColor: "text-orange-600" },
-  cultural: { gradient: "from-violet-500 to-indigo-500", bg: "bg-violet-50", iconColor: "text-violet-600" },
-  "food-drink": { gradient: "from-amber-500 to-yellow-500", bg: "bg-amber-50", iconColor: "text-amber-600" },
-  nature: { gradient: "from-emerald-500 to-green-500", bg: "bg-emerald-50", iconColor: "text-emerald-600" },
-  wellness: { gradient: "from-pink-500 to-rose-500", bg: "bg-pink-50", iconColor: "text-pink-600" },
-  nightlife: { gradient: "from-violet-500 to-fuchsia-500", bg: "bg-fuchsia-50", iconColor: "text-fuchsia-600" },
+const colorMap: Record<string, { border: string; bg: string; iconBg: string; iconColor: string }> = {
+  adventure: {
+    border: "border-orange-500/20",
+    bg: "bg-orange-500/5 hover:bg-orange-500/10",
+    iconBg: "bg-orange-50",
+    iconColor: "text-orange-600",
+  },
+  cultural: {
+    border: "border-violet-500/20",
+    bg: "bg-violet-500/5 hover:bg-violet-500/10",
+    iconBg: "bg-violet-50",
+    iconColor: "text-violet-600",
+  },
+  "food-drink": {
+    border: "border-amber-500/20",
+    bg: "bg-amber-500/5 hover:bg-amber-500/10",
+    iconBg: "bg-amber-50",
+    iconColor: "text-amber-600",
+  },
+  nature: {
+    border: "border-emerald-500/20",
+    bg: "bg-emerald-500/5 hover:bg-emerald-500/10",
+    iconBg: "bg-emerald-50",
+    iconColor: "text-emerald-600",
+  },
+  wellness: {
+    border: "border-pink-500/20",
+    bg: "bg-pink-500/5 hover:bg-pink-500/10",
+    iconBg: "bg-pink-50",
+    iconColor: "text-pink-600",
+  },
+  nightlife: {
+    border: "border-fuchsia-500/20",
+    bg: "bg-fuchsia-500/5 hover:bg-fuchsia-500/10",
+    iconBg: "bg-fuchsia-50",
+    iconColor: "text-fuchsia-600",
+  },
 };
 
-const defaultColor = {
-  gradient: "from-sky-500 to-blue-500",
-  bg: "bg-sky-50",
-  iconColor: "text-sky-600",
+const defaultColors = {
+  border: "border-brand-500/20",
+  bg: "bg-brand-500/5 hover:bg-brand-500/10",
+  iconBg: "bg-brand-50",
+  iconColor: "text-brand-600",
 };
 
 interface CategoriesProps {
@@ -43,26 +74,43 @@ interface CategoriesProps {
 
 export function Categories({ categories }: CategoriesProps) {
   return (
-    <section className="bg-white py-10 sm:py-14">
+    <section className="bg-muted/20 py-12 sm:py-16">
       <div className="container px-4">
         {/* Header */}
-        <div className="mb-6 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-sky-500">
-            Categories
-          </p>
-          <h2 className="mt-1 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
-            Browse by Category
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-400">
+        <div className="mb-8 text-center">
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-[11px] font-bold uppercase tracking-widest text-brand-500"
+          >
+            Browse by type
+          </motion.p>
+          <motion.h2
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.08 }}
+            className="mt-1 text-xl font-extrabold tracking-tight text-foreground sm:text-2xl"
+          >
+            Explore Categories
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.14 }}
+            className="mt-0.5 text-xs text-muted-foreground"
+          >
             Find the perfect experience for any interest
-          </p>
+          </motion.p>
         </div>
 
         {/* Grid */}
         <div className="grid grid-cols-3 gap-3 sm:gap-4 lg:grid-cols-6">
           {categories.map((cat, i) => {
             const Icon = iconMap[cat.icon_name] ?? Mountain;
-            const colors = colorMap[cat.slug] ?? defaultColor;
+            const colors = colorMap[cat.slug] ?? defaultColors;
 
             return (
               <motion.div
@@ -70,24 +118,22 @@ export function Categories({ categories }: CategoriesProps) {
                 initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
+                transition={{ duration: 0.3, delay: i * 0.055 }}
               >
                 <Link
                   href={`/search?q=${encodeURIComponent(cat.name)}`}
-                  className="group flex flex-col items-center rounded-2xl border border-slate-100 bg-white p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:p-5"
+                  className={`group flex flex-col items-center rounded-2xl border p-4 text-center transition-all hover:-translate-y-0.5 hover:shadow-md sm:p-5 ${colors.border} ${colors.bg}`}
                 >
-                  {/* Icon container */}
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-xl ${colors.bg} transition-transform duration-200 group-hover:scale-105 sm:h-12 sm:w-12`}
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 sm:h-12 sm:w-12 ${colors.iconBg}`}
                   >
-                    <Icon className={`h-5 w-5 ${colors.iconColor} sm:h-5.5 sm:w-5.5`} strokeWidth={1.75} />
+                    <Icon className={`h-5 w-5 ${colors.iconColor}`} strokeWidth={1.75} />
                   </div>
-
-                  <p className="mt-3 text-[11px] font-bold text-slate-800 sm:text-xs">
+                  <p className="mt-3 text-[11px] font-bold text-foreground sm:text-xs">
                     {cat.name}
                   </p>
                   {cat.description && (
-                    <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-400">
+                    <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">
                       {cat.description}
                     </p>
                   )}

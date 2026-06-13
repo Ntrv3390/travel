@@ -5,7 +5,7 @@ import { motion, useInView } from "framer-motion";
 import { CountUp } from "countup.js";
 import { Globe2, MapPin, Users, Star } from "lucide-react";
 
-function StatCard({
+function StatItem({
   icon: Icon,
   value,
   suffix,
@@ -33,7 +33,7 @@ function StatCard({
     const val = decimal ? value / 10 : value;
     const counter = new CountUp(countRef.current, val, {
       startVal: 0,
-      duration: 2,
+      duration: 2.2,
       decimalPlaces: decimal ? 1 : 0,
       useEasing: true,
       useGrouping: true,
@@ -48,23 +48,21 @@ function StatCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.4 }}
-      className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-5"
+      className="flex flex-col items-center gap-3 rounded-2xl border border-border/60 bg-card p-5 text-center shadow-sm"
     >
-      <div
-        className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${bgColor}`}
-      >
-        <Icon className={`h-4.5 w-4.5 ${color}`} strokeWidth={2} />
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${bgColor}`}>
+        <Icon className={`h-5 w-5 ${color}`} strokeWidth={1.75} />
       </div>
-      <div className="flex items-baseline gap-0.5">
-        <span ref={countRef} className="text-2xl font-black text-slate-900 tabular-nums">
-          0
-        </span>
-        <span className="text-xl font-black text-slate-900">{suffix ?? ""}</span>
-        {badge && (
-          <span className="ml-0.5 text-sm font-semibold text-slate-400">{badge}</span>
-        )}
+      <div>
+        <div className="flex items-baseline justify-center gap-0.5">
+          <span ref={countRef} className="text-2xl font-black tabular-nums text-foreground sm:text-3xl">
+            0
+          </span>
+          <span className="text-xl font-black text-foreground/80">{suffix ?? ""}</span>
+          {badge && <span className="ml-0.5 text-sm font-semibold text-muted-foreground">{badge}</span>}
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
       </div>
-      <p className="mt-0.5 text-xs text-slate-400">{label}</p>
     </motion.div>
   );
 }
@@ -85,8 +83,8 @@ export function TrustSection({
       value: stats.totalExperiences || 6209,
       suffix: "+",
       label: "Experiences",
-      color: "text-sky-600",
-      bgColor: "bg-sky-50",
+      color: "text-brand-500",
+      bgColor: "bg-brand-50",
     },
     {
       icon: MapPin,
@@ -116,11 +114,19 @@ export function TrustSection({
   ];
 
   return (
-    <section className="bg-slate-50 py-10 sm:py-14">
+    <section className="border-y border-border/40 bg-muted/20 py-10 sm:py-14">
       <div className="container px-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-          {items.map((item) => (
-            <StatCard key={item.label} {...item} />
+          {items.map((item, i) => (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.35, delay: i * 0.07 }}
+            >
+              <StatItem {...item} />
+            </motion.div>
           ))}
         </div>
       </div>

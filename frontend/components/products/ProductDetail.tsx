@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef } from "react";
-import { motion } from "framer-motion";
-import { ProductDetailProvider } from "@/context/ProductDetailContext";
+import { useState, useMemo, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useCartContext } from "@/context/CartContext";
+import { BookingModal } from "./BookingModal";
 import { ProductHero } from "./pdp/ProductHero";
 import { PackageCards } from "./pdp/PackageCards";
-import { AvailabilitySection } from "./pdp/AvailabilitySection";
-import { SeatMapSection } from "./pdp/SeatMapSection";
 import { HighlightsSection } from "./pdp/HighlightsSection";
 import { AboutSection } from "./pdp/AboutSection";
 import { FaqSection } from "./pdp/FaqSection";
@@ -23,21 +21,31 @@ interface ProductDetailProps {
 
 export function ProductDetail({ product }: ProductDetailProps) {
   const { cart } = useCartContext();
-  const availabilityRef = useRef<HTMLDivElement>(null);
 
-  const cartItem = useMemo(() => {
+  // Any cart item for this product — used only to set the initially-highlighted variant
+  const anyCartItem = useMemo(() => {
     if (!cart?.items) return null;
+    const pid = String(product.id);
+    return cart.items.find((i) => i.experienceId === pid || i.productId === pid) ?? null;
+  }, [cart, product.id]);
+
+  const [selectedVariantId, setSelectedVariantId] = useState<string | number | null>(
+    anyCartItem?.variantId ?? null
+  );
+
+  // Cart item for whichever variant is currently selected — drives modal pre-fill
+  const cartItem = useMemo(() => {
+    if (!cart?.items || !selectedVariantId) return null;
     const pid = String(product.id);
     return (
       cart.items.find(
-        (i) => i.experienceId === pid || i.productId === pid
+        (i) =>
+          (i.experienceId === pid || i.productId === pid) &&
+          String(i.variantId) === String(selectedVariantId)
       ) ?? null
     );
-  }, [cart, product.id]);
-
-  const [selectedVariantId, setSelectedVariantId] = useState<
-    string | number | null
-  >(cartItem?.variantId ?? product.variants?.[0]?.id ?? null);
+  }, [cart, product.id, selectedVariantId]);
+  const [bookingModalOpen, setBookingModalOpen] = useState(false);
 
   const finalPrice =
     product.listingPrice?.minimumPrice?.finalPrice ??
@@ -60,32 +68,21 @@ export function ProductDetail({ product }: ProductDetailProps) {
     product as { cutoffTimeInMinutes?: number | null }
   ).cutoffTimeInMinutes;
 
-  const scrollToAvailability = useCallback(() => {
+  const scrollToPackages = useCallback(() => {
     setTimeout(() => {
       const el = document.getElementById("packages");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   }, []);
 
-  const handleSelectVariant = useCallback(
-    (id: string | number) => {
-      setSelectedVariantId(id);
-      scrollToAvailability();
-    },
-    [scrollToAvailability]
-  );
+  const handleSelectVariant = useCallback((id: string | number) => {
+    setSelectedVariantId(id);
+    setBookingModalOpen(true);
+  }, []);
 
   const selectedVariant = product.variants?.find(
     (v) => v.id === selectedVariantId
   );
-
-  // Derive pax from the selected variant (falls back to first variant)
-  const pax = selectedVariant?.pax ?? product.variants?.[0]?.pax ?? null;
-
-  const imageUrl =
-    product.media?.find((m) => m.type === "IMAGE")?.url?.replace(/^\/\//, "https://") ?? "";
 
   return (
     <div className="relative">
@@ -134,62 +131,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 listingPrice={product.listingPrice}
               />
             </motion.div>
-
-            {/* Full Availability Calendar — NORMAL products */}
-            {product.inventorySelectionType === "NORMAL" &&
-              selectedVariantId != null &&
-              product.id && (
-                <div ref={availabilityRef}>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3, duration: 0.35 }}
-                  >
-                    <ProductDetailProvider
-                      productId={String(product.id)}
-                      productName={product.name}
-                      variantId={selectedVariantId}
-                      variantName={selectedVariant?.name ?? ""}
-                      imageUrl={imageUrl}
-                      cartItemId={cartItem?.id ?? null}
-                      initialDate={cartItem?.date ?? null}
-                      initialGuests={cartItem?.guestCounts ?? null}
-                      pax={pax}
-                      inputFields={selectedVariant?.inputFields}
-                    >
-                      <AvailabilitySection />
-                    </ProductDetailProvider>
-                  </motion.div>
-                </div>
-              )}
-
-            {/* Seat map selection — SVG / SEATMAP products */}
-            {(product.inventorySelectionType === "SVG" || product.inventorySelectionType === "SEATMAP") &&
-              selectedVariantId != null &&
-              product.id && (
-                <div ref={availabilityRef}>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3, duration: 0.35 }}
-                  >
-                    <ProductDetailProvider
-                      productId={String(product.id)}
-                      productName={product.name}
-                      variantId={selectedVariantId}
-                      variantName={selectedVariant?.name ?? ""}
-                      imageUrl={imageUrl}
-                      cartItemId={cartItem?.id ?? null}
-                      initialDate={cartItem?.date ?? null}
-                      initialGuests={cartItem?.guestCounts ?? null}
-                      pax={pax}
-                      inputFields={selectedVariant?.inputFields}
-                    >
-                      <SeatMapSection />
-                    </ProductDetailProvider>
-                  </motion.div>
-                </div>
-              )}
 
             {/* About */}
             {product.content?.shortSummary && (
@@ -247,12 +188,14 @@ export function ProductDetail({ product }: ProductDetailProps) {
           <div className="hidden min-w-0 lg:block">
             <StickyBookingCard
               price={finalPrice}
+              originalPrice={product.listingPrice?.minimumPrice?.originalPrice}
+              discount={product.listingPrice?.bestDiscount ?? 0}
               productName={product.name}
               hasFreeCancellation={product.cancellationPolicy?.cancellable}
               hasInstantConfirmation={product.hasInstantConfirmation}
               hasMobileTicket={product.hasMobileTicket}
               duration={product.variants?.[0]?.duration}
-              onCheckAvailability={scrollToAvailability}
+              onCheckAvailability={scrollToPackages}
             />
           </div>
         </div>
@@ -261,8 +204,25 @@ export function ProductDetail({ product }: ProductDetailProps) {
       {/* Mobile sticky bottom CTA */}
       <StickyBookingBar
         price={finalPrice}
-        onCheckAvailability={scrollToAvailability}
+        hasFreeCancellation={product.cancellationPolicy?.cancellable}
+        hasInstantConfirmation={product.hasInstantConfirmation}
+        onCheckAvailability={scrollToPackages}
       />
+
+      {/* Multi-step booking modal */}
+      <AnimatePresence>
+        {bookingModalOpen && selectedVariant && (
+          <BookingModal
+            product={product}
+            variant={selectedVariant}
+            cartItemId={cartItem?.id ?? null}
+            initialDate={cartItem?.date ?? null}
+            initialSlotId={cartItem?.inventoryId ?? null}
+            initialGuests={cartItem?.guestCounts ?? null}
+            onClose={() => setBookingModalOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

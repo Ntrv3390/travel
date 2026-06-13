@@ -1,12 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Star, Award } from "lucide-react";
-
-function formatCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "")}K+`;
-  return String(n);
-}
+import { useRouter } from "next/navigation";
+import { Search, MapPin, Star, Shield, Zap, ChevronDown } from "lucide-react";
 
 interface HeroStats {
   totalExperiences: number;
@@ -14,126 +11,209 @@ interface HeroStats {
   avgRating: number;
 }
 
+const POPULAR = ["Paris", "Tokyo", "Bali", "New York", "Rome", "Santorini", "Dubai"];
+
+const FLOAT_PILLS = [
+  { label: "🗼 Paris", x: "8%", y: "22%", delay: 1.0 },
+  { label: "🗻 Tokyo", x: "82%", y: "18%", delay: 1.2 },
+  { label: "🌴 Bali", x: "6%", y: "68%", delay: 1.4 },
+  { label: "🗽 New York", x: "76%", y: "64%", delay: 1.6 },
+  { label: "🏛️ Rome", x: "48%", y: "80%", delay: 1.8 },
+];
+
 export function Hero({ stats }: { stats: HeroStats }) {
-  const statItems = [
-    { icon: Star, value: stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "4.8", label: "Avg rating" },
-    { icon: Award, value: formatCount(stats.totalDestinations), label: "Destinations" },
-  ];
+  const [query, setQuery] = useState("");
+  const router = useRouter();
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+  };
 
   return (
-    <section className="relative min-h-screen overflow-hidden -mt-20 pt-20">
-      {/* Background video */}
-      <div className="absolute inset-0 overflow-hidden">
-        <iframe
-          src="https://www.youtube.com/embed/FJKPmnyPqsg?autoplay=1&mute=1&loop=1&playlist=FJKPmnyPqsg&controls=0&rel=0&iv_load_policy=3&modestbranding=1&cc_load_policy=0&disablekb=1&fs=0&playsinline=1"
-          className="absolute"
-          style={{
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "177.77777778vh",
-            height: "56.25vw",
-            minWidth: "100%",
-            minHeight: "100%",
-            pointerEvents: "none",
-          }}
-          allow="autoplay; encrypted-media"
-          title="Triipzy travel experience video"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-900/75 to-slate-950/90" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(56,189,248,0.08),transparent)]" />
+    <section className="relative -mt-[68px] flex min-h-[92vh] flex-col items-center justify-center overflow-hidden bg-[#06101f] pt-[68px]">
+      {/* Ambient glow orbs */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 left-1/3 h-[600px] w-[600px] rounded-full bg-brand-600/25 blur-[140px]" />
+        <div className="absolute right-0 top-1/4 h-[450px] w-[450px] rounded-full bg-violet-700/15 blur-[110px]" />
+        <div className="absolute bottom-10 left-0 h-[350px] w-[350px] rounded-full bg-brand-500/12 blur-[100px]" />
+        <div className="absolute bottom-0 right-1/4 h-[250px] w-[250px] rounded-full bg-cyan-500/10 blur-[80px]" />
       </div>
 
-      <div className="relative z-10 flex min-h-screen flex-col">
-        {/* Main content */}
-        <div className="flex-1 container flex flex-col items-center justify-center px-4 pt-24 pb-12 text-center sm:pt-32">
+      {/* Dot grid texture */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.025]"
+        style={{
+          backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+        }}
+      />
 
-          {/* Pill badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="mb-5"
+      {/* Floating destination pills — desktop only */}
+      {FLOAT_PILLS.map((pill) => (
+        <motion.div
+          key={pill.label}
+          className="pointer-events-none absolute hidden lg:block"
+          style={{ left: pill.x, top: pill.y }}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{
+            opacity: [0, 0.6, 0.6],
+            scale: [0.85, 1, 1],
+            y: [0, -8, 0],
+          }}
+          transition={{
+            opacity: { delay: pill.delay, duration: 0.8 },
+            scale: { delay: pill.delay, duration: 0.5 },
+            y: {
+              delay: pill.delay + 0.8,
+              duration: 3.5,
+              repeat: Infinity,
+              repeatType: "reverse",
+              ease: "easeInOut",
+            },
+          }}
+        >
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/60 backdrop-blur-md">
+            {pill.label}
+          </div>
+        </motion.div>
+      ))}
+
+      {/* Main content */}
+      <div className="relative z-10 container px-4 py-24 text-center">
+        {/* Eyebrow */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brand-500/10 px-4 py-1.5 backdrop-blur-sm"
+        >
+          <Star className="h-3.5 w-3.5 fill-brand-400 text-brand-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-300">
+            Trusted by 51,000+ travelers worldwide
+          </span>
+        </motion.div>
+
+        {/* Headline */}
+        <motion.h1
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.75, delay: 0.12 }}
+          className="mx-auto max-w-4xl text-[2.6rem] font-black leading-[1.1] tracking-tight text-white sm:text-6xl md:text-7xl"
+        >
+          Your Next{" "}
+          <span className="bg-gradient-to-r from-brand-400 via-sky-300 to-cyan-300 bg-clip-text text-transparent">
+            Adventure
+          </span>
+          <br />
+          Starts Here
+        </motion.h1>
+
+        {/* Subtitle */}
+        <motion.p
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.28 }}
+          className="mx-auto mt-5 max-w-lg text-base text-white/55 sm:text-lg"
+        >
+          Handpicked tours, activities and experiences across{" "}
+          <span className="font-semibold text-white/80">500+ destinations</span> worldwide.
+        </motion.p>
+
+        {/* Search bar */}
+        <motion.form
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.42 }}
+          onSubmit={handleSearch}
+          className="mx-auto mt-8 flex max-w-2xl items-center overflow-hidden rounded-full border border-white/10 bg-white/6 p-1.5 backdrop-blur-xl"
+        >
+          <div className="flex flex-1 items-center gap-2.5 px-4">
+            <MapPin className="h-4 w-4 shrink-0 text-brand-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Where do you want to go?"
+              className="w-full bg-transparent text-sm text-white placeholder-white/35 outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            className="shrink-0 rounded-full bg-brand-500 px-7 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 transition-all hover:bg-brand-600 active:scale-95"
           >
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-white/60 backdrop-blur-md">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-              Discover extraordinary experiences worldwide
-            </span>
-          </motion.div>
+            <span className="hidden sm:inline">Search</span>
+            <Search className="h-4 w-4 sm:hidden" />
+          </button>
+        </motion.form>
 
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.1 }}
-            className="max-w-3xl text-[28px] font-black leading-[1.15] tracking-tight text-white sm:text-4xl md:text-5xl"
-          >
-            Discover the World,{" "}
-            <span className="bg-gradient-to-r from-sky-300 via-cyan-300 to-teal-300 bg-clip-text text-transparent">
-              Your Way
-            </span>
-          </motion.h1>
-
-          {/* Subtext */}
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.22 }}
-            className="mt-4 max-w-lg text-sm leading-relaxed text-white/45 sm:text-[15px]"
-          >
-            Curated tours and activities crafted by locals — book unique adventures across{" "}
-            <span className="font-medium text-white/70">{formatCount(stats.totalDestinations)} destinations</span>.
-          </motion.p>
-
-          {/* Inline stats */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.38 }}
-            className="mt-6 flex items-center gap-5"
-          >
-            {statItems.map((stat) => (
-              <div key={stat.label} className="flex items-center gap-1.5 text-white/40">
-                <stat.icon className="h-3.5 w-3.5 text-sky-400/70" />
-                <span className="text-xs">
-                  <span className="font-semibold text-white/80">{stat.value}</span>{" "}
-                  {stat.label}
-                </span>
-              </div>
-            ))}
-          </motion.div>
-        </div>
-
-        {/* Bottom feature cards */}
+        {/* Popular tags */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.55 }}
-          className="container px-4 pb-8"
+          transition={{ duration: 0.6, delay: 0.56 }}
+          className="mt-5 flex flex-wrap items-center justify-center gap-2"
         >
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {[
-              { emoji: "🏆", title: "Top Rated", desc: "Curated by experts" },
-              { emoji: "💳", title: "Best Price", desc: "Guaranteed match" },
-              { emoji: "🎧", title: "24/7 Support", desc: "Always here to help" },
-            ].map((item, i) => (
-              <motion.div
-                key={item.title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.6 + i * 0.07 }}
-                className="flex items-center gap-2.5 rounded-2xl border border-white/[0.07] bg-white/[0.04] px-3 py-3 backdrop-blur-sm sm:gap-3 sm:px-4 sm:py-3.5"
-              >
-                <span className="text-base sm:text-lg">{item.emoji}</span>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-white/90 sm:text-xs">{item.title}</p>
-                  <p className="hidden text-[10px] text-white/35 sm:block">{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
+          <span className="text-xs text-white/35">Popular:</span>
+          {POPULAR.map((dest, i) => (
+            <motion.button
+              key={dest}
+              type="button"
+              onClick={() => router.push(`/search?q=${encodeURIComponent(dest)}`)}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.6 + i * 0.045 }}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/55 transition-all hover:border-brand-500/50 hover:bg-brand-500/10 hover:text-brand-300"
+            >
+              {dest}
+            </motion.button>
+          ))}
+        </motion.div>
+
+        {/* Trust strip */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.72 }}
+          className="mt-10 flex flex-wrap items-center justify-center gap-5 text-xs text-white/40 sm:gap-8"
+        >
+          <div className="flex items-center gap-1.5">
+            <Shield className="h-3.5 w-3.5 text-emerald-400" />
+            <span>Free cancellation</span>
+          </div>
+          <div className="hidden h-3 w-px bg-white/10 sm:block" />
+          <div className="flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-amber-400" />
+            <span>Instant confirmation</span>
+          </div>
+          <div className="hidden h-3 w-px bg-white/10 sm:block" />
+          <div className="flex items-center gap-1.5">
+            <Star className="h-3.5 w-3.5 fill-brand-400 text-brand-400" />
+            <span>Best price guarantee</span>
           </div>
         </motion.div>
       </div>
+
+      {/* Scroll cue */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.5, duration: 0.6 }}
+        className="absolute bottom-8 left-1/2 -translate-x-1/2"
+      >
+        <motion.div
+          animate={{ y: [0, 6, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          className="flex flex-col items-center gap-1 text-white/25"
+        >
+          <span className="text-[10px] uppercase tracking-widest">Scroll</span>
+          <ChevronDown className="h-4 w-4" />
+        </motion.div>
+      </motion.div>
+
+      {/* Bottom fade */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-background to-transparent" />
     </section>
   );
 }

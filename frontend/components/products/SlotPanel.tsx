@@ -20,10 +20,13 @@ interface SlotPanelProps {
   error: string | null
   onRetry: () => void
   selectedDate: string
-  /** Minimum total guests required to book (from variant.pax.min). Defaults to 1. */
   paxMin?: number
-  /** Maximum total guests allowed to book (from variant.pax.max). Defaults to 20. */
   paxMax?: number | null
+  compact?: boolean
+  /** inventoryId of the slot currently in cart — highlights it and changes button label */
+  cartSlotId?: string | null
+  /** Called after a successful "Add to cart" so the parent can close the modal */
+  onAddedToCart?: () => void
 }
 
 // ── Availability pill ──────────────────────────────────────────────────────────
@@ -51,56 +54,6 @@ function AvailPill({ availability }: { availability: string }) {
   )
 }
 
-// ── Guest counter ──────────────────────────────────────────────────────────────
-
-function GuestCounter({
-  label,
-  sublabel,
-  count,
-  disableDecrement,
-  disableIncrement,
-  onDecrement,
-  onIncrement,
-}: {
-  label: string
-  sublabel?: string
-  count: number
-  disableDecrement: boolean
-  disableIncrement: boolean
-  onDecrement: () => void
-  onIncrement: () => void
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2.5 ring-1 ring-border/50 sm:px-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium capitalize text-foreground">{label}</p>
-        {sublabel && <p className="text-[11px] text-muted-foreground">{sublabel}</p>}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <button
-          onClick={onDecrement}
-          disabled={disableDecrement}
-          aria-label={`Decrease ${label}`}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-all hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-30 active:scale-90"
-        >
-          <Minus className="h-3 w-3" />
-        </button>
-        <span className="w-6 text-center text-sm font-bold tabular-nums text-foreground">
-          {count}
-        </span>
-        <button
-          onClick={onIncrement}
-          disabled={disableIncrement}
-          aria-label={`Increase ${label}`}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-all hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-30 active:scale-90"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function SlotPanel({
@@ -111,6 +64,9 @@ export function SlotPanel({
   selectedDate,
   paxMin = 1,
   paxMax = null,
+  compact = false,
+  cartSlotId = null,
+  onAddedToCart,
 }: SlotPanelProps) {
   const { formatPrice, currency } = useCurrency()
   const { cart, addItem, updateCartItem } = useCartContext()
@@ -315,6 +271,8 @@ export function SlotPanel({
         })
         toast({ title: "Added to cart", description: `${variantName ?? productName ?? "Experience"} added to your cart.`, variant: "success" })
       }
+      // Close the booking modal after successful cart action
+      onAddedToCart?.()
     } catch (err) {
       toast({ title: "Failed to add", description: err instanceof Error ? err.message : "Could not add item to cart. Please try again.", variant: "error" })
     } finally {
@@ -325,223 +283,325 @@ export function SlotPanel({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  return (
-    <div className="space-y-3">
-
-      {/* ── Guest selector ──────────────────────────────────────────────── */}
-      {personTypes.length > 0 && (
-        <div className="rounded-2xl border border-border/60 bg-background p-4 shadow-sm">
-          {/* Header row */}
-          <div className="mb-3 flex items-center gap-2">
-            <Users className="h-4 w-4 text-brand-500" />
-            <span className="text-sm font-semibold">Select guests</span>
-            {/* Pax range badge */}
-            <span className="ml-auto flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {paxMin}
-              {effectiveMax !== paxMin ? `–${effectiveMax}` : ""} guest{effectiveMax !== 1 ? "s" : ""}
-            </span>
+  // Guest selector panel — shared between both layout modes
+  const guestPanel = personTypes.length > 0 && (
+    <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-md">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/30 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 dark:bg-brand-900/40">
+            <Users className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
           </div>
+          <span className="text-sm font-bold text-foreground">Guests</span>
+        </div>
+        <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-600 ring-1 ring-brand-200/80 dark:bg-brand-950/50 dark:text-brand-400 dark:ring-brand-800/60">
+          {paxMin}{effectiveMax !== paxMin ? `–${effectiveMax}` : ""}
+        </span>
+      </div>
 
-          {/* Per-type counters */}
-          <div className="space-y-2">
-            {personTypes.map((p) => {
-              const count = effectiveGuests[p.type] ?? 0
-              // Decrement disabled if: this type is already 0, OR removing would drop total below 0
-              // (we allow going below paxMin while adjusting — the hint + button disable handles UX)
-              const disableDecrement = count === 0
-              // Increment disabled if: total would exceed effectiveMax
-              const disableIncrement = totalGuests >= effectiveMax
-              return (
-                <GuestCounter
-                  key={p.type}
-                  label={p.name ?? p.type.charAt(0) + p.type.slice(1).toLowerCase()}
-                  sublabel={p.ageFrom != null ? `Age ${p.ageFrom}–${p.ageTo ?? "99+"}` : undefined}
-                  count={count}
-                  disableDecrement={disableDecrement}
-                  disableIncrement={disableIncrement}
-                  onDecrement={() =>
-                    setGuests(prev => ({ ...prev, [p.type]: Math.max(0, (prev[p.type] ?? 0) - 1) }))
-                  }
-                  onIncrement={() =>
-                    setGuests(prev => ({ ...prev, [p.type]: (prev[p.type] ?? 0) + 1 }))
-                  }
-                />
-              )
-            })}
-          </div>
+      {/* Counter rows */}
+      <div className={cn("divide-y divide-border/40", compact ? "px-3" : "px-4")}>
+        {personTypes.map((p) => {
+          const count = effectiveGuests[p.type] ?? 0
+          const disableDecrement = count === 0
+          const disableIncrement = totalGuests >= effectiveMax
+          return (
+            <div
+              key={p.type}
+              className={cn("flex items-center justify-between gap-3", compact ? "py-3" : "py-3.5")}
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  {p.name ?? p.type.charAt(0) + p.type.slice(1).toLowerCase()}
+                </p>
+                {p.ageFrom != null && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Age {p.ageFrom}–{p.ageTo ?? "99+"}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2.5">
+                <button
+                  onClick={() => setGuests(prev => ({ ...prev, [p.type]: Math.max(0, (prev[p.type] ?? 0) - 1) }))}
+                  disabled={disableDecrement}
+                  aria-label={`Decrease ${p.name ?? p.type}`}
+                  className={cn(
+                    "flex items-center justify-center rounded-full border-2 text-muted-foreground transition-all active:scale-90",
+                    "disabled:cursor-not-allowed disabled:opacity-25",
+                    count > 0
+                      ? "border-brand-400 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40"
+                      : "border-border hover:border-muted-foreground",
+                    compact ? "h-7 w-7" : "h-8 w-8"
+                  )}
+                >
+                  <Minus className={cn(compact ? "h-3 w-3" : "h-3.5 w-3.5")} />
+                </button>
 
-          {/* Constraint hint */}
-          {paxHint && (
-            <p className={cn(
-              "mt-2.5 text-center text-xs",
-              aboveMax ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400"
-            )}>
-              {paxHint}
-            </p>
-          )}
+                <span className={cn(
+                  "w-6 text-center font-bold tabular-nums",
+                  count > 0 ? "text-brand-600 dark:text-brand-400" : "text-muted-foreground/50",
+                  compact ? "text-sm" : "text-base"
+                )}>
+                  {count}
+                </span>
 
-          {/* Summary when valid */}
-          {hasGuests && peopleSummary && (
-            <p className="mt-2 text-center text-xs text-muted-foreground">{peopleSummary}</p>
-          )}
+                <button
+                  onClick={() => setGuests(prev => ({ ...prev, [p.type]: (prev[p.type] ?? 0) + 1 }))}
+                  disabled={disableIncrement}
+                  aria-label={`Increase ${p.name ?? p.type}`}
+                  className={cn(
+                    "flex items-center justify-center rounded-full border-2 text-muted-foreground transition-all active:scale-90",
+                    "disabled:cursor-not-allowed disabled:opacity-25",
+                    !disableIncrement
+                      ? "border-brand-400 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40"
+                      : "border-border",
+                    compact ? "h-7 w-7" : "h-8 w-8"
+                  )}
+                >
+                  <Plus className={cn(compact ? "h-3 w-3" : "h-3.5 w-3.5")} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Footer: hint or summary */}
+      {paxHint && (
+        <div className={cn(
+          "border-t px-4 py-2.5",
+          aboveMax
+            ? "border-rose-200/60 bg-rose-50/60 dark:border-rose-800/40 dark:bg-rose-950/30"
+            : "border-amber-200/60 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-950/30"
+        )}>
+          <p className={cn(
+            "text-center text-[11px] font-medium",
+            aboveMax ? "text-rose-700 dark:text-rose-400" : "text-amber-700 dark:text-amber-400"
+          )}>
+            {paxHint}
+          </p>
         </div>
       )}
+      {hasGuests && peopleSummary && !paxHint && (
+        <div className="border-t border-brand-100/60 bg-brand-50/40 px-4 py-2.5 dark:border-brand-800/30 dark:bg-brand-950/20">
+          <p className="text-center text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+            {peopleSummary}
+          </p>
+        </div>
+      )}
+    </div>
+  )
 
-      {/* ── Slot header ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-0.5">
-        <p className="text-xs font-medium text-muted-foreground">
-          {slots.length} time slot{slots.length !== 1 ? "s" : ""} · {selectedDate}
-        </p>
-      </div>
+  // Slot cards list
+  const slotCards = (
+    <div className="space-y-3">
+      <p className="px-0.5 text-xs font-medium text-muted-foreground">
+        {slots.length} time slot{slots.length !== 1 ? "s" : ""} available
+      </p>
 
-      {/* ── Slot cards ──────────────────────────────────────────────────── */}
-      <div className="space-y-2.5">
-        <AnimatePresence initial={false}>
-          {slots.map((slot, idx) => {
-            const startTime = slot.startDateTime.split("T")[1]?.slice(0, 5) ?? slot.startDateTime
-            const endTime = slot.endDateTime.split("T")[1]?.slice(0, 5) ?? slot.endDateTime
-            const isClosed = slot.availability === "CLOSED"
-            const totalPrice = calculateTotalPrice(slot)
-            const isThisAdding = addingToCart && selectedSlotId === slot.id
-            const actionsDisabled = !hasGuests || addingToCart
+      <AnimatePresence initial={false}>
+        {slots.map((slot, idx) => {
+          const startTime = slot.startDateTime.split("T")[1]?.slice(0, 5) ?? slot.startDateTime
+          const endTime = slot.endDateTime.split("T")[1]?.slice(0, 5) ?? slot.endDateTime
+          const isClosed = slot.availability === "CLOSED"
+          const totalPrice = calculateTotalPrice(slot)
+          const isThisAdding = addingToCart && selectedSlotId === slot.id
+          const actionsDisabled = !hasGuests || addingToCart
+          const isInCart = cartSlotId === slot.id
 
-            return (
-              <motion.div
-                key={slot.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: idx * 0.04 }}
-                className={cn(
-                  "overflow-hidden rounded-2xl border border-border/60 bg-background shadow-sm transition-opacity",
-                  isClosed && "opacity-50"
-                )}
-              >
-                {/* Slot header row */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
-                      <Clock className="h-3.5 w-3.5 text-brand-500" />
-                    </div>
-                    <p className="text-sm font-bold tabular-nums text-foreground">
-                      {startTime} – {endTime}
-                    </p>
-                  </div>
+          return (
+            <motion.div
+              key={slot.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: idx * 0.05 }}
+              className={cn(
+                "group overflow-hidden rounded-2xl border shadow-md transition-all duration-200",
+                isInCart
+                  ? "border-emerald-300/70 bg-emerald-50/30 shadow-emerald-100 dark:border-emerald-700/50 dark:bg-emerald-950/10 dark:shadow-emerald-950/20"
+                  : "border-border/50 bg-card",
+                !isClosed && !isInCart && "hover:shadow-lg hover:border-brand-200/60 dark:hover:border-brand-800/40",
+                isClosed && "opacity-40"
+              )}
+            >
+              {/* ── Header ── */}
+              <div className={cn(
+                "relative flex items-center justify-between gap-3 overflow-hidden border-b",
+                isInCart
+                  ? "border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-transparent dark:border-emerald-800/40 dark:from-emerald-950/30"
+                  : "border-border/40 bg-gradient-to-r from-brand-50/70 via-brand-50/30 to-transparent dark:from-brand-950/30 dark:via-brand-950/10 dark:to-transparent",
+                compact ? "px-3 py-2.5" : "px-4 py-3.5"
+              )}>
+                {/* accent bar */}
+                <div className={cn(
+                  "absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-gradient-to-b",
+                  isInCart ? "from-emerald-400 to-emerald-600" : "from-brand-400 to-brand-600"
+                )} />
+                <div className="flex items-center gap-2 pl-3">
+                  <Clock className={cn("h-3.5 w-3.5 shrink-0", isInCart ? "text-emerald-500" : "text-brand-500")} />
+                  <p className={cn("font-extrabold tabular-nums tracking-tight text-foreground", compact ? "text-sm" : "text-base")}>
+                    {startTime}
+                    <span className="mx-1.5 font-light text-muted-foreground/60">–</span>
+                    {endTime}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isInCart && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300/60 dark:bg-emerald-900/40 dark:text-emerald-400 dark:ring-emerald-700/50">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                      In cart
+                    </span>
+                  )}
                   <AvailPill availability={slot.availability} />
                 </div>
+              </div>
 
-                {/* Pricing table */}
-                {(slot.pricing?.persons?.length ?? 0) > 0 && !isClosed && (
-                  <div className="px-4 py-3">
-                    <div className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50">
-                      {slot.pricing.persons.map((p) => (
-                        <div key={p.type} className="flex items-center justify-between gap-2 px-3 py-2.5">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-foreground">{p.name}</p>
-                            {p.ageFrom != null && (
-                              <p className="text-[10px] text-muted-foreground">
-                                Age {p.ageFrom}–{p.ageTo ?? "99+"}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-3">
-                            <span className="text-xs font-bold text-foreground">
-                              {formatPrice(p.headoutSellingPrice ?? p.price)}
-                            </span>
-                            {p.availability !== "CLOSED" && p.remaining != null && (
-                              <span className={cn(
-                                "rounded-full px-1.5 py-0.5 text-[9px] font-semibold",
-                                p.remaining < 10
-                                  ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                                  : "bg-muted text-muted-foreground"
-                              )}>
-                                {p.remaining < 10 ? `${p.remaining} left` : "In stock"}
-                              </span>
-                            )}
-                            {p.availability === "CLOSED" && (
-                              <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
-                                Sold out
-                              </span>
-                            )}
-                          </div>
+              {/* ── Pricing rows ── */}
+              {(slot.pricing?.persons?.length ?? 0) > 0 && !isClosed && (
+                <div className={compact ? "px-3 pt-2 pb-1" : "px-4 pt-3 pb-1"}>
+                  <div className="divide-y divide-border/30">
+                    {slot.pricing.persons.map((p) => (
+                      <div
+                        key={p.type}
+                        className={cn(
+                          "flex items-center justify-between gap-3",
+                          compact ? "py-2" : "py-2.5"
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">{p.name}</p>
+                          {p.ageFrom != null && (
+                            <p className="text-[10px] text-muted-foreground">Age {p.ageFrom}–{p.ageTo ?? "99+"}</p>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-sm font-bold text-foreground">
+                            {formatPrice(p.headoutSellingPrice ?? p.price)}
+                          </span>
+                          {p.availability !== "CLOSED" && p.remaining != null && (
+                            <span className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              p.remaining < 10
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+                                : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-800/40"
+                            )}>
+                              {p.remaining < 10 ? `${p.remaining} left` : "Available"}
+                            </span>
+                          )}
+                          {p.availability === "CLOSED" && (
+                            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
+                              Sold out
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Group pricing */}
-                {(slot.pricing?.groups?.length ?? 0) > 0 && !isClosed && (
-                  <div className="px-4 pb-3">
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      Group pricing
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {slot.pricing.groups.map((g, i) => (
-                        <span
-                          key={i}
-                          className="rounded-lg border border-border/60 bg-muted/30 px-2 py-1 text-[11px] font-medium text-foreground"
-                        >
-                          Up to {g.size} · {formatPrice(g.price)}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              {/* ── Group pricing ── */}
+              {(slot.pricing?.groups?.length ?? 0) > 0 && !isClosed && (
+                <div className={cn("flex flex-wrap gap-1.5", compact ? "px-3 pb-2" : "px-4 pb-3")}>
+                  <p className="w-full text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Group pricing
+                  </p>
+                  {slot.pricing.groups.map((g, i) => (
+                    <span
+                      key={i}
+                      className="rounded-lg border border-border/60 bg-muted/30 px-2 py-1 text-[11px] font-medium text-foreground"
+                    >
+                      Up to {g.size} · {formatPrice(g.price)}
+                    </span>
+                  ))}
+                </div>
+              )}
 
-                {/* Action footer */}
-                {!isClosed && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 bg-muted/5 px-4 py-3">
-                    <div>
-                      {hasGuests ? (
-                        <>
-                          <p className="text-base font-bold leading-tight text-foreground">
-                            {formatPrice(totalPrice)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {totalGuests} guest{totalGuests !== 1 ? "s" : ""}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          {aboveMax ? `Max ${effectiveMax} guests` : `Min ${paxMin} guest${paxMin !== 1 ? "s" : ""} required`}
+              {/* ── Action footer ── */}
+              {!isClosed && (
+                <div className={cn(
+                  "flex items-center justify-between gap-3 border-t border-border/40 bg-muted/20",
+                  compact ? "px-3 py-2.5" : "px-4 py-3"
+                )}>
+                  {/* Price / hint */}
+                  <div className="min-w-0">
+                    {hasGuests ? (
+                      <div>
+                        <p className={cn("font-extrabold leading-none tracking-tight text-foreground", compact ? "text-base" : "text-lg")}>
+                          {formatPrice(totalPrice)}
                         </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddToCart(slot)}
-                        disabled={actionsDisabled}
-                        className="gap-1.5 rounded-xl"
-                        title={!hasGuests ? paxHint ?? undefined : undefined}
-                      >
-                        {isThisAdding
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <ShoppingCart className="h-3.5 w-3.5" />
-                        }
-                        <span className="hidden sm:inline">
-                          {isThisAdding ? "Adding…" : "Add to cart"}
-                        </span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleBookNow(slot)}
-                        disabled={actionsDisabled}
-                        className="gap-1.5 rounded-xl"
-                        title={!hasGuests ? paxHint ?? undefined : undefined}
-                      >
-                        Book now
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {totalGuests} guest{totalGuests !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        {aboveMax ? `Max ${effectiveMax} guests` : `Min ${paxMin} required`}
+                      </p>
+                    )}
                   </div>
-                )}
-              </motion.div>
-            )
-          })}
-        </AnimatePresence>
-      </div>
+
+                  {/* Buttons */}
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => handleAddToCart(slot)}
+                      disabled={actionsDisabled}
+                      title={!hasGuests ? paxHint ?? undefined : undefined}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-xl border border-border/60 bg-background font-semibold text-foreground transition-all",
+                        "hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/30",
+                        "disabled:cursor-not-allowed disabled:opacity-40 active:scale-95",
+                        compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
+                      )}
+                    >
+                      {isThisAdding
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <ShoppingCart className="h-3.5 w-3.5" />
+                      }
+                      <span className="hidden sm:inline">
+                        {isThisAdding ? "Adding…" : isInCart ? "Update cart" : "Add to cart"}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleBookNow(slot)}
+                      disabled={actionsDisabled}
+                      title={!hasGuests ? paxHint ?? undefined : undefined}
+                      className={cn(
+                        "relative flex items-center gap-1.5 overflow-hidden rounded-xl font-bold text-white transition-all",
+                        "bg-gradient-to-r from-brand-500 to-brand-600 shadow-md shadow-brand-500/25",
+                        "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:rounded-t-xl before:bg-white/15",
+                        "hover:from-brand-600 hover:to-brand-700 hover:shadow-lg hover:shadow-brand-500/30",
+                        "disabled:cursor-not-allowed disabled:opacity-40 active:scale-95",
+                        compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"
+                      )}
+                    >
+                      Book now
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )
+        })}
+      </AnimatePresence>
+    </div>
+  )
+
+  return compact ? (
+    // Compact: 2-column on sm+ — guests sticky left, slots scrollable right
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+      {guestPanel && (
+        <div className="shrink-0 sm:w-[200px] sm:sticky sm:top-5 sm:self-start">{guestPanel}</div>
+      )}
+      <div className="min-w-0 flex-1">{slotCards}</div>
+    </div>
+  ) : (
+    // Default: stacked
+    <div className="space-y-3">
+      {guestPanel}
+      {slotCards}
     </div>
   )
 }

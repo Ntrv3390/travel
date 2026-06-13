@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, History } from "lucide-react";
 import { ExperienceCard } from "@/components/shared/ExperienceCard";
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import type { Experience, ExperienceOption } from "@/types/experience";
@@ -71,37 +71,57 @@ export function RecentlyViewedExperiences() {
   };
 
   return (
-    <section className="bg-white py-10 sm:py-14">
+    <section className="bg-background py-12 sm:py-16">
       <div className="container px-4">
         {/* Header */}
         <div className="mb-6 flex items-end justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-sky-500">
-              Continue Exploring
-            </p>
-            <h2 className="mt-1 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              className="mb-1 inline-flex items-center gap-1.5"
+            >
+              <History className="h-3.5 w-3.5 text-brand-500" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-brand-500">
+                Continue Exploring
+              </p>
+            </motion.div>
+            <motion.h2
+              initial={{ opacity: 0, y: 8 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.07 }}
+              className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl"
+            >
               Recently Viewed
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-400">Pick up where you left off</p>
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.12 }}
+              className="mt-0.5 text-xs text-muted-foreground"
+            >
+              Pick up where you left off
+            </motion.p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden gap-1.5 sm:flex">
-              <button
-                onClick={() => scroll("left")}
-                disabled={!canScrollLeft}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => scroll("right")}
-                disabled={!canScrollRight}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+          <div className="hidden gap-1.5 sm:flex">
+            <button
+              onClick={() => scroll("left")}
+              disabled={!canScrollLeft}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => scroll("right")}
+              disabled={!canScrollRight}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
@@ -117,8 +137,8 @@ export function RecentlyViewedExperiences() {
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.3) }}
-              className="snap-start flex-shrink-0 w-[220px] sm:w-[240px] h-[340px]"
+              transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.32) }}
+              className="snap-start h-[340px] w-[220px] flex-shrink-0 sm:w-[240px]"
               style={{ minHeight: 340, maxHeight: 340 }}
             >
               <div className="h-full w-full">

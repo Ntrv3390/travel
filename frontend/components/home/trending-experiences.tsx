@@ -55,24 +55,24 @@ export function TrendingExperiences({
   const showSkeletons = loading || isChanging;
 
   return (
-    <section className="bg-white py-10 sm:py-14">
+    <section className="bg-background py-12 sm:py-16">
       <div className="container px-4">
         {/* Header */}
         <div className="mb-6 flex items-end justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-sky-500">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-brand-500">
               Trending Now
             </p>
-            <h2 className="mt-1 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+            <h2 className="mt-1 text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
               Popular Experiences
             </h2>
-            <p className="mt-0.5 text-xs text-slate-400">Most booked this week</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Most booked this week</p>
           </div>
 
           <div className="flex items-center gap-3">
             <Link
               href="/products"
-              className="hidden items-center gap-1 text-xs font-semibold text-sky-600 transition-colors hover:text-sky-700 sm:inline-flex"
+              className="hidden items-center gap-1 text-xs font-semibold text-brand-500 transition-colors hover:text-brand-600 sm:inline-flex"
             >
               View all <ArrowRight className="h-3.5 w-3.5" />
             </Link>
@@ -80,14 +80,14 @@ export function TrendingExperiences({
               <button
                 onClick={() => scroll("left")}
                 disabled={!canScrollLeft}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
                 onClick={() => scroll("right")}
                 disabled={!canScrollRight}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -136,7 +136,7 @@ export function TrendingExperiences({
         <div className="mt-5 flex justify-center sm:hidden">
           <Link
             href="/products"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50"
           >
             View all experiences <ArrowRight className="h-3.5 w-3.5" />
           </Link>

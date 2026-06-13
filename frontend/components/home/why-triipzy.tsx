@@ -10,8 +10,8 @@ const features = [
     icon: ShieldCheck,
     title: "Secure booking",
     desc: "End-to-end encryption and fraud protection on every transaction.",
-    color: "text-sky-600",
-    bg: "bg-sky-50",
+    color: "text-brand-500",
+    bg: "bg-brand-50",
   },
   {
     icon: Zap,
@@ -37,7 +37,7 @@ const features = [
 ];
 
 const stats = [
-  { value: 51, suffix: "K+", label: "Travelers", color: "text-sky-600" },
+  { value: 51, suffix: "K+", label: "Travelers", color: "text-brand-500" },
   { value: 99.9, suffix: "%", label: "Satisfaction", color: "text-emerald-600" },
   { value: 24, suffix: "/7", label: "Support", color: "text-amber-600" },
 ];
@@ -67,14 +67,14 @@ function StatItem({ stat }: { stat: (typeof stats)[0] }) {
         </span>
         <span className={`text-lg font-black ${stat.color}`}>{stat.suffix}</span>
       </div>
-      <p className="mt-0.5 text-[10px] text-slate-400">{stat.label}</p>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">{stat.label}</p>
     </div>
   );
 }
 
 export function WhyTriipzy() {
   return (
-    <section className="bg-white py-10 sm:py-14">
+    <section className="bg-background py-12 sm:py-16">
       <div className="container px-4">
         <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-14">
 
@@ -85,30 +85,30 @@ export function WhyTriipzy() {
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
           >
-            <p className="text-[10px] font-bold uppercase tracking-widest text-sky-500">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-brand-500">
               Why choose us
             </p>
-            <h2 className="mt-1.5 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl lg:text-2xl">
+            <h2 className="mt-1.5 text-xl font-extrabold tracking-tight text-foreground sm:text-2xl lg:text-3xl">
               Why{" "}
-              <span className="bg-gradient-to-r from-sky-600 to-cyan-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-brand-500 to-cyan-500 bg-clip-text text-transparent">
                 Triipzy
               </span>
               ?
             </h2>
-            <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-500">
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
               We connect you with authentic, handpicked experiences crafted by local experts.
               Every booking is backed by our satisfaction guarantee and the best prices.
             </p>
 
-            {/* Stat row */}
-            <div className="mt-7 grid grid-cols-3 divide-x divide-slate-100 rounded-2xl border border-slate-100 bg-slate-50/70 px-2 py-4">
+            {/* Stats row */}
+            <div className="mt-7 grid grid-cols-3 divide-x divide-border rounded-2xl border border-border/60 bg-muted/30 px-2 py-4">
               {stats.map((stat) => (
                 <StatItem key={stat.label} stat={stat} />
               ))}
             </div>
           </motion.div>
 
-          {/* Right column — feature list */}
+          {/* Right column — feature cards */}
           <motion.div
             initial={{ opacity: 0, x: 16 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -123,7 +123,7 @@ export function WhyTriipzy() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.3, delay: i * 0.07 }}
-                className="flex gap-3.5 rounded-2xl border border-slate-100 bg-white p-4 transition-shadow hover:shadow-sm"
+                className="flex gap-3.5 rounded-2xl border border-border/60 bg-card p-4 transition-shadow hover:shadow-sm"
               >
                 <div
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${feat.bg}`}
@@ -131,8 +131,8 @@ export function WhyTriipzy() {
                   <feat.icon className={`h-5 w-5 ${feat.color}`} strokeWidth={1.75} />
                 </div>
                 <div>
-                  <p className="text-[13px] font-bold text-slate-800">{feat.title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{feat.desc}</p>
+                  <p className="text-[13px] font-bold text-foreground">{feat.title}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{feat.desc}</p>
                 </div>
               </motion.div>
             ))}

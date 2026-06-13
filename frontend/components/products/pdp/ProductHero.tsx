@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Users,
   X,
   Camera,
   CheckCircle2,
@@ -265,7 +264,6 @@ export function ProductHero({ product }: ProductHeroProps) {
   const rating = product.reviewsSummary?.averageRating;
   const reviewCount = product.reviewsSummary?.ratingsCount ?? 0;
   const duration = product.variants?.[0]?.duration;
-  const pax = product.variants?.[0]?.pax;
 
   const typeLabel =
     product.productType === "AIRPORT_TRANSFER"
@@ -421,59 +419,62 @@ export function ProductHero({ product }: ProductHeroProps) {
                     {formatDuration(duration)}
                   </span>
                 )}
-                {pax && (
-                  <span className="flex items-center gap-1">
-                    <Users className="h-3.5 w-3.5 shrink-0" />
-                    {pax.min}–{pax.max ?? "∞"}
-                  </span>
-                )}
               </div>
             </div>
 
-            {/* Trust pills — scrollable row */}
+            {/* Trust badges — 2-col pill grid */}
             {trustItems.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none -mx-4 px-4">
+              <div className="grid grid-cols-2 gap-2">
                 {trustItems.map(({ key, icon: Icon, label, color }) => (
-                  <span
+                  <div
                     key={key}
                     className={cn(
-                      "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                      "flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold",
                       color
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </span>
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="leading-tight">{label}</span>
+                  </div>
                 ))}
               </div>
             )}
 
             {/* Pricing pill */}
             {finalPrice !== undefined && (
-              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background px-4 py-3.5 shadow-sm">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-                    From
-                  </p>
-                  <div className="mt-0.5 flex items-baseline gap-2">
-                    <span className="text-2xl font-bold tracking-tight">
-                      {formatPrice(finalPrice)}
-                    </span>
-                    {discount > 0 && originalPrice && (
-                      <span className="text-sm text-muted-foreground line-through">
-                        {formatPrice(originalPrice)}
+              <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-background px-4 py-3.5 shadow-sm">
+                {/* Subtle gradient wash */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-50/60 via-transparent to-transparent dark:from-brand-950/20" />
+                <div className="relative flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-500">
+                      From
+                    </p>
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className="text-[1.6rem] font-black tracking-tight leading-none">
+                        {formatPrice(finalPrice)}
                       </span>
-                    )}
+                      {discount > 0 && originalPrice && (
+                        <span className="text-sm text-muted-foreground line-through">
+                          {formatPrice(originalPrice)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      per {product.pricing?.profileType === "PER_GROUP" ? "group" : "person"}
+                    </p>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    per {product.pricing?.profileType === "PER_GROUP" ? "group" : "person"}
-                  </p>
+                  {discount > 0 ? (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-rose-600 px-3 py-1.5 text-sm font-black text-white shadow-md shadow-rose-200/50 dark:shadow-rose-900/30">
+                      {discount}%&nbsp;<span className="font-semibold opacity-90">OFF</span>
+                    </span>
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-bold text-brand-600 dark:bg-brand-950/40 dark:text-brand-400">
+                      <Zap className="h-3.5 w-3.5 text-brand-500" />
+                      Best Price
+                    </span>
+                  )}
                 </div>
-                {discount > 0 && (
-                  <span className="rounded-xl bg-rose-500 px-2.5 py-1 text-sm font-bold text-white shadow-sm">
-                    {discount}% OFF
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -581,7 +582,7 @@ export function ProductHero({ product }: ProductHeroProps) {
                   )}
                 </div>
 
-                {/* Duration + group size */}
+                {/* Duration */}
                 <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted-foreground">
                   {duration != null && (
                     <span className="flex items-center gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1">
@@ -589,39 +590,39 @@ export function ProductHero({ product }: ProductHeroProps) {
                       {formatDuration(duration)}
                     </span>
                   )}
-                  {pax && (
-                    <span className="flex items-center gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1">
-                      <Users className="h-3.5 w-3.5 shrink-0" />
-                      {pax.min}–{pax.max ?? "∞"} people
-                    </span>
-                  )}
                 </div>
 
-                {/* Trust checklist */}
+                {/* Trust badges — compact 2-col pill grid */}
                 {trustItems.length > 0 && (
-                  <ul className="mt-4 space-y-2">
+                  <div className="mt-4 grid grid-cols-2 gap-2">
                     {trustItems.map(({ key, icon: Icon, label, color }) => (
-                      <li key={key} className="flex items-center gap-2.5 text-sm">
-                        <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", color)}>
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                        <span>{label}</span>
-                      </li>
+                      <div
+                        key={key}
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold",
+                          color
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="leading-tight">{label}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
 
               {/* Pricing footer */}
               {finalPrice !== undefined && (
-                <div className="mt-auto border-t border-border/50 px-5 py-4">
-                  <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-                    Starting from
-                  </p>
-                  <div className="mt-1.5 flex items-end justify-between">
+                <div className="relative mt-auto overflow-hidden border-t border-border/50 px-5 py-4">
+                  {/* Brand gradient wash */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-50/60 via-transparent to-transparent dark:from-brand-950/20" />
+                  <div className="relative flex items-center justify-between gap-3">
                     <div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[1.75rem] font-bold tracking-tight leading-none">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-500">
+                        Starting from
+                      </p>
+                      <div className="mt-1 flex items-baseline gap-2">
+                        <span className="text-[2rem] font-black tracking-tight leading-none">
                           {formatPrice(finalPrice)}
                         </span>
                         {discount > 0 && originalPrice && (
@@ -630,13 +631,18 @@ export function ProductHero({ product }: ProductHeroProps) {
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         per {product.pricing?.profileType === "PER_GROUP" ? "group" : "person"}
                       </p>
                     </div>
-                    {discount > 0 && (
-                      <span className="rounded-xl bg-rose-500 px-2.5 py-1 text-sm font-bold text-white shadow-sm">
-                        {discount}% OFF
+                    {discount > 0 ? (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-rose-600 px-3.5 py-2 text-sm font-black text-white shadow-md shadow-rose-200/50 dark:shadow-rose-900/30">
+                        {discount}%&nbsp;<span className="font-semibold opacity-90">OFF</span>
+                      </span>
+                    ) : (
+                      <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand-50 px-3 py-2 text-xs font-bold text-brand-600 dark:bg-brand-950/40 dark:text-brand-400">
+                        <Zap className="h-3.5 w-3.5 text-brand-500" />
+                        Best Price
                       </span>
                     )}
                   </div>
