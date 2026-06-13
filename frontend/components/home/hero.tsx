@@ -5,12 +5,6 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Search, MapPin, Star, Shield, Zap, ChevronDown } from "lucide-react";
 
-interface HeroStats {
-  totalExperiences: number;
-  totalDestinations: number;
-  avgRating: number;
-}
-
 const POPULAR = ["Paris", "Tokyo", "Bali", "New York", "Rome", "Santorini", "Dubai"];
 
 const FLOAT_PILLS = [
@@ -21,7 +15,7 @@ const FLOAT_PILLS = [
   { label: "🏛️ Rome", x: "48%", y: "80%", delay: 1.8 },
 ];
 
-export function Hero({ stats }: { stats: HeroStats }) {
+export function Hero() {
   const [query, setQuery] = useState("");
   const router = useRouter();
 

@@ -81,7 +81,7 @@ export default async function HomePage() {
       />
 
       {/* Dark hero with video */}
-      <Hero stats={{ totalExperiences: 0, totalDestinations, avgRating: 0 }} />
+      <Hero />
 
       {/* Platform trust indicators */}
       {/* <Partners /> */}

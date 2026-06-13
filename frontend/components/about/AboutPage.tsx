@@ -632,7 +632,7 @@ export function AboutPage() {
                   grad: "from-indigo-400 to-blue-500",
                   delay: 0.35,
                 },
-              ].map((c, i) => (
+              ].map((c) => (
                 <motion.div
                   key={c.title}
                   initial={{ opacity: 0, x: 20 }}
