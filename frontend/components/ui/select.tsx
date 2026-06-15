@@ -9,7 +9,7 @@ interface SelectContextValue {
   onValueChange: (value: string) => void
   open: boolean
   setOpen: (open: boolean) => void
-  triggerRef: React.RefObject<HTMLButtonElement | null>
+  triggerRef: React.MutableRefObject<HTMLButtonElement | null>
 }
 
 const SelectContext = React.createContext<SelectContextValue | null>(null)
@@ -23,7 +23,7 @@ function useSelect() {
 function Select({ value, onValueChange, children }: { value?: string; onValueChange?: (value: string) => void; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const [internalValue, setInternalValue] = React.useState("")
-  const triggerRef = React.useRef<HTMLButtonElement | null>(null)
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null) as React.MutableRefObject<HTMLButtonElement | null>
 
   const isControlled = value !== undefined
   const actualValue = isControlled ? value : internalValue
