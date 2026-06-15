@@ -116,7 +116,7 @@ function SelectContent({ className, children, ...props }: React.HTMLAttributes<H
       ref={contentRef}
       style={style}
       className={cn(
-        "max-h-60 overflow-auto rounded-md border bg-popover p-1 shadow-md",
+        "max-h-60 overflow-auto rounded-md border border-border bg-white dark:bg-gray-950 p-1 shadow-lg",
         className,
       )}
       {...props}
