@@ -24,6 +24,9 @@ type Config struct {
 	HeadoutStageBaseURL   string
 	HeadoutProdBaseURL    string
 
+	// App public URL (used as Referer when proxying Headout domain-gated endpoints)
+	AppURL string
+
 	// Environment
 	Environment string
 
@@ -57,6 +60,7 @@ func Load() *Config {
 		DBPassword:     getEnv("DB_PASSWORD", ""),
 		DBName:         getEnv("DB_NAME", "travel_db"),
 		DBSSLMode:      getEnv("DB_SSLMODE", "disable"),
+		AppURL:                getEnv("APP_URL", "https://triipzy.com"),
 		HeadoutAPIKey:         getEnv("HEADOUT_API_KEY", ""),
 		HeadoutURL:            getEnv("HEADOUT_URL", ""),
 		HeadoutEnvironment:    getEnv("HEADOUT_ENV", ""),

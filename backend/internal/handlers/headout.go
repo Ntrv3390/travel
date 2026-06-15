@@ -97,6 +97,7 @@ type HeadoutHandler struct {
 	service       *services.HeadoutProxyService
 	publicService *services.HeadoutProxyService
 	db            *gorm.DB
+	appURL        string
 }
 
 func NewHeadoutHandler(cfg *config.Config, db *gorm.DB) *HeadoutHandler {
@@ -105,6 +106,7 @@ func NewHeadoutHandler(cfg *config.Config, db *gorm.DB) *HeadoutHandler {
 		service:       services.NewHeadoutProxyService(cfg),
 		publicService: services.NewHeadoutProxyService(cfg),
 		db:            db,
+		appURL:        cfg.AppURL,
 	}
 }
 
@@ -846,6 +848,85 @@ func (h *HeadoutHandler) ListSeatmapInventory(c *gin.Context) {
 	}
 	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
 		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
+	}
+	h.writeUpstreamResponse(c, upstream)
+}
+
+const venueSVGCacheTTL = 24 * time.Hour
+
+// GetVenueMap proxies GET /v2/products/{productId}/svg/
+// Returns the CDN URL for the static venue layout SVG. Cached 24 h.
+func (h *HeadoutHandler) GetVenueMap(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	if productID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId is required"})
+		return
+	}
+	path := fmt.Sprintf("/v2/products/%s/svg/", url.PathEscape(productID))
+	if entry, ok := headoutCacheGet(path); ok {
+		c.Data(entry.status, "application/json", entry.body)
+		return
+	}
+	upstream, err := h.service.Get(c.Request.Context(), path, nil, true)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
+		headoutCacheSet(path, upstream.StatusCode, upstream.Body, venueSVGCacheTTL)
+	}
+	h.writeUpstreamResponse(c, upstream)
+}
+
+// GetVenueSeatmap proxies GET /v2/products/{productId}/seatmap/
+// Returns raw HTML for the Headout-hosted seat selection iframe.
+// Access is domain-gated: Headout checks the Referer header against its allowlist.
+// A 403 response means the calling domain is not whitelisted; forward it as-is so the
+// frontend can detect it and fall back to the SeatMapPanel text UI.
+func (h *HeadoutHandler) GetVenueSeatmap(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	if productID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId is required"})
+		return
+	}
+	path := fmt.Sprintf("/v2/products/%s/seatmap/", url.PathEscape(productID))
+	upstream, err := h.service.GetHTML(c.Request.Context(), path, h.appURL)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
+	}
+	if upstream.StatusCode == http.StatusForbidden {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	c.Data(upstream.StatusCode, "text/html; charset=utf-8", upstream.Body)
+}
+
+// ValidateSeatmap proxies POST /v2/seatmap/products/{productId}/variants/{variantId}/validate/
+// Performs a live seat availability and pricing check before checkout.
+// Always check validationErrors even on 200 responses. Not cached.
+func (h *HeadoutHandler) ValidateSeatmap(c *gin.Context) {
+	productID := strings.TrimSpace(c.Param("productId"))
+	variantID := strings.TrimSpace(c.Param("variantId"))
+	if productID == "" || variantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "productId and variantId are required"})
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1*1024*1024))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+		return
+	}
+	q := url.Values{}
+	if cc := c.Query("currencyCode"); cc != "" {
+		q.Set("currencyCode", cc)
+	}
+	path := fmt.Sprintf("/v2/seatmap/products/%s/variants/%s/validate/",
+		url.PathEscape(productID), url.PathEscape(variantID))
+	upstream, err := h.service.Post(c.Request.Context(), path, q, body, true)
+	if err != nil {
+		h.handleProxyError(c, err)
+		return
 	}
 	h.writeUpstreamResponse(c, upstream)
 }

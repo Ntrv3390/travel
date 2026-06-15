@@ -4,7 +4,7 @@ import { toSlug } from "@/lib/utils";
 import type { SearchParams } from "@/types/api";
 import type { BookingRequest, BookingResponse } from "@/types/booking";
 import type { Experience, ExperienceOption } from "@/types/experience";
-import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse, SeatmapAvailabilityResponse, SeatmapInventoryResponse } from "@/types/product";
+import type { Product, ProductsResponse, ProductsQueryParams, VariantAvailabilityResponse, SlotInventoryResponse, SeatmapAvailabilityResponse, SeatmapInventoryResponse, VenueMapResponse, SeatmapValidateRequest, SeatmapValidateResponse } from "@/types/product";
 import type { SearchAllResponse } from "@/types/search";
 
 const API_BASE = env.API_URL;
@@ -588,6 +588,49 @@ export async function getSeatmapInventory(
     if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
     const res = await fetch(url.toString(), { cache: "no-store" });
     return readJson<SeatmapInventoryResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function getVenueMap(productId: string): Promise<ApiResult<VenueMapResponse>> {
+  try {
+    const url = buildUrl(`/api/v1/headout/v2/products/${encodeURIComponent(productId)}/svg`);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return readJson<VenueMapResponse>(res);
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
+  }
+}
+
+export async function checkSeatmapIframeAccess(productId: string): Promise<{ allowed: boolean }> {
+  try {
+    const url = buildUrl(`/api/v1/headout/v2/products/${encodeURIComponent(productId)}/seatmap`);
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    return { allowed: res.status !== 403 };
+  } catch {
+    return { allowed: false };
+  }
+}
+
+export async function validateSeatmap(
+  productId: string,
+  variantId: string | number,
+  payload: SeatmapValidateRequest,
+  currencyCode?: string,
+): Promise<ApiResult<SeatmapValidateResponse>> {
+  try {
+    const url = buildUrl(
+      `/api/v1/headout/v2/seatmap/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/validate`,
+    );
+    if (currencyCode) url.searchParams.set("currencyCode", currencyCode);
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    return readJson<SeatmapValidateResponse>(res);
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : "Network request failed" };
   }

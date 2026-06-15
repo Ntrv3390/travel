@@ -9,6 +9,10 @@ const BookingModal = dynamic(
   () => import("./BookingModal").then((m) => ({ default: m.BookingModal })),
   { ssr: false },
 );
+const SeatmapBookingModal = dynamic(
+  () => import("./SeatmapBookingModal").then((m) => ({ default: m.SeatmapBookingModal })),
+  { ssr: false },
+);
 import { ProductHero } from "./pdp/ProductHero";
 import { PackageCards } from "./pdp/PackageCards";
 import { HighlightsSection } from "./pdp/HighlightsSection";
@@ -208,18 +212,28 @@ export function ProductDetail({ product }: ProductDetailProps) {
         onCheckAvailability={scrollToPackages}
       />
 
-      {/* Multi-step booking modal */}
+      {/* Booking modals */}
       <AnimatePresence>
         {bookingModalOpen && selectedVariant && (
-          <BookingModal
-            product={product}
-            variant={selectedVariant}
-            cartItemId={cartItem?.id ?? null}
-            initialDate={cartItem?.date ?? null}
-            initialSlotId={cartItem?.inventoryId ?? null}
-            initialGuests={cartItem?.guestCounts ?? null}
-            onClose={() => setBookingModalOpen(false)}
-          />
+          product.inventorySelectionType === "SEATMAP" ? (
+            <SeatmapBookingModal
+              product={product}
+              variant={selectedVariant}
+              cartItemId={cartItem?.id ?? null}
+              initialDate={cartItem?.date ?? null}
+              onClose={() => setBookingModalOpen(false)}
+            />
+          ) : (
+            <BookingModal
+              product={product}
+              variant={selectedVariant}
+              cartItemId={cartItem?.id ?? null}
+              initialDate={cartItem?.date ?? null}
+              initialSlotId={cartItem?.inventoryId ?? null}
+              initialGuests={cartItem?.guestCounts ?? null}
+              onClose={() => setBookingModalOpen(false)}
+            />
+          )
         )}
       </AnimatePresence>
     </div>

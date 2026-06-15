@@ -310,6 +310,67 @@ export interface SeatmapInventoryResponse {
   sections: SeatmapSection[];
 }
 
+export interface VenueMapResponse {
+  productId: number;
+  svgUrl: string;
+}
+
+export interface SeatmapValidateRequest {
+  inventoryId: number;
+  seatCodes: string[];
+}
+
+export interface SeatmapPrice {
+  currency: string;
+  profileType?: string;
+  headoutSellingPrice: number;
+  netPrice: number | null;
+}
+
+export interface SeatmapValidatedSeat {
+  seatCode: string;
+  sectionName: string | null;
+  row: string | null;
+  seatNumber: string | null;
+  seatType: string | null;
+  isAvailable: boolean;
+  pricing: SeatmapPrice | null;
+}
+
+export interface SeatmapValidationError {
+  code: "SEAT_UNAVAILABLE" | "SEAT_NOT_FOUND" | "ADJACENCY_RULE_VIOLATION";
+  message: string;
+  seatCode: string;
+}
+
+export interface SeatmapValidateResponse {
+  productId: number;
+  variantId: number;
+  inventoryId: number;
+  currencyCode: string;
+  date: string;
+  startTime: string;
+  seats: SeatmapValidatedSeat[];
+  validationErrors: SeatmapValidationError[];
+}
+
+export interface IframeSeat {
+  id: string;
+  seatCode: string;
+  inventorySlotId: string;
+  price: number;
+  originalPrice: number;
+  currency: string;
+  discounted: boolean;
+  seatNumber: string;
+  seatRow: string;
+  seatSection: string;
+  color: string;
+  description: string;
+  remaining: number;
+  maxAvailable: number;
+}
+
 export interface ProductsQueryParams {
   cityCode?: string;
   collectionId?: string;

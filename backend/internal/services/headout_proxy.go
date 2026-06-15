@@ -87,6 +87,40 @@ func (s *HeadoutProxyService) Put(ctx context.Context, path string, query url.Va
 	return s.request(ctx, http.MethodPut, path, query, body, requiresAuth)
 }
 
+// GetHTML fetches an HTML endpoint (e.g. the venue seatmap iframe) without auth.
+// The caller must supply a referer that Headout will check against its domain allowlist.
+func (s *HeadoutProxyService) GetHTML(ctx context.Context, path string, referer string) (*UpstreamResponse, error) {
+	fullURL := s.baseURL + path
+	requestCtx, cancel := context.WithTimeout(ctx, headoutDefaultTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build headout request: %w", err)
+	}
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+
+	response, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("headout request failed: %w", err)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 10*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read headout response: %w", err)
+	}
+	logger.Debugf("Headout request GET %s -> %d", fullURL, response.StatusCode)
+	return &UpstreamResponse{
+		StatusCode: response.StatusCode,
+		Body:       responseBody,
+		Headers:    response.Header,
+	}, nil
+}
+
 func (s *HeadoutProxyService) request(
 	ctx context.Context,
 	method string,
