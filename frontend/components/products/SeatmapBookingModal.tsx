@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  X, ChevronLeft, ChevronRight, Loader2, Clock, MapPin, ArrowLeft,
+  X, ChevronLeft, ChevronRight, Loader2, CalendarDays, Clock, MapPin,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,6 @@ import { SeatmapIframe } from "@/components/products/SeatmapIframe";
 import { SeatMapPanel } from "@/components/products/SeatMapPanel";
 import {
   getSeatmapAvailabilities,
-  checkSeatmapIframeAccess,
   addCartItem,
   getCartSessionId,
 } from "@/lib/api";
@@ -24,7 +23,7 @@ import type {
   SeatmapAvailabilityDate, SeatmapAvailabilitySlot,
 } from "@/types/product";
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
+// ─── Date helpers ──────────────────────────────────────────────────────────────
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = [
@@ -40,6 +39,15 @@ function fmtDate(y: number, m: number, d: number) {
 function todayStr() {
   const d = new Date(); return fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
 }
+function addMonths(year: number, month: number, delta: number) {
+  const d = new Date(year, month + delta, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+function fmtLong(dateStr: string) {
+  return new Date(dateStr + "T00:00").toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+}
 function formatTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h < 12 ? "am" : "pm";
@@ -47,10 +55,111 @@ function formatTime(t: string) {
   return `${h12}:${String(m).padStart(2, "0")}${ampm}`;
 }
 
+// ─── Month grid for seatmap data ───────────────────────────────────────────────
+
+interface SeatmapMonthGridProps {
+  year: number;
+  month: number;
+  availMap: Map<string, SeatmapAvailabilityDate>;
+  selectedDate: string | null;
+  today: string;
+  formatPrice: (n: number) => string;
+  onDateClick: (dateStr: string, info: SeatmapAvailabilityDate | undefined) => void;
+}
+
+function SeatmapMonthGrid({
+  year, month, availMap, selectedDate, today, formatPrice, onDateClick,
+}: SeatmapMonthGridProps) {
+  return (
+    <div className="min-w-0">
+      <div className="grid grid-cols-7">
+        {DAY_NAMES.map((d, i) => (
+          <div key={i} className="py-1 text-center text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7">
+        {Array.from({ length: getFirstDay(year, month) }).map((_, i) => (
+          <div key={`e-${i}`} className="min-h-[34px] sm:min-h-[38px]" />
+        ))}
+        {Array.from({ length: getDaysInMonth(year, month) }).map((_, i) => {
+          const day = i + 1;
+          const dateStr = fmtDate(year, month, day);
+          const info = availMap.get(dateStr);
+          const isPast = dateStr < today;
+          const isToday = dateStr === today;
+          const isSelected = dateStr === selectedDate;
+          const hasSlots = info != null && info.slots.some(s => s.remaining > 0);
+          const isUnavailable = isPast || !hasSlots;
+          const availableSlots = info?.slots.filter(s => s.remaining > 0) ?? [];
+          const minPrice = availableSlots.length > 0
+            ? Math.min(...availableSlots.map(s => s.pricing.headoutSellingPrice))
+            : null;
+          const totalRemaining = availableSlots.reduce((sum, s) => sum + s.remaining, 0);
+          const isLimited = hasSlots && totalRemaining < 20;
+          const clickable = !isUnavailable;
+
+          return (
+            <div
+              key={day}
+              onClick={() => clickable && onDateClick(dateStr, info)}
+              onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && clickable) onDateClick(dateStr, info); }}
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              aria-label={`${day} ${MONTH_NAMES[month]}${isSelected ? ", selected" : ""}`}
+              aria-pressed={isSelected || undefined}
+              className={cn(
+                "flex min-h-[34px] flex-col items-center justify-center rounded-lg px-0 py-0.5 text-center transition-all duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
+                "sm:min-h-[38px]",
+                isSelected
+                  ? "bg-brand-500 shadow-sm"
+                  : isUnavailable
+                    ? "cursor-default opacity-25"
+                    : isToday
+                      ? "cursor-pointer bg-brand-50 ring-1 ring-brand-300 dark:bg-brand-950/30"
+                      : "cursor-pointer hover:bg-brand-50/70 dark:hover:bg-brand-950/20",
+              )}
+            >
+              <span className={cn(
+                "text-[11px] font-semibold leading-none sm:text-xs",
+                isSelected
+                  ? "text-white"
+                  : isToday && !isUnavailable
+                    ? "text-brand-600 dark:text-brand-400"
+                    : isUnavailable
+                      ? "text-muted-foreground"
+                      : "text-foreground",
+              )}>
+                {day}
+              </span>
+
+              {!isUnavailable && minPrice != null && (
+                <span className={cn(
+                  "mt-[2px] text-[7px] font-semibold leading-none sm:text-[8px]",
+                  isSelected ? "text-white/80"
+                    : isLimited ? "text-amber-500"
+                      : "text-emerald-600 dark:text-emerald-400",
+                )}>
+                  {formatPrice(minPrice)}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Module-level availability cache ──────────────────────────────────────────
+
 const availCache = new Map<string, { data: SeatmapAvailabilityDate[]; exp: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Props ─────────────────────────────────────────────────────────────────────
 
 interface SeatmapBookingModalProps {
   product: Product;
@@ -60,123 +169,148 @@ interface SeatmapBookingModalProps {
   onClose: () => void;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Main component ────────────────────────────────────────────────────────────
 
 export function SeatmapBookingModal({
-  product,
-  variant,
-  cartItemId,
-  initialDate,
-  onClose,
+  product, variant, cartItemId, initialDate = null, onClose,
 }: SeatmapBookingModalProps) {
   const router = useRouter();
   const { currency, formatPrice } = useCurrency();
   const { toast } = useToast();
 
-  // Step: "date" = calendar + slot picker, "seatmap" = seat selection
-  const [step, setStep] = useState<"date" | "seatmap">("date");
+  const step = useRef<1 | 2 | 3>(1);
+  const [, forceUpdate] = useState(0);
+  const rerender = () => forceUpdate(n => n + 1);
+  const setStep = (s: 1 | 2 | 3) => { step.current = s; rerender(); };
 
-  // Calendar state
-  const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate ?? null);
+  const now = new Date();
+  const initDate = initialDate ? new Date(initialDate + "T00:00") : now;
+  const [viewYear, setViewYear] = useState(initDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initDate.getMonth());
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate);
   const [selectedSlots, setSelectedSlots] = useState<SeatmapAvailabilitySlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<SeatmapAvailabilitySlot | null>(null);
+
+  // Accumulated availability across months
   const [availabilities, setAvailabilities] = useState<SeatmapAvailabilityDate[]>([]);
   const [calLoading, setCalLoading] = useState(true);
+  const [bgLoading, setBgLoading] = useState(false);
   const [calError, setCalError] = useState<string | null>(null);
+  const [maxMonth, setMaxMonth] = useState<{ year: number; month: number } | null>(null);
 
-  // Iframe access state (null = unknown, bool = checked)
-  const [iframeAllowed, setIframeAllowed] = useState<boolean | null>(null);
-  const iframeCheckDone = useRef(false);
+  // fallback: starts false (try iframe first); onFallback flips it to show SeatMapPanel
+  const [showFallback, setShowFallback] = useState(false);
 
-  // Booking state (after seats confirmed)
   const [bookingLoading, setBookingLoading] = useState(false);
+  const abortRef = useRef(false);
 
   const TODAY = todayStr();
-  const monthStart = fmtDate(viewYear, viewMonth, 1);
-  const endDate = fmtDate(viewYear, viewMonth, getDaysInMonth(viewYear, viewMonth));
-  const startDate = monthStart < TODAY ? TODAY : monthStart;
 
-  // ── Fetch availability for current calendar month ─────────────────────────
-
-  const fetchAvail = useCallback(async () => {
-    const cacheKey = `${product.id}:${variant.id}:${currency}:${startDate}:${endDate}`;
-    const cached = availCache.get(cacheKey);
-    if (cached && Date.now() < cached.exp) {
-      setAvailabilities(cached.data);
-      setCalLoading(false);
-      return;
-    }
-    setCalLoading(true);
-    setCalError(null);
-    const result = await getSeatmapAvailabilities(String(product.id), variant.id, {
-      currencyCode: currency,
-      startDate,
-      endDate,
-    });
-    if (result.error) {
-      setCalError(result.error);
-    } else {
-      const data = result.data?.availabilities ?? [];
-      availCache.set(cacheKey, { data, exp: Date.now() + CACHE_TTL });
-      setAvailabilities(data);
-    }
-    setCalLoading(false);
-  }, [product.id, variant.id, currency, startDate, endDate]);
-
-  useEffect(() => { fetchAvail(); }, [fetchAvail]);
-
-  // ── Preflight iframe access check (runs once, in background) ─────────────
-
-  useEffect(() => {
-    if (iframeCheckDone.current) return;
-    iframeCheckDone.current = true;
-    checkSeatmapIframeAccess(String(product.id)).then(({ allowed }) => {
-      setIframeAllowed(allowed);
-    });
-  }, [product.id]);
-
-  // ── Lock body scroll while modal is open ─────────────────────────────────
+  // ── Lock body scroll ────────────────────────────────────────────────────────
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
 
-  // ── Calendar interaction ──────────────────────────────────────────────────
+  // ── Fetch availability month-by-month (same pattern as BookingModal) ────────
 
-  const prevMonth = () => {
-    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
-    else setViewMonth(m => m - 1);
-    setSelectedDate(null);
-    setSelectedSlots([]);
+  useEffect(() => {
+    abortRef.current = false;
+    setCalLoading(true);
+    setCalError(null);
+    setAvailabilities([]);
+    setMaxMonth(null);
+
+    const baseYear = now.getFullYear();
+    const baseMonth = now.getMonth();
+
+    (async () => {
+      for (let i = 0; i < 18; i++) {
+        if (abortRef.current) break;
+        const m = addMonths(baseYear, baseMonth, i);
+        const mStart = fmtDate(m.year, m.month, 1);
+        const mEnd = fmtDate(m.year, m.month, getDaysInMonth(m.year, m.month));
+        const startDate = mStart < TODAY ? TODAY : mStart;
+
+        const cacheKey = `${product.id}:${variant.id}:${currency}:${startDate}:${mEnd}`;
+        let data: SeatmapAvailabilityDate[];
+        const cached = availCache.get(cacheKey);
+        if (cached && Date.now() < cached.exp) {
+          data = cached.data;
+        } else {
+          const result = await getSeatmapAvailabilities(String(product.id), variant.id, {
+            currencyCode: currency, startDate, endDate: mEnd,
+          });
+          if (abortRef.current) break;
+          if (result.error) {
+            if (i === 0) setCalError(result.error);
+            break;
+          }
+          data = result.data?.availabilities ?? [];
+          availCache.set(cacheKey, { data, exp: Date.now() + CACHE_TTL });
+        }
+
+        if (data.length > 0) setAvailabilities(prev => [...prev, ...data]);
+        if (i === 0) { setCalLoading(false); setBgLoading(true); }
+
+        const hasOpen = data.some(d => d.slots.some(s => s.remaining > 0));
+        if (hasOpen) {
+          setMaxMonth({ year: m.year, month: m.month });
+        } else {
+          break;
+        }
+      }
+      setCalLoading(false);
+      setBgLoading(false);
+    })();
+
+    return () => { abortRef.current = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.id, variant.id, currency]);
+
+  // ── Calendar navigation ──────────────────────────────────────────────────────
+
+  const m2 = addMonths(viewYear, viewMonth, 1);
+  const isPrevDisabled = viewYear === now.getFullYear() && viewMonth === now.getMonth();
+  const nextPairStart = addMonths(viewYear, viewMonth, 2);
+  const isNextDisabled = !bgLoading && maxMonth != null && (
+    nextPairStart.year > maxMonth.year ||
+    (nextPairStart.year === maxMonth.year && nextPairStart.month > maxMonth.month)
+  );
+
+  const goBack = () => {
+    const prev = addMonths(viewYear, viewMonth, -2);
+    setViewYear(prev.year); setViewMonth(prev.month);
+    setSelectedDate(null); setSelectedSlots([]);
   };
-  const nextMonth = () => {
-    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
-    else setViewMonth(m => m + 1);
-    setSelectedDate(null);
-    setSelectedSlots([]);
+  const goForward = () => {
+    if (isNextDisabled) return;
+    const next = addMonths(viewYear, viewMonth, 2);
+    setViewYear(next.year); setViewMonth(next.month);
+    setSelectedDate(null); setSelectedSlots([]);
   };
 
-  const isPrevDisabled = viewYear === today.getFullYear() && viewMonth === today.getMonth();
   const availMap = new Map<string, SeatmapAvailabilityDate>();
   for (const a of availabilities) availMap.set(a.date, a);
 
   const handleDateClick = (dateStr: string, info: SeatmapAvailabilityDate | undefined) => {
-    if (!info || !info.slots.some(s => s.remaining > 0)) return;
+    if (!info || dateStr < TODAY) return;
+    const open = info.slots.filter(s => s.remaining > 0);
+    if (open.length === 0) return;
     setSelectedDate(dateStr);
     setSelectedSlots(info.slots);
+    setSelectedSlot(null);
+    setStep(2);
   };
 
   const handleSlotClick = (slot: SeatmapAvailabilitySlot) => {
     if (slot.remaining <= 0) return;
     setSelectedSlot(slot);
-    setStep("seatmap");
+    setStep(3);
   };
 
-  // ── After seat confirmation: add to cart ─────────────────────────────────
+  // ── Cart after seat confirmation ─────────────────────────────────────────────
 
   const handleSeatsConfirmed = useCallback(
     async (seats: IframeSeat[], validation: SeatmapValidateResponse) => {
@@ -187,6 +321,9 @@ export function SeatmapBookingModal({
         const totalPrice = validation.seats.reduce(
           (sum, s) => sum + (s.pricing?.headoutSellingPrice ?? 0), 0,
         );
+        const imageUrl =
+          product.media?.find(m => m.type === "IMAGE")?.url?.replace(/^\/\//, "https://") ?? "";
+
         const result = await addCartItem(sessionId, {
           experienceId: String(product.id),
           productId: String(product.id),
@@ -202,32 +339,24 @@ export function SeatmapBookingModal({
           title: variant.name ?? product.name,
           priceAmount: totalPrice,
           currency: validation.currencyCode,
-          imageUrl: product.media?.[0]?.url ?? "",
+          imageUrl,
         });
+
         mutate(["/api/v1/cart", sessionId]);
+
         if (result.error || !result.data) {
-          toast({
-            title: "Booking failed",
-            description: result.error ?? "Could not add to cart.",
-            variant: "error",
-          });
+          toast({ title: "Booking failed", description: result.error ?? "Could not add to cart.", variant: "error" });
           return;
         }
+
         const raw = result.data as unknown as Record<string, unknown>;
-        const cart = (raw.data as Record<string, unknown> ?? raw) as {
-          items?: Array<Record<string, unknown>>;
-        };
+        const cart = (raw.data as Record<string, unknown> ?? raw) as { items?: Array<Record<string, unknown>> };
         const newItem = cart.items?.find(
-          (i) =>
-            i.variantId === String(variant.id) &&
-            i.inventoryId === String(validation.inventoryId),
+          i => i.variantId === String(variant.id) && i.inventoryId === String(validation.inventoryId),
         );
         const itemId = newItem?.id ?? cart.items?.[cart.items.length - 1]?.id;
-        if (itemId) {
-          router.push(`/checkout?cartItemId=${itemId}`);
-        } else {
-          router.push("/cart");
-        }
+        if (itemId) { router.push(`/checkout?cartItemId=${itemId}`); }
+        else { router.push("/cart"); }
         onClose();
       } catch (err) {
         toast({
@@ -242,254 +371,218 @@ export function SeatmapBookingModal({
     [product, variant, router, onClose, toast],
   );
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // ── Labels ───────────────────────────────────────────────────────────────────
 
-  const imageUrl = product.media?.[0]?.url ?? "";
+  const stepLabel = step.current === 1 ? "Pick a date" : step.current === 2 ? "Choose a time" : "Select your seats";
+  const imageUrl = product.media?.find(m => m.type === "IMAGE")?.url?.replace(/^\/\//, "https://") ?? "";
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <ProductDetailProvider
-      productId={String(product.id)}
-      productName={product.name}
-      variantId={variant.id}
-      variantName={variant.name ?? ""}
-      imageUrl={imageUrl}
-      cartItemId={cartItemId}
-      initialDate={initialDate ?? null}
-      initialGuests={null}
-    >
+    <>
       {/* Backdrop */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
         onClick={onClose}
-        aria-hidden="true"
       />
 
-      {/* Panel */}
-      <motion.div
-        initial={{ opacity: 0, y: 48, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 48, scale: 0.97 }}
-        transition={{ type: "spring", stiffness: 380, damping: 34 }}
-        className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex flex-col bg-background shadow-2xl",
-          "rounded-t-3xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2",
-          "sm:w-full sm:max-w-2xl sm:rounded-3xl",
-          "max-h-[95dvh] sm:max-h-[90dvh]",
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Book ${product.name}`}
-        onClick={e => e.stopPropagation()}
+      {/* Sheet */}
+      <div
+        className="fixed inset-0 z-[101] flex items-end justify-center sm:items-center sm:p-4"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
-        {/* Header */}
-        <div className="flex flex-shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-5 sm:py-4">
-          {step === "seatmap" && (
-            <button
-              onClick={() => { setStep("date"); setSelectedSlot(null); }}
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Back to dates"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{variant.name}</p>
-            {selectedDate && (
-              <p className="text-xs text-muted-foreground">
-                {selectedDate}
-                {selectedSlot && ` · ${formatTime(selectedSlot.startTime)}`}
-              </p>
-            )}
+        <motion.div
+          initial={{ y: "100%", opacity: 0.9 }} animate={{ y: 0, opacity: 1 }}
+          exit={{ y: "100%", opacity: 0 }}
+          transition={{ type: "spring", damping: 32, stiffness: 380 }}
+          className="flex w-full flex-col bg-background shadow-2xl max-h-[92svh] rounded-t-3xl sm:max-w-2xl sm:rounded-3xl"
+        >
+          {/* Drag handle (mobile) */}
+          <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20 sm:hidden" />
+
+          {/* Progress bar */}
+          <div className="flex gap-1.5 px-5 pt-3 pb-1">
+            {([1, 2, 3] as const).map((s) => (
+              <div
+                key={s}
+                className={cn(
+                  "h-1 flex-1 rounded-full transition-all duration-300",
+                  step.current >= s ? "bg-brand-500" : "bg-muted",
+                )}
+              />
+            ))}
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
-          <AnimatePresence mode="wait" initial={false}>
-            {step === "date" ? (
-              <motion.div
-                key="date"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.22 }}
-              >
-                {/* Calendar section header */}
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
-                    <MapPin className="h-3 w-3 text-brand-500" />
-                  </span>
-                  <h2 className="text-sm font-semibold">Choose a Date</h2>
-                </div>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border/50 px-5 py-3">
+            <div className="flex items-center gap-2.5">
+              {step.current > 1 && (
+                <button
+                  onClick={() => setStep((step.current - 1) as 1 | 2 | 3)}
+                  aria-label="Back"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              )}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Step {step.current} of 3 · {variant.name ?? "Package"}
+                </p>
+                <h3 className="font-bold tracking-tight">{stepLabel}</h3>
+              </div>
+            </div>
+            <button
+              onClick={onClose} aria-label="Close"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-                {/* Calendar */}
-                <div className="overflow-hidden rounded-2xl border border-border/60 bg-background shadow-sm">
-                  {/* Month nav */}
-                  <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-                    <span className="text-sm font-semibold">
-                      {MONTH_NAMES[viewMonth]} {viewYear}
-                    </span>
-                    <div className="flex items-center gap-1">
+          {/* Content */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ProductDetailProvider
+              productId={String(product.id)}
+              productName={product.name}
+              variantId={variant.id}
+              variantName={variant.name ?? ""}
+              imageUrl={imageUrl}
+              cartItemId={cartItemId}
+              initialDate={selectedDate}
+              initialGuests={null}
+            >
+
+              {/* ── Step 1: Calendar ──────────────────────────────────────── */}
+              {step.current === 1 && (
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+                  <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+
+                    {/* Nav bar — same as BookingModal */}
+                    <div className="flex items-center border-b border-border/50 px-3 py-2.5">
                       <button
-                        onClick={prevMonth}
+                        onClick={goBack}
                         disabled={isPrevDisabled}
-                        aria-label="Previous month"
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+                        aria-label="Previous two months"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-3.5 w-3.5" />
                       </button>
+
+                      <div className="grid flex-1 grid-cols-2">
+                        <span className="text-center text-xs font-bold sm:text-sm">
+                          {MONTH_NAMES[viewMonth]} {viewYear}
+                        </span>
+                        <span className="text-center text-xs font-bold sm:text-sm">
+                          {MONTH_NAMES[m2.month]} {m2.year}
+                        </span>
+                      </div>
+
                       <button
-                        onClick={nextMonth}
-                        aria-label="Next month"
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
+                        onClick={goForward}
+                        disabled={isNextDisabled}
+                        aria-label="Next two months"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        {bgLoading
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin opacity-50" />
+                          : <ChevronRight className="h-3.5 w-3.5" />
+                        }
                       </button>
                     </div>
-                  </div>
 
-                  {/* Grid */}
-                  <div className="p-3 sm:p-4">
-                    {calLoading ? (
-                      <div className="flex items-center justify-center py-12">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : calError ? (
-                      <div className="py-8 text-center">
-                        <p className="text-sm text-rose-500">{calError}</p>
-                        <button
-                          onClick={fetchAvail}
-                          className="mt-2 text-xs text-brand-500 underline underline-offset-2"
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="mb-1 grid grid-cols-7">
-                          {DAY_NAMES.map((d, i) => (
-                            <div key={i} className="py-1.5 text-center text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {d}
+                    {/* Calendar body */}
+                    <div className="p-3 sm:p-4">
+                      {calLoading ? (
+                        <div className="flex flex-col items-center justify-center gap-2 py-14">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">Loading availability…</p>
+                        </div>
+                      ) : calError ? (
+                        <div className="flex flex-col items-center gap-3 py-10">
+                          <p className="text-sm text-rose-500">{calError}</p>
+                          <button
+                            onClick={() => {
+                              availCache.clear();
+                              setCalError(null);
+                              setCalLoading(true);
+                            }}
+                            className="text-xs text-brand-500 underline underline-offset-2"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Two-month grid — identical layout to BookingModal */}
+                          <div className="grid grid-cols-1 gap-0 sm:grid-cols-2">
+                            <div className="pb-4 sm:pb-0 sm:pr-4">
+                              <SeatmapMonthGrid
+                                year={viewYear} month={viewMonth}
+                                availMap={availMap} selectedDate={selectedDate}
+                                today={TODAY} formatPrice={formatPrice}
+                                onDateClick={handleDateClick}
+                              />
                             </div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-7 gap-0.5">
-                          {Array.from({ length: getFirstDay(viewYear, viewMonth) }).map((_, i) => (
-                            <div key={`e-${i}`} className="min-h-[52px]" />
-                          ))}
-                          {Array.from({ length: getDaysInMonth(viewYear, viewMonth) }).map((_, i) => {
-                            const day = i + 1;
-                            const dateStr = fmtDate(viewYear, viewMonth, day);
-                            const info = availMap.get(dateStr);
-                            const isPast = dateStr < TODAY;
-                            const isToday = dateStr === TODAY;
-                            const isSelected = dateStr === selectedDate;
-                            const hasSlots = info != null && info.slots.some(s => s.remaining > 0);
-                            const isClosed = !hasSlots;
-                            const minPrice = info
-                              ? Math.min(...info.slots.filter(s => s.remaining > 0).map(s => s.pricing.headoutSellingPrice))
-                              : null;
-                            const totalLeft = info ? info.slots.reduce((s, x) => s + x.remaining, 0) : 0;
-                            const isLimited = hasSlots && totalLeft < 20;
-                            const clickable = !isPast && hasSlots;
+                            <div className="border-t border-border/50 pt-4 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                              <SeatmapMonthGrid
+                                year={m2.year} month={m2.month}
+                                availMap={availMap} selectedDate={selectedDate}
+                                today={TODAY} formatPrice={formatPrice}
+                                onDateClick={handleDateClick}
+                              />
+                            </div>
+                          </div>
 
-                            return (
-                              <div
-                                key={day}
-                                onClick={() => clickable && handleDateClick(dateStr, info)}
-                                onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && clickable) handleDateClick(dateStr, info); }}
-                                role={clickable ? "button" : undefined}
-                                tabIndex={clickable ? 0 : undefined}
-                                aria-label={`${day} ${MONTH_NAMES[viewMonth]}${isSelected ? ", selected" : ""}`}
-                                aria-pressed={isSelected || undefined}
-                                className={cn(
-                                  "flex min-h-[52px] flex-col items-center justify-center rounded-xl px-0.5 py-1.5 text-center transition-all duration-150",
-                                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400",
-                                  isSelected
-                                    ? "bg-brand-500 shadow-md"
-                                    : isPast
-                                      ? "opacity-30"
-                                      : isClosed
-                                        ? "cursor-default opacity-40"
-                                        : isToday
-                                          ? "bg-brand-50 ring-1 ring-brand-300 cursor-pointer dark:bg-brand-950/30"
-                                          : "cursor-pointer hover:bg-brand-50/60 dark:hover:bg-brand-950/20",
-                                )}
-                              >
-                                <span className={cn(
-                                  "text-xs font-semibold sm:text-sm",
-                                  isSelected ? "text-white"
-                                    : isToday ? "text-brand-600 dark:text-brand-400"
-                                      : isPast || isClosed ? "text-muted-foreground"
-                                        : "text-foreground",
-                                )}>
-                                  {day}
-                                </span>
-                                {!isPast && minPrice != null && !isClosed && (
-                                  <span className={cn(
-                                    "mt-0.5 text-[9px] font-semibold leading-none",
-                                    isSelected ? "text-white/85"
-                                      : isLimited ? "text-amber-500"
-                                        : "text-emerald-600 dark:text-emerald-400",
-                                  )}>
-                                    {formatPrice(minPrice)}
-                                  </span>
-                                )}
-                                {!isPast && isClosed && (
-                                  <span className="mt-0.5 text-[9px] text-rose-400">–</span>
-                                )}
-                                {!isPast && !isClosed && isLimited && (
-                                  <span className={cn("mt-0.5 text-[8px] font-medium", isSelected ? "text-white/75" : "text-amber-500")}>
-                                    {totalLeft} left
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Legend */}
-                        <div className="mt-3 flex items-center gap-3 border-t border-border/40 pt-3 text-[10px] text-muted-foreground">
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Available</span>
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />Limited</span>
-                          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" />Sold out</span>
-                        </div>
-                      </>
-                    )}
+                          {/* Legend */}
+                          <div className="mt-3 flex flex-wrap gap-3 border-t border-border/40 pt-3 text-[10px] text-muted-foreground">
+                            <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Available</span>
+                            <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Limited</span>
+                            <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />Unavailable</span>
+                            {bgLoading && (
+                              <span className="ml-auto flex items-center gap-1 text-muted-foreground/60">
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                Loading more dates…
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Time slots */}
-                <AnimatePresence>
-                  {selectedDate && selectedSlots.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      transition={{ duration: 0.2 }}
-                      className="mt-4"
+              {/* ── Step 2: Time slot picker ──────────────────────────────── */}
+              {step.current === 2 && selectedDate && (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  {/* Pinned date banner */}
+                  <div className="flex shrink-0 items-center gap-2.5 border-b border-border/50 bg-background px-5 py-2.5">
+                    <CalendarDays className="h-4 w-4 shrink-0 text-brand-500" />
+                    <span className="flex-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
+                      {fmtLong(selectedDate)}
+                    </span>
+                    <button
+                      onClick={() => setStep(1)}
+                      className="shrink-0 text-xs font-semibold text-brand-500 underline-offset-2 hover:underline"
                     >
-                      <div className="mb-3 flex items-center gap-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
-                          <Clock className="h-3 w-3 text-brand-500" />
-                        </span>
-                        <h2 className="text-sm font-semibold">Choose a Time</h2>
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {selectedSlots.length} slot{selectedSlots.length !== 1 ? "s" : ""}
-                        </span>
+                      Change
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+                    {selectedSlots.length === 0 ? (
+                      <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
+                        <Clock className="h-5 w-5 opacity-40" />
+                        No time slots available for this date.
                       </div>
+                    ) : (
                       <div className="space-y-2">
+                        <p className="mb-3 text-xs text-muted-foreground">
+                          {selectedSlots.length} time slot{selectedSlots.length !== 1 ? "s" : ""} available
+                        </p>
                         {selectedSlots.map((slot) => {
                           const soldOut = slot.remaining <= 0;
                           return (
@@ -504,28 +597,28 @@ export function SeatmapBookingModal({
                                   : "cursor-pointer border-border/60 bg-background shadow-sm hover:border-brand-300 hover:bg-brand-50/30 active:scale-[0.99]",
                               )}
                             >
-                              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50">
-                                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-950/30">
+                                    <Clock className="h-4 w-4 text-brand-500" />
                                   </div>
                                   <div>
                                     <p className="text-sm font-bold tabular-nums text-foreground">
                                       {formatTime(slot.startTime)}
                                     </p>
-                                    <p className="text-[10px] text-muted-foreground">
+                                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                                       from {formatPrice(slot.pricing.headoutSellingPrice)} / seat
-                                      {slot.remaining > 0 && ` · ${slot.remaining} left`}
+                                      {slot.remaining > 0 ? ` · ${slot.remaining} remaining` : ""}
                                     </p>
                                   </div>
                                 </div>
                                 {soldOut ? (
-                                  <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600 ring-1 ring-inset ring-rose-200">
+                                  <span className="shrink-0 rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-600 ring-1 ring-inset ring-rose-200">
                                     Sold out
                                   </span>
                                 ) : (
-                                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                                    Select
+                                  <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-semibold text-brand-600 ring-1 ring-inset ring-brand-200 dark:bg-brand-950/30 dark:text-brand-400 dark:ring-brand-800">
+                                    Select →
                                   </span>
                                 )}
                               </div>
@@ -533,64 +626,69 @@ export function SeatmapBookingModal({
                           );
                         })}
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="seatmap"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.22 }}
-                className="flex flex-col"
-              >
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/40">
-                    <MapPin className="h-3 w-3 text-brand-500" />
-                  </span>
-                  <h2 className="text-sm font-semibold">Select Your Seats</h2>
-                </div>
-
-                {/* Show iframe or fallback based on access check */}
-                {iframeAllowed === null ? (
-                  // Still checking — show brief loading
-                  <div className="flex items-center justify-center py-16">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    )}
                   </div>
-                ) : iframeAllowed ? (
-                  <SeatmapIframe
-                    productId={String(product.id)}
-                    variantId={variant.id}
-                    date={selectedDate!}
-                    startTime={selectedSlot!.startTime}
-                    onSeatsConfirmed={handleSeatsConfirmed}
-                    className="min-h-[480px]"
-                  />
-                ) : (
-                  // 403 fallback: text-based seat picker
-                  <SeatMapPanel
-                    productId={String(product.id)}
-                    variantId={variant.id}
-                    selectedDate={selectedDate!}
-                    slots={selectedSlots}
-                    currency={currency}
-                  />
-                )}
+                </div>
+              )}
+
+              {/* ── Step 3: Seat map ──────────────────────────────────────── */}
+              {step.current === 3 && selectedDate && selectedSlot && (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  {/* Pinned slot banner */}
+                  <div className="flex shrink-0 items-center gap-2.5 border-b border-border/50 bg-background px-5 py-2.5">
+                    <MapPin className="h-4 w-4 shrink-0 text-brand-500" />
+                    <span className="flex-1 text-sm font-semibold text-brand-700 dark:text-brand-300">
+                      {fmtLong(selectedDate)} · {formatTime(selectedSlot.startTime)}
+                    </span>
+                    <button
+                      onClick={() => setStep(2)}
+                      className="shrink-0 text-xs font-semibold text-brand-500 underline-offset-2 hover:underline"
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+                    {showFallback ? (
+                      <SeatMapPanel
+                        productId={String(product.id)}
+                        variantId={variant.id}
+                        selectedDate={selectedDate}
+                        slots={selectedSlots}
+                        currency={currency}
+                      />
+                    ) : (
+                      <SeatmapIframe
+                        productId={String(product.id)}
+                        variantId={variant.id}
+                        date={selectedDate}
+                        startTime={selectedSlot.startTime}
+                        onSeatsConfirmed={handleSeatsConfirmed}
+                        onFallback={() => setShowFallback(true)}
+                        className="min-h-[440px]"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+
+            </ProductDetailProvider>
+          </div>
+
+          {/* Booking in progress */}
+          <AnimatePresence>
+            {bookingLoading && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex shrink-0 items-center justify-center gap-2 border-t border-border/60 px-5 py-3"
+              >
+                <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
+                <span className="text-sm text-muted-foreground">Adding to cart…</span>
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-
-        {/* Footer loading bar while booking */}
-        {bookingLoading && (
-          <div className="flex flex-shrink-0 items-center justify-center gap-2 border-t border-border/60 px-5 py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
-            <span className="text-sm text-muted-foreground">Adding to cart…</span>
-          </div>
-        )}
-      </motion.div>
-    </ProductDetailProvider>
+        </motion.div>
+      </div>
+    </>
   );
 }

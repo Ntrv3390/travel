@@ -880,9 +880,14 @@ func (h *HeadoutHandler) GetVenueMap(c *gin.Context) {
 
 // GetVenueSeatmap proxies GET /v2/products/{productId}/seatmap/
 // Returns raw HTML for the Headout-hosted seat selection iframe.
-// Access is domain-gated: Headout checks the Referer header against its allowlist.
-// A 403 response means the calling domain is not whitelisted; forward it as-is so the
-// frontend can detect it and fall back to the SeatMapPanel text UI.
+// Access is domain-gated via Referer allowlist and CSP frame-ancestors.
+// Returns 403 in two cases:
+//  1. Headout itself returned 403 (Referer not whitelisted)
+//  2. Headout returned 200 but the CSP frame-ancestors header would block our
+//     APP_URL — so the browser would refuse to embed the iframe anyway.
+//
+// The frontend uses this 403 to immediately fall back to the SeatMapPanel UI
+// without ever rendering the iframe.
 func (h *HeadoutHandler) GetVenueSeatmap(c *gin.Context) {
 	productID := strings.TrimSpace(c.Param("productId"))
 	if productID == "" {
@@ -899,7 +904,65 @@ func (h *HeadoutHandler) GetVenueSeatmap(c *gin.Context) {
 		c.Status(http.StatusForbidden)
 		return
 	}
+	// If the response carries a frame-ancestors directive that would block our
+	// APP_URL, treat it as 403 so the frontend skips the iframe entirely.
+	if csp := upstream.Headers.Get("Content-Security-Policy"); csp != "" {
+		if iframeBlocked(csp, h.appURL) {
+			c.Status(http.StatusForbidden)
+			return
+		}
+	}
 	c.Data(upstream.StatusCode, "text/html; charset=utf-8", upstream.Body)
+}
+
+// iframeBlocked returns true when the CSP frame-ancestors directive would
+// prevent the given appURL from embedding the page in an iframe.
+func iframeBlocked(csp, appURL string) bool {
+	lower := strings.ToLower(csp)
+	idx := strings.Index(lower, "frame-ancestors")
+	if idx == -1 {
+		return false // no frame-ancestors directive → not blocked
+	}
+	directive := csp[idx:]
+	if semi := strings.Index(directive, ";"); semi != -1 {
+		directive = directive[:semi]
+	}
+	directiveLower := strings.ToLower(directive)
+
+	// 'none' blocks all embedding
+	if strings.Contains(directiveLower, "'none'") {
+		return true
+	}
+	// A bare wildcard allows everyone
+	if strings.Contains(directive, " * ") || strings.HasSuffix(strings.TrimSpace(directive), "*") {
+		return false
+	}
+
+	// Parse our own origin from APP_URL
+	parsed, err := url.Parse(appURL)
+	if err != nil || parsed.Host == "" {
+		return true // can't determine our origin → assume blocked
+	}
+	origin := parsed.Scheme + "://" + parsed.Host // e.g. https://triipzy.com
+	host := parsed.Host                            // e.g. triipzy.com
+
+	// Check exact origin match, bare host match, and wildcard subdomain match
+	// (Headout may list *.example.com which would cover www.example.com)
+	if strings.Contains(directiveLower, strings.ToLower(origin)) {
+		return false
+	}
+	if strings.Contains(directiveLower, strings.ToLower(host)) {
+		return false
+	}
+	// Check whether a wildcard subdomain rule covers our host, e.g. *.triipzy.com
+	parts := strings.SplitN(host, ".", 2)
+	if len(parts) == 2 {
+		wildcard := "*." + parts[1]
+		if strings.Contains(directiveLower, strings.ToLower(wildcard)) {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateSeatmap proxies POST /v2/seatmap/products/{productId}/variants/{variantId}/validate/

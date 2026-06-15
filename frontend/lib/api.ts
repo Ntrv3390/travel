@@ -607,6 +607,9 @@ export async function checkSeatmapIframeAccess(productId: string): Promise<{ all
   try {
     const url = buildUrl(`/api/v1/headout/v2/products/${encodeURIComponent(productId)}/seatmap`);
     const res = await fetch(url.toString(), { cache: "no-store" });
+    // Backend returns 403 in two cases:
+    // 1. Headout itself returned 403 (domain not whitelisted)
+    // 2. Headout returned 200 but the CSP frame-ancestors would block our APP_URL
     return { allowed: res.status !== 403 };
   } catch {
     return { allowed: false };
