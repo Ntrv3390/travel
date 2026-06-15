@@ -2,8 +2,13 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import dynamic from "next/dynamic";
 import { useCartContext } from "@/context/CartContext";
-import { BookingModal } from "./BookingModal";
+
+const BookingModal = dynamic(
+  () => import("./BookingModal").then((m) => ({ default: m.BookingModal })),
+  { ssr: false },
+);
 import { ProductHero } from "./pdp/ProductHero";
 import { PackageCards } from "./pdp/PackageCards";
 import { HighlightsSection } from "./pdp/HighlightsSection";
@@ -88,13 +93,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
     <div className="relative">
       <div className="space-y-3 sm:space-y-4 lg:space-y-6 pb-[72px] lg:pb-0">
         {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4 }}
-        >
-          <ProductHero product={product} />
-        </motion.div>
+        <ProductHero product={product} />
 
         {/* Desktop two-column layout for packages + booking */}
         <div className="lg:grid lg:grid-cols-[1fr,380px] lg:gap-8">

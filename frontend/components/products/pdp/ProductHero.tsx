@@ -303,7 +303,7 @@ export function ProductHero({ product }: ProductHeroProps) {
               setTouchStart(null);
             }}
           >
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" initial={false}>
               <motion.img
                 key={selectedImage}
                 src={imgUrl(images[selectedImage]?.url)}
@@ -315,6 +315,7 @@ export function ProductHero({ product }: ProductHeroProps) {
                 transition={{ duration: 0.25 }}
                 onClick={() => setLightboxOpen(true)}
                 draggable={false}
+                fetchPriority={selectedImage === 0 ? "high" : "auto"}
               />
             </AnimatePresence>
 
@@ -490,7 +491,7 @@ export function ProductHero({ product }: ProductHeroProps) {
               style={{ height: "340px" }}
               onClick={() => setLightboxOpen(true)}
             >
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" initial={false}>
                 <motion.img
                   key={selectedImage}
                   src={imgUrl(images[selectedImage]?.url)}
@@ -501,6 +502,7 @@ export function ProductHero({ product }: ProductHeroProps) {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.25 }}
                   draggable={false}
+                  fetchPriority={selectedImage === 0 ? "high" : "auto"}
                 />
               </AnimatePresence>
 

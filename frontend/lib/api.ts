@@ -300,13 +300,17 @@ export async function getSlotInventory(
 
 export async function getProductById(
   id: string,
-  options?: { languageCode?: string; currencyCode?: string },
+  options?: { languageCode?: string; currencyCode?: string; revalidate?: number },
 ): Promise<ApiResult<Product>> {
   try {
     const url = buildUrl(`/api/v1/headout/v2/products/${encodeURIComponent(id)}`);
     if (options?.languageCode) url.searchParams.set("languageCode", options.languageCode);
     if (options?.currencyCode) url.searchParams.set("currencyCode", options.currencyCode);
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    const fetchOpts: RequestInit =
+      isServer() && options?.revalidate !== undefined
+        ? { next: { revalidate: options.revalidate } }
+        : { cache: "no-store" };
+    const res = await fetch(url.toString(), fetchOpts);
     if (!res.ok) {
       if (res.status === 404) {
         return { data: null, error: "Product not found" };

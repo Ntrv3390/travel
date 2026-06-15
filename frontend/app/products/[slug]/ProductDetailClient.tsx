@@ -1,145 +1,60 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { MaxWidthWrapper } from "@/components/ui/MaxWidthWrapper";
 import { ProductDetail } from "@/components/products/ProductDetail";
 import { getProductById } from "@/lib/api";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useTrackRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import type { Product } from "@/types/product";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export function ProductDetailClient() {
+interface ProductDetailClientProps {
+  initialProduct: Product;
+}
+
+export function ProductDetailClient({ initialProduct }: ProductDetailClientProps) {
   const params = useParams();
   const slug = params?.slug as string;
   const id = slug?.split("-").pop() ?? "";
   const { currency } = useCurrency();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetchIdRef = useRef(0);
+  const [product, setProduct] = useState<Product>(initialProduct);
   const { track } = useTrackRecentlyViewed();
+  const isFirstCurrencyRender = useRef(true);
 
-  const fetchProduct = useCallback(async () => {
-    if (!id) return;
-    const fetchId = ++fetchIdRef.current;
-    setLoading(true);
-    setError(null);
-    const result = await getProductById(id, { currencyCode: currency });
-    if (fetchId !== fetchIdRef.current) return;
-    if (result.error) {
-      setError(result.error);
-    } else if (result.data) {
-      setProduct(result.data);
-      const p = result.data;
-      track({
-        headoutId: p.id,
-        title: p.name || p.title || "",
-        imageUrl: p.media?.[0]?.url || p.imageUrl || "",
-        price: p.listingPrice?.minimumPrice?.finalPrice || p.fromPrice || 0,
-        currency: p.listingPrice?.currencyCode || p.currency?.code || "USD",
-        rating: p.reviewsSummary?.averageRating || 0,
-        reviewCount: p.reviewsSummary?.ratingsCount || 0,
-        city: p.city?.name || p.cityName || "",
-        category: p.primaryCategory?.name || "",
-        slug: (p.title || p.name || "").toLowerCase().replace(/\s+/g, "-"),
-        duration: "",
-      });
-    } else {
-      setError("Product not found");
-    }
-    setLoading(false);
-  }, [id, currency]);
-
+  // Track product view once on mount
   useEffect(() => {
-    fetchProduct();
-  }, [id, currency]);
+    const p = initialProduct;
+    track({
+      headoutId: p.id,
+      title: p.name || p.title || "",
+      imageUrl: p.media?.[0]?.url || p.imageUrl || "",
+      price: p.listingPrice?.minimumPrice?.finalPrice || p.fromPrice || 0,
+      currency: p.listingPrice?.currencyCode || p.currency?.code || "USD",
+      rating: p.reviewsSummary?.averageRating || 0,
+      reviewCount: p.reviewsSummary?.ratingsCount || 0,
+      city: p.city?.name || p.cityName || "",
+      category: p.primaryCategory?.name || "",
+      slug: (p.title || p.name || "").toLowerCase().replace(/\s+/g, "-"),
+      duration: "",
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (loading) {
-    return (
-      <main className="min-h-screen overflow-hidden">
-        <MaxWidthWrapper className="py-4 sm:py-6 lg:py-8">
-          <div className="animate-pulse space-y-6">
-            <div className="h-6 w-32 rounded-full bg-muted sm:w-40" />
-            {/* Hero skeleton */}
-            <div className="grid gap-6 overflow-hidden lg:grid-cols-[minmax(0,1.8fr)_minmax(360px,0.9fr)]">
-              <div className="min-w-0">
-                <div className="h-[260px] rounded-2xl bg-muted lg:h-[420px]" />
-              </div>
-              <div className="space-y-3">
-                <div className="h-5 w-3/4 rounded-lg bg-muted" />
-                <div className="h-3.5 w-1/2 rounded bg-muted" />
-                <div className="h-3.5 w-2/3 rounded bg-muted" />
-                <div className="mt-4 h-20 rounded-2xl bg-muted" />
-              </div>
-            </div>
-            {/* Thumbnail skeleton */}
-            <div className="hidden gap-3 lg:grid lg:grid-cols-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-muted" />
-              ))}
-            </div>
-            {/* Content skeleton */}
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-14 rounded-2xl bg-muted" />
-              ))}
-            </div>
-          </div>
-        </MaxWidthWrapper>
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="min-h-screen overflow-hidden">
-        <MaxWidthWrapper className="py-4 sm:py-6 lg:py-8">
-          <div className="flex flex-col items-center gap-4 py-20">
-            <div className="glass-strong rounded-2xl p-6 text-center sm:p-8">
-              <p className="text-base font-medium text-red-500 sm:text-lg">
-                {error}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                Product ID: {id}
-              </p>
-              <div className="mt-4 flex gap-3 sm:mt-6">
-                <Button
-                  variant="outline"
-                  onClick={fetchProduct}
-                  disabled={loading}
-                  className="rounded-xl"
-                >
-                  <Loader2
-                    className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
-                  />
-                  Retry
-                </Button>
-                <Button
-                  variant="ghost"
-                  asChild
-                  className="rounded-xl"
-                >
-                  <Link
-                    href="/products"
-                    className="inline-flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <ArrowLeft className="h-4 w-4 shrink-0" />
-                    <span>Back to Products</span>
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </MaxWidthWrapper>
-      </main>
-    );
-  }
-
-  if (!product) return null;
+  // Silent re-fetch when currency changes to update prices
+  useEffect(() => {
+    if (isFirstCurrencyRender.current) {
+      isFirstCurrencyRender.current = false;
+      return;
+    }
+    if (!id) return;
+    getProductById(id, { currencyCode: currency }).then((result) => {
+      if (result.data) setProduct(result.data);
+    });
+  }, [currency, id]);
 
   return (
     <main className="min-h-screen">
