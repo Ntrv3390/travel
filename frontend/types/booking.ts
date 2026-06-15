@@ -20,6 +20,7 @@ export interface BookingRequest {
   priceAmount: number;
   specialRequests?: string;
   variantInputFields?: Array<{ id: string; value: string }>;
+  customerInputFields?: Array<{ id: string; value: string }>;
 }
 
 export interface BookingResponse {

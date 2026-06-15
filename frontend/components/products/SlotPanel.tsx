@@ -82,6 +82,7 @@ export function SlotPanel({
   })
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [addingToCart, setAddingToCart] = useState(false)
+  const [bookingNowSlotId, setBookingNowSlotId] = useState<string | null>(null)
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -174,6 +175,7 @@ export function SlotPanel({
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const handleBookNow = async (slot: SlotItem) => {
+    setBookingNowSlotId(slot.id)
     const totalBookingPrice = calculateTotalBookingPrice(slot)
     try {
       const sessionId = getCartSessionId()
@@ -214,6 +216,8 @@ export function SlotPanel({
       }
     } catch (err) {
       toast({ title: "Booking failed", description: err instanceof Error ? err.message : "Could not process booking.", variant: "error" })
+    } finally {
+      setBookingNowSlotId(null)
     }
   }
 
@@ -406,7 +410,8 @@ export function SlotPanel({
           const isClosed = slot.availability === "CLOSED"
           const totalPrice = calculateTotalPrice(slot)
           const isThisAdding = addingToCart && selectedSlotId === slot.id
-          const actionsDisabled = !hasGuests || addingToCart
+          const isThisBooking = bookingNowSlotId === slot.id
+          const actionsDisabled = !hasGuests || addingToCart || bookingNowSlotId !== null
           const isInCart = cartSlotId === slot.id
 
           return (
@@ -576,8 +581,11 @@ export function SlotPanel({
                         compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"
                       )}
                     >
-                      Book now
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      {isThisBooking
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <ArrowRight className="h-3.5 w-3.5" />
+                      }
+                      {isThisBooking ? "Booking…" : "Book now"}
                     </button>
                   </div>
                 </div>

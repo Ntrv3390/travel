@@ -106,6 +106,7 @@ type createBookingRequest struct {
 	CurrencyCode        string `json:"currencyCode,omitempty"`
 	PriceAmount         float64 `json:"priceAmount,omitempty"`
 	VariantInputFields  []map[string]interface{} `json:"variantInputFields,omitempty"`
+	CustomerInputFields []map[string]interface{} `json:"customerInputFields,omitempty"`
 	IdempotencyKey      string `json:"-"`
 	SessionID           string `json:"-"`
 }
@@ -611,6 +612,9 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 				if req.Phone != "" {
 					inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "value": req.Phone})
 				}
+				for _, cf := range req.CustomerInputFields {
+					inputFields = append(inputFields, cf)
+				}
 			}
 
 			customer := map[string]interface{}{
@@ -631,6 +635,9 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		}
 		if req.Phone != "" {
 			inputFields = append(inputFields, map[string]interface{}{"id": "PHONE", "value": req.Phone})
+		}
+		for _, cf := range req.CustomerInputFields {
+			inputFields = append(inputFields, cf)
 		}
 		customers = append(customers, map[string]interface{}{
 			"personType":  "ADULT",

@@ -36,7 +36,13 @@ export function CheckoutForm() {
 
     const variantInputFields = isDynamic
       ? info.inputFields
-        .filter((f) => !STANDARD_CUSTOMER_FIELDS.has(f.id))
+        .filter((f) => !STANDARD_CUSTOMER_FIELDS.has(f.id) && f.level !== "PRIMARY_CUSTOMER" && f.level !== "ALL_CUSTOMER")
+        .map((f) => ({ id: f.id, value: String(values[f.id] ?? "") }))
+      : undefined;
+
+    const customerInputFields = isDynamic
+      ? info.inputFields
+        .filter((f) => !STANDARD_CUSTOMER_FIELDS.has(f.id) && (f.level === "PRIMARY_CUSTOMER" || f.level === "ALL_CUSTOMER"))
         .map((f) => ({ id: f.id, value: String(values[f.id] ?? "") }))
       : undefined;
 
@@ -74,6 +80,7 @@ export function CheckoutForm() {
         priceAmount: info.bookingPrice,
         specialRequests: isDynamic ? undefined : String(values.specialRequests ?? ""),
         variantInputFields,
+        customerInputFields: customerInputFields?.length ? customerInputFields : undefined,
       },
       sessionId,
       idempotencyKey,
@@ -109,51 +116,80 @@ export function CheckoutForm() {
     guestCounts: info.guestCounts ?? { ADULT: 1 },
   };
 
-  if (info.experienceId === '') {
-    if (!info.experienceId) {
-      return (
-        <div className="container flex min-h-[70vh] items-center justify-center px-4">
-          <div className="w-full max-w-lg text-center">
-            <div className="mb-6 inline-flex h-24 w-24 items-center justify-center rounded-full bg-muted">
-              <span className="text-4xl">🎟️</span>
+  if (info.loading) {
+    return (
+      <div className="container py-8 sm:py-10 pb-10">
+        <div className="mx-auto max-w-2xl lg:max-w-5xl">
+          <StepBar currentStep={2} />
+          <div className="gap-8 lg:grid lg:grid-cols-[1fr_380px]">
+            <div className="space-y-6">
+              <div className="rounded-2xl border bg-card shadow-glass p-6">
+                <Skeleton className="mb-4 h-6 w-40 rounded-lg" />
+                <Skeleton className="mb-6 h-4 w-56 rounded-lg" />
+                <div className="space-y-4">
+                  <Skeleton className="h-11 w-full rounded-xl" />
+                  <Skeleton className="h-11 w-full rounded-xl" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Skeleton className="h-11 rounded-xl" />
+                    <Skeleton className="h-11 rounded-xl" />
+                  </div>
+                  <Skeleton className="h-11 w-full rounded-xl" />
+                  <Skeleton className="mt-2 h-12 w-full rounded-xl" />
+                </div>
+              </div>
             </div>
-
-            <h1 className="text-6xl font-extrabold tracking-tight">404</h1>
-
-            <h2 className="mt-4 text-2xl font-semibold">
-              Experience Not Found
-            </h2>
-
-            <p className="mt-3 text-muted-foreground">
-              The experience you&apos;re trying to book is unavailable, expired,
-              or the session has been cleared.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <button
-                onClick={() => router.push("/")}
-                className="rounded-xl bg-primary px-6 py-3 font-medium text-primary-foreground transition hover:opacity-90"
-              >
-                Go Home
-              </button>
-
-              <button
-                onClick={() => router.push("/products")}
-                className="rounded-xl border px-6 py-3 font-medium transition hover:bg-muted"
-              >
-                Browse Experiences
-              </button>
+            <div className="order-first lg:order-last mt-0 mb-6 lg:mb-0">
+              <Skeleton className="h-64 w-full rounded-2xl" />
             </div>
-
-            <p className="mt-6 text-sm text-muted-foreground">
-              Need help? Contact our <Link href="/help" className="underline">
-                support team
-              </Link> and we&apos;ll assist you.
-            </p>
           </div>
         </div>
-      );
-    }
+      </div>
+    );
+  }
+
+  if (!info.experienceId) {
+    return (
+      <div className="container flex min-h-[70vh] items-center justify-center px-4">
+        <div className="w-full max-w-lg text-center">
+          <div className="mb-6 inline-flex h-24 w-24 items-center justify-center rounded-full bg-muted">
+            <span className="text-4xl">🎟️</span>
+          </div>
+
+          <h1 className="text-6xl font-extrabold tracking-tight">404</h1>
+
+          <h2 className="mt-4 text-2xl font-semibold">
+            Experience Not Found
+          </h2>
+
+          <p className="mt-3 text-muted-foreground">
+            The experience you&apos;re trying to book is unavailable, expired,
+            or the session has been cleared.
+          </p>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <button
+              onClick={() => router.push("/")}
+              className="rounded-xl bg-primary px-6 py-3 font-medium text-primary-foreground transition hover:opacity-90"
+            >
+              Go Home
+            </button>
+
+            <button
+              onClick={() => router.push("/products")}
+              className="rounded-xl border px-6 py-3 font-medium transition hover:bg-muted"
+            >
+              Browse Experiences
+            </button>
+          </div>
+
+          <p className="mt-6 text-sm text-muted-foreground">
+            Need help? Contact our <Link href="/help" className="underline">
+              support team
+            </Link> and we&apos;ll assist you.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -161,40 +197,33 @@ export function CheckoutForm() {
       <div className="mx-auto max-w-2xl lg:max-w-5xl">
         <StepBar currentStep={2} />
 
-        {info.loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-48 w-full rounded-2xl" />
-            <Skeleton className="h-64 w-full rounded-2xl" />
-          </div>
-        ) : (
-          <div className="gap-8 lg:grid lg:grid-cols-[1fr_380px]">
-            {/* Form column */}
-            <div className="space-y-6">
-              <div className="rounded-2xl border bg-card shadow-glass p-6">
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold">Traveller Details</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Enter details for the lead traveller
-                  </p>
-                </div>
-                <CustomerDetailsForm
-                  submitLabel="Confirm & Book"
-                  submitting={submitting}
-                  inputFields={info.inputFields}
-                  onSubmit={onSubmit}
-                />
+        <div className="gap-8 lg:grid lg:grid-cols-[1fr_380px]">
+          {/* Form column */}
+          <div className="space-y-6">
+            <div className="rounded-2xl border bg-card shadow-glass p-6">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold">Traveller Details</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enter details for the lead traveller
+                </p>
               </div>
-              <TrustSignals />
+              <CustomerDetailsForm
+                submitLabel="Confirm & Book"
+                submitting={submitting}
+                inputFields={info.inputFields}
+                onSubmit={onSubmit}
+              />
             </div>
+            <TrustSignals />
+          </div>
 
-            {/* Summary column — mobile: above form via order, desktop: sidebar */}
-            <div className="order-first lg:order-last mt-0 mb-6 lg:mb-0">
-              <div className="lg:sticky lg:top-24">
-                <OrderSummary items={[summaryItem]} currency={info.currency} />
-              </div>
+          {/* Summary column — mobile: above form via order, desktop: sidebar */}
+          <div className="order-first lg:order-last mt-0 mb-6 lg:mb-0">
+            <div className="lg:sticky lg:top-24">
+              <OrderSummary items={[summaryItem]} currency={info.currency} />
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
