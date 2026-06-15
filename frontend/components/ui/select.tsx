@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import * as ReactDOM from "react-dom"
 import { cn } from "@/lib/utils"
 
 interface SelectContextValue {
@@ -8,6 +9,7 @@ interface SelectContextValue {
   onValueChange: (value: string) => void
   open: boolean
   setOpen: (open: boolean) => void
+  triggerRef: React.RefObject<HTMLButtonElement | null>
 }
 
 const SelectContext = React.createContext<SelectContextValue | null>(null)
@@ -21,13 +23,14 @@ function useSelect() {
 function Select({ value, onValueChange, children }: { value?: string; onValueChange?: (value: string) => void; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const [internalValue, setInternalValue] = React.useState("")
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null)
 
   const isControlled = value !== undefined
   const actualValue = isControlled ? value : internalValue
   const handleChange = onValueChange ?? setInternalValue
 
   return (
-    <SelectContext.Provider value={{ value: actualValue, onValueChange: handleChange, open, setOpen }}>
+    <SelectContext.Provider value={{ value: actualValue, onValueChange: handleChange, open, setOpen, triggerRef }}>
       <div className="relative">{children}</div>
     </SelectContext.Provider>
   )
@@ -35,10 +38,14 @@ function Select({ value, onValueChange, children }: { value?: string; onValueCha
 
 const SelectTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ className, children, ...props }, ref) => {
-    const { setOpen } = useSelect()
+    const { setOpen, triggerRef } = useSelect()
     return (
       <button
-        ref={ref}
+        ref={(el) => {
+          triggerRef.current = el
+          if (typeof ref === "function") ref(el)
+          else if (ref) ref.current = el
+        }}
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
@@ -71,12 +78,28 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(
 SelectValue.displayName = "SelectValue"
 
 function SelectContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  const { open, setOpen } = useSelect()
-  const ref = React.useRef<HTMLDivElement>(null)
+  const { open, setOpen, triggerRef } = useSelect()
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const [style, setStyle] = React.useState<React.CSSProperties>({})
+
+  React.useEffect(() => {
+    if (!open || !triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    })
+  }, [open, triggerRef])
 
   React.useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (
+        contentRef.current && !contentRef.current.contains(e.target as Node) &&
+        triggerRef.current && !triggerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false)
       }
     }
@@ -84,21 +107,23 @@ function SelectContent({ className, children, ...props }: React.HTMLAttributes<H
       document.addEventListener("mousedown", handleClickOutside)
     }
     return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [open, setOpen])
+  }, [open, setOpen, triggerRef])
 
   if (!open) return null
 
-  return (
+  return ReactDOM.createPortal(
     <div
-      ref={ref}
+      ref={contentRef}
+      style={style}
       className={cn(
-        "absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md",
+        "max-h-60 overflow-auto rounded-md border bg-popover p-1 shadow-md",
         className,
       )}
       {...props}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
