@@ -415,6 +415,7 @@ interface PackageCardsProps {
   onSelectVariant: (id: string | number) => void;
   inCartVariantId?: string | number | null;
   listingPrice?: ProductListingPrice;
+  hideHeader?: boolean;
 }
 
 const INITIAL_VISIBLE = 2;
@@ -425,6 +426,7 @@ export function PackageCards({
   onSelectVariant,
   inCartVariantId,
   listingPrice,
+  hideHeader = false,
 }: PackageCardsProps) {
   const [showAll, setShowAll] = useState(false);
   const [openModalId, setOpenModalId] = useState<string | number | null>(null);
@@ -445,17 +447,19 @@ export function PackageCards({
   return (
     <section id="packages" className="scroll-mt-24">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Choose a Package</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Select the option that suits you best
-          </p>
+      {!hideHeader && (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Choose a Package</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Select the option that suits you best
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
+            {sortedVariants.length} option{sortedVariants.length !== 1 ? "s" : ""}
+          </span>
         </div>
-        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-          {sortedVariants.length} option{sortedVariants.length !== 1 ? "s" : ""}
-        </span>
-      </div>
+      )}
 
       {/* Cards */}
       <div className="space-y-2.5">

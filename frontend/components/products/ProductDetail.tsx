@@ -13,6 +13,10 @@ const SeatmapBookingModal = dynamic(
   () => import("./SeatmapBookingModal").then((m) => ({ default: m.SeatmapBookingModal })),
   { ssr: false },
 );
+const PackageSelectionModal = dynamic(
+  () => import("./pdp/PackageSelectionModal").then((m) => ({ default: m.PackageSelectionModal })),
+  { ssr: false },
+);
 import { ProductHero } from "./pdp/ProductHero";
 import { PackageCards } from "./pdp/PackageCards";
 import { HighlightsSection } from "./pdp/HighlightsSection";
@@ -55,6 +59,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
     );
   }, [cart, product.id, selectedVariantId]);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
+  const [packageSelectionOpen, setPackageSelectionOpen] = useState(false);
 
   const finalPrice =
     product.listingPrice?.minimumPrice?.finalPrice ??
@@ -77,11 +82,8 @@ export function ProductDetail({ product }: ProductDetailProps) {
     product as { cutoffTimeInMinutes?: number | null }
   ).cutoffTimeInMinutes;
 
-  const scrollToPackages = useCallback(() => {
-    setTimeout(() => {
-      const el = document.getElementById("packages");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
+  const openPackageSelection = useCallback(() => {
+    setPackageSelectionOpen(true);
   }, []);
 
   const handleSelectVariant = useCallback((id: string | number) => {
@@ -198,7 +200,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
               hasInstantConfirmation={product.hasInstantConfirmation}
               hasMobileTicket={product.hasMobileTicket}
               duration={product.variants?.[0]?.duration}
-              onCheckAvailability={scrollToPackages}
+              onCheckAvailability={openPackageSelection}
             />
           </div>
         </div>
@@ -209,8 +211,22 @@ export function ProductDetail({ product }: ProductDetailProps) {
         price={finalPrice}
         hasFreeCancellation={product.cancellationPolicy?.cancellable}
         hasInstantConfirmation={product.hasInstantConfirmation}
-        onCheckAvailability={scrollToPackages}
+        onCheckAvailability={openPackageSelection}
       />
+
+      {/* Package selection modal — opens when user clicks Check Availability */}
+      <AnimatePresence>
+        {packageSelectionOpen && (
+          <PackageSelectionModal
+            variants={product.variants ?? []}
+            selectedVariantId={selectedVariantId}
+            onSelectVariant={handleSelectVariant}
+            inCartVariantId={cartItem?.variantId}
+            listingPrice={product.listingPrice}
+            onClose={() => setPackageSelectionOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Booking modals */}
       <AnimatePresence>
