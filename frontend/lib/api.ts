@@ -140,9 +140,13 @@ async function readJson<T>(res: Response): Promise<ApiResult<T>> {
   }
 }
 
-async function requestExperiences(url: string, options?: { signal?: AbortSignal }): Promise<ApiResult<{ experiences: Experience[]; count: number; page: number; limit: number; totalPages: number }>> {
+async function requestExperiences(url: string, options?: { signal?: AbortSignal; revalidate?: number }): Promise<ApiResult<{ experiences: Experience[]; count: number; page: number; limit: number; totalPages: number }>> {
   try {
-    const res = await fetch(url, { cache: "no-store", signal: options?.signal });
+    const fetchOpts: RequestInit =
+      isServer() && options?.revalidate !== undefined
+        ? { next: { revalidate: options.revalidate } }
+        : { cache: "no-store", signal: options?.signal };
+    const res = await fetch(url, fetchOpts);
     const payload = await readJson<BackendListResponse>(res);
 
     if (payload.error) {
@@ -166,7 +170,7 @@ async function requestExperiences(url: string, options?: { signal?: AbortSignal 
   }
 }
 
-export async function getTopExperiences(limit = 24, page = 1, currency = "USD", options?: { signal?: AbortSignal }) {
+export async function getTopExperiences(limit = 24, page = 1, currency = "USD", options?: { signal?: AbortSignal; revalidate?: number }) {
   const url = buildUrl("/api/v1/experiences");
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("page", String(page));
@@ -243,7 +247,7 @@ export async function getCities(offset = 0, limit = 20) {
   });
 }
 
-export async function getProducts(params: ProductsQueryParams, options?: { signal?: AbortSignal }): Promise<ApiResult<ProductsResponse>> {
+export async function getProducts(params: ProductsQueryParams, options?: { signal?: AbortSignal; revalidate?: number }): Promise<ApiResult<ProductsResponse>> {
   try {
     const url = buildUrl("/api/v1/headout/v2/products");
     if (params.cityCode) url.searchParams.set("cityCode", params.cityCode);
@@ -255,7 +259,11 @@ export async function getProducts(params: ProductsQueryParams, options?: { signa
     if (params.campaignName) url.searchParams.set("campaignName", params.campaignName);
     if (params.offset !== undefined) url.searchParams.set("offset", String(params.offset));
     if (params.limit !== undefined) url.searchParams.set("limit", String(params.limit));
-    const res = await fetch(url.toString(), { cache: "no-store", signal: options?.signal });
+    const fetchOpts: RequestInit =
+      isServer() && options?.revalidate !== undefined
+        ? { next: { revalidate: options.revalidate } }
+        : { cache: "no-store", signal: options?.signal };
+    const res = await fetch(url.toString(), fetchOpts);
     return readJson<ProductsResponse>(res);
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : "Network request failed" };

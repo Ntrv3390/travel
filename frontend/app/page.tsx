@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from "next";
-import { getCities, getHomeCategories, getHomeTestimonials } from "@/lib/api";
+import { getCities, getHomeCategories, getHomeTestimonials, getTopExperiences } from "@/lib/api";
+import { HOME_REVALIDATE_SECONDS } from "@/lib/constants";
 import { Hero } from "@/components/home/hero";
 import { TrustSection } from "@/components/home/trust-section";
 import { TrendingExperiences } from "@/components/home/trending-experiences";
@@ -43,16 +44,18 @@ export const metadata: Metadata = {
 export const revalidate = 86400;
 
 export default async function HomePage() {
-  const [citiesResult, categoriesResult, testimonialsResult] = await Promise.all([
+  const [citiesResult, categoriesResult, testimonialsResult, trendingResult] = await Promise.all([
     getCities(0, 50),
     getHomeCategories(),
     getHomeTestimonials(),
+    getTopExperiences(50, 1, "USD", { revalidate: HOME_REVALIDATE_SECONDS }),
   ]);
 
   const citiesResponse = citiesResult.data as { cities: City[]; total: number } | null;
   const cities: City[] = citiesResponse?.cities ?? [];
   const categories: HomeCategory[] = categoriesResult.data ?? [];
   const testimonials: Testimonial[] = testimonialsResult.data ?? [];
+  const initialTrending = trendingResult.data?.experiences ?? [];
   const totalDestinations = citiesResponse?.total ?? cities.length;
 
   const jsonLD = {
@@ -91,8 +94,8 @@ export default async function HomePage() {
       {/* Recently viewed — client-side, renders from localStorage or API */}
       <RecentlyViewedExperiences />
 
-      {/* Client-side, reacts to currency changes */}
-      <TrendingExperiences />
+      {/* Server data on first paint; client re-fetches only on currency change */}
+      <TrendingExperiences initialExperiences={initialTrending} />
 
             {/* Animated counters */}
       <TrustSection

@@ -50,75 +50,77 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-const initialState: State = {
-  products: [],
-  nextOffset: 0,
-  total: 0,
-  loading: false,
-  error: null,
-  initialLoading: true,
-  done: false,
-};
+function makeInitialState(products: Product[], nextOffset: number | null): State {
+  if (products.length > 0) {
+    return {
+      products,
+      nextOffset,
+      total: products.length,
+      loading: false,
+      error: null,
+      initialLoading: false,
+      done: nextOffset === null,
+    };
+  }
+  return { products: [], nextOffset: 0, total: 0, loading: false, error: null, initialLoading: true, done: false };
+}
+
+const ITEM_LIMIT = 60;
+const ITEMS_BEFORE_END = 8;
 
 interface ProductsGridProps {
   queryParams: ProductsQueryParams;
+  initialProducts?: Product[];
+  initialNextOffset?: number | null;
 }
 
-export function ProductsGrid({ queryParams }: ProductsGridProps) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+export function ProductsGrid({ queryParams, initialProducts = [], initialNextOffset = null }: ProductsGridProps) {
+  const [state, dispatch] = useReducer(
+    reducer,
+    { initialProducts, initialNextOffset },
+    ({ initialProducts, initialNextOffset }) => makeInitialState(initialProducts, initialNextOffset),
+  );
+
   const { currency } = useCurrency();
+
+  // Keep currency in a ref so fetchProducts (used for infinite scroll) always
+  // reads the latest value without needing it as a dependency.
+  const currencyRef = useRef(currency);
+  currencyRef.current = currency;
+
   const fetchTick = useRef(0);
-  const offsetRef = useRef<number>(0);
+  const offsetRef = useRef<number>(initialNextOffset ?? 0);
   const isFetching = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const ITEM_LIMIT = 60;
-  // Trigger loading when this many items remain before the end of the list.
-  const ITEMS_BEFORE_END = 8;
-
+  // Stable fetch — only recreated when queryParams fields change, not on currency change.
+  // Uses currencyRef so infinite-scroll pages always get the current currency.
   const fetchProducts = useCallback(
     async (append: boolean, overrideOffset?: number) => {
-      // If we're starting a new fresh fetch (e.g. currency changed), cancel any in-flight
       if (!append) {
         abortRef.current?.abort();
         abortRef.current = new AbortController();
         isFetching.current = false;
       }
-
       if (isFetching.current) return;
       isFetching.current = true;
       const tick = ++fetchTick.current;
       dispatch({ type: "FETCH_START" });
       const offset = overrideOffset !== undefined ? overrideOffset : append ? offsetRef.current : 0;
-
       const signal = abortRef.current?.signal;
-      const result = await getProducts({ ...queryParams, currencyCode: currency, offset, limit: ITEM_LIMIT }, { signal });
+      const result = await getProducts(
+        { ...queryParams, currencyCode: currencyRef.current, offset, limit: ITEM_LIMIT },
+        { signal },
+      );
 
-      // If aborted, do nothing
-      if (signal?.aborted) {
-        isFetching.current = false;
-        return;
-      }
-
-      if (tick !== fetchTick.current) {
-        isFetching.current = false;
-        return;
-      }
+      if (signal?.aborted || tick !== fetchTick.current) { isFetching.current = false; return; }
 
       if (result.error) {
-        // AbortError from fetch inside getProducts isn't handled as error
         if (result.error !== "AbortError") dispatch({ type: "FETCH_ERROR", error: result.error });
       } else if (result.data) {
         const nextOffset = result.data.nextOffset ?? null;
         if (append) offsetRef.current = nextOffset ?? 0;
-        dispatch({
-          type: "FETCH_SUCCESS",
-          products: result.data.products,
-          nextOffset,
-          total: result.data.total,
-          append,
-        });
-        // Auto-skip cities that returned empty (upstream 503) but still have more cities
+        dispatch({ type: "FETCH_SUCCESS", products: result.data.products, nextOffset, total: result.data.total, append });
         if (result.data.products.length === 0 && nextOffset !== null) {
           isFetching.current = false;
           fetchProducts(true, nextOffset);
@@ -129,24 +131,58 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
       }
       isFetching.current = false;
     },
-    [queryParams, currency],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId],
   );
 
+  // ── Initial load (only when no server data was passed) ──────────────────────
+  const didInitialFetch = useRef(initialProducts.length > 0);
   useEffect(() => {
+    if (didInitialFetch.current) return;
+    didInitialFetch.current = true;
+    offsetRef.current = 0;
+    fetchProducts(false);
+    return () => { abortRef.current?.abort(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Re-fetch when filter/query params change ────────────────────────────────
+  const isFirstQueryRender = useRef(true);
+  useEffect(() => {
+    if (isFirstQueryRender.current) { isFirstQueryRender.current = false; return; }
     offsetRef.current = 0;
     fetchTick.current = 0;
     dispatch({ type: "RESET" });
     fetchProducts(false);
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId, currency, fetchProducts]);
+    return () => { abortRef.current?.abort(); };
+  }, [queryParams.cityCode, queryParams.collectionId, queryParams.categoryId, queryParams.subCategoryId, fetchProducts]);
 
+  // ── Silent price update when currency changes ───────────────────────────────
+  // Keeps the existing product cards visible; swaps prices in the background.
+  // This ensures card prices match the product detail page (same currency, same TTL).
+  const isFirstCurrencyRender = useRef(true);
+  useEffect(() => {
+    if (isFirstCurrencyRender.current) { isFirstCurrencyRender.current = false; return; }
+    if (state.products.length === 0) { fetchProducts(false); return; }
+
+    const controller = new AbortController();
+    getProducts(
+      { ...queryParams, currencyCode: currency, offset: 0, limit: ITEM_LIMIT },
+      { signal: controller.signal },
+    ).then((result) => {
+      if (controller.signal.aborted || !result.data?.products) return;
+      const nextOffset = result.data.nextOffset ?? null;
+      dispatch({ type: "FETCH_SUCCESS", products: result.data.products, nextOffset, total: result.data.total, append: false });
+      offsetRef.current = nextOffset ?? 0;
+    });
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency]);
+
+  // ── Infinite scroll ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (state.initialLoading || state.loading || state.nextOffset === null || state.done || state.error) return;
     if (state.products.length === 0) return;
-    // Trigger index advances with each page load so it never lands on an
-    // already-scrolled-past element (the old fixed-index-24 bug).
     const triggerIndex = Math.max(0, state.products.length - ITEMS_BEFORE_END);
     const triggerEl = document.getElementById(`product-card-${state.products[triggerIndex]?.id}`);
     if (!triggerEl) return;
@@ -197,7 +233,9 @@ export function ProductsGrid({ queryParams }: ProductsGridProps) {
     <div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {state.products.map((product) => (
-          <div key={product.id} id={`product-card-${product.id}`}><ProductCard product={product} /></div>
+          <div key={product.id} id={`product-card-${product.id}`}>
+            <ProductCard product={product} />
+          </div>
         ))}
       </div>
 

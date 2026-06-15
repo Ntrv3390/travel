@@ -23,8 +23,14 @@ export function TrendingExperiences({
   const [canScrollRight, setCanScrollRight] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const fetchId = useRef(0);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
+    // Skip the initial mount when the server already provided data
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      if (initialExperiences.length > 0) return;
+    }
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const id = ++fetchId.current;
@@ -38,7 +44,7 @@ export function TrendingExperiences({
       .finally(() => {
         if (id === fetchId.current) setLoading(false);
       });
-  }, [currency]);
+  }, [currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scroll = (dir: "left" | "right") => {
     if (!scrollRef.current) return;

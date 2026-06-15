@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ProductsGrid } from "@/components/products/ProductsGrid";
 import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
+import { getProducts } from "@/lib/api";
+import { PDP_REVALIDATE_SECONDS } from "@/lib/constants";
+
+export const revalidate = PDP_REVALIDATE_SECONDS;
 
 export const metadata: Metadata = {
   title: "Explore Experiences & Tours | Triipzy",
@@ -21,7 +25,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/products" },
 };
 
-export default function ProductsPage() {
+export default async function ProductsPage() {
+  const result = await getProducts(
+    { offset: 0, limit: 60 },
+    { revalidate: PDP_REVALIDATE_SECONDS },
+  );
+  const initialProducts = result.data?.products ?? [];
+  const initialNextOffset = result.data?.nextOffset ?? null;
+
   return (
     <main className="container py-8">
       <BreadcrumbJsonLd items={[{ label: "Products" }]} />
@@ -32,7 +43,11 @@ export default function ProductsPage() {
       </div>
 
       <Suspense>
-        <ProductsGrid queryParams={{}} />
+        <ProductsGrid
+          queryParams={{}}
+          initialProducts={initialProducts}
+          initialNextOffset={initialNextOffset}
+        />
       </Suspense>
     </main>
   );
