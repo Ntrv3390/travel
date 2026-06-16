@@ -10,6 +10,7 @@ interface StepBarProps {
 }
 
 export function StepBar({ currentStep }: StepBarProps) {
+  if (currentStep === 1) return null;
   return (
     <div className="flex items-center justify-center mb-8 select-none">
       {STEPS.map((label, idx) => {
