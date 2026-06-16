@@ -28,7 +28,7 @@ export function StepBar({ currentStep }: StepBarProps) {
                   !isDone && !isActive && "border-muted-foreground/30 text-muted-foreground bg-background",
                 )}
               >
-                {isDone ? <Check className="h-3.5 w-3.5" /> : <span>{stepNum}</span>}
+                {isDone ? <Check className="h-3.5 w-3.5" /> : <span>{stepNum-1}</span>}
               </div>
               <span
                 className={cn(
