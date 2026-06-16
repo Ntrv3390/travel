@@ -191,7 +191,7 @@ export function Navbar() {
             />
 
             {/* Cart */}
-            <Link
+            {/* <Link
               href="/cart"
               aria-label={`Cart${itemCount > 0 ? `, ${itemCount} items` : ""}`}
               className={`relative ml-1 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${isSolid
@@ -210,7 +210,7 @@ export function Navbar() {
                   {itemCount > 9 ? "9+" : itemCount}
                 </span>
               )}
-            </Link>
+            </Link> */}
 
             {/* Mobile hamburger */}
             <div className="ml-1 md:hidden flex items-center">

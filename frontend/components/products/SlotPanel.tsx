@@ -3,10 +3,9 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { Loader2, Clock, ShoppingCart, ArrowRight, Minus, Plus, Users, AlertCircle, RefreshCw, Sparkles } from "lucide-react"
+import { Loader2, Clock, ArrowRight, Minus, Plus, Users, AlertCircle, RefreshCw, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useCurrency } from "@/hooks/useCurrency"
-import { useCartContext } from "@/context/CartContext"
 import { useProductDetail } from "@/context/ProductDetailContext"
 import { useToast } from "@/components/ui/toaster"
 import { cn } from "@/lib/utils"
@@ -66,10 +65,8 @@ export function SlotPanel({
   paxMax = null,
   compact = false,
   cartSlotId = null,
-  onAddedToCart,
 }: SlotPanelProps) {
   const { formatPrice, currency } = useCurrency()
-  const { cart, addItem, updateCartItem } = useCartContext()
   const { productId, productName, variantId, variantName, imageUrl, initialGuests, inputFields } = useProductDetail()
   const { toast } = useToast()
   const router = useRouter()
@@ -80,8 +77,6 @@ export function SlotPanel({
     if (initialGuests && Object.keys(initialGuests).length > 0) return initialGuests
     return {}
   })
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
-  const [addingToCart, setAddingToCart] = useState(false)
   const [bookingNowSlotId, setBookingNowSlotId] = useState<string | null>(null)
 
   // ── Loading ────────────────────────────────────────────────────────────────
@@ -221,69 +216,6 @@ export function SlotPanel({
     }
   }
 
-  const handleAddToCart = async (slot: SlotItem) => {
-    setAddingToCart(true)
-    setSelectedSlotId(slot.id)
-    const totalBookingPrice = calculateTotalBookingPrice(slot)
-    try {
-      const existing = (cart?.items ?? []).find(
-        (i) =>
-          i.experienceId === productId &&
-          i.variantId === String(variantId) &&
-          i.date === selectedDate &&
-          i.inventoryId === slot.id
-      )
-      if (existing) {
-        const mergedGuests = { ...effectiveGuests }
-        const currentTotal = Object.values(mergedGuests).reduce((a, b) => a + b, 0)
-        const existingTotal = Object.values(existing.guestCounts ?? {}).reduce<number>((a, b) => a + b, 0)
-        if (existingTotal > 0) {
-          for (const [type, count] of Object.entries(existing.guestCounts ?? {})) {
-            mergedGuests[type] = (mergedGuests[type] ?? 0) + count
-          }
-        }
-        const newTotal = Object.values(mergedGuests).reduce((a, b) => a + b, 0)
-        const unitPrice = existingTotal > 0 ? existing.priceAmount / existingTotal : totalBookingPrice / currentTotal
-        const newPrice = Math.round(newTotal * unitPrice * 100) / 100
-        await updateCartItem(existing.id, {
-          guestCounts: mergedGuests,
-          adults: mergedGuests.ADULT ?? 0,
-          children: mergedGuests.CHILD ?? 0,
-          priceAmount: newPrice,
-        })
-        setGuests(mergedGuests)
-        toast({ title: "Cart updated", description: `Guest count updated for ${variantName ?? productName ?? "Experience"}.`, variant: "success" })
-      } else {
-        await addItem({
-          experienceId: productId,
-          productId,
-          variantId: String(variantId),
-          inventoryId: slot.id,
-          inventoryType: "NORMAL",
-          date: selectedDate,
-          startDateTime: slot.startDateTime,
-          endDateTime: slot.endDateTime,
-          adults: effectiveGuests.ADULT ?? 0,
-          children: effectiveGuests.CHILD ?? 0,
-          guestCounts: effectiveGuests,
-          title: variantName ?? productName ?? "Experience",
-          priceAmount: totalBookingPrice,
-          currency: currency ?? "USD",
-          imageUrl,
-          inputFields: inputFields ?? [],
-          addedAt: new Date().toISOString(),
-        })
-        toast({ title: "Added to cart", description: `${variantName ?? productName ?? "Experience"} added to your cart.`, variant: "success" })
-      }
-      // Close the booking modal after successful cart action
-      onAddedToCart?.()
-    } catch (err) {
-      toast({ title: "Failed to add", description: err instanceof Error ? err.message : "Could not add item to cart. Please try again.", variant: "error" })
-    } finally {
-      setAddingToCart(false)
-      setSelectedSlotId(null)
-    }
-  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -320,7 +252,7 @@ export function SlotPanel({
                 </p>
                 {p.ageFrom != null && (
                   <p className="text-[11px] text-muted-foreground">
-                    Age {p.ageFrom}–{p.ageTo ?? "99+"}
+                    Age {p.ageFrom}+
                   </p>
                 )}
               </div>
@@ -409,9 +341,8 @@ export function SlotPanel({
           const endTime = slot.endDateTime.split("T")[1]?.slice(0, 5) ?? slot.endDateTime
           const isClosed = slot.availability === "CLOSED"
           const totalPrice = calculateTotalPrice(slot)
-          const isThisAdding = addingToCart && selectedSlotId === slot.id
           const isThisBooking = bookingNowSlotId === slot.id
-          const actionsDisabled = !hasGuests || addingToCart || bookingNowSlotId !== null
+          const actionsDisabled = !hasGuests || bookingNowSlotId !== null
           const isInCart = cartSlotId === slot.id
 
           return (
@@ -476,7 +407,7 @@ export function SlotPanel({
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground">{p.name}</p>
                           {p.ageFrom != null && (
-                            <p className="text-[10px] text-muted-foreground">Age {p.ageFrom}–{p.ageTo ?? "99+"}</p>
+                            <p className="text-[10px] text-muted-foreground">Age {p.ageFrom}+</p>
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -548,7 +479,7 @@ export function SlotPanel({
 
                   {/* Buttons */}
                   <div className="flex shrink-0 gap-2">
-                    <button
+                    {/* <button
                       onClick={() => handleAddToCart(slot)}
                       disabled={actionsDisabled}
                       title={!hasGuests ? paxHint ?? undefined : undefined}
@@ -566,24 +497,24 @@ export function SlotPanel({
                       <span className="hidden sm:inline">
                         {isThisAdding ? "Adding…" : isInCart ? "Update cart" : "Add to cart"}
                       </span>
-                    </button>
+                    </button> */}
 
                     <button
                       onClick={() => handleBookNow(slot)}
                       disabled={actionsDisabled}
                       title={!hasGuests ? paxHint ?? undefined : undefined}
                       className={cn(
-                        "relative flex items-center gap-1.5 overflow-hidden rounded-xl font-bold text-white transition-all",
+                        "relative flex items-center gap-2 overflow-hidden rounded-xl font-bold text-white transition-all",
                         "bg-gradient-to-r from-brand-500 to-brand-600 shadow-md shadow-brand-500/25",
                         "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:rounded-t-xl before:bg-white/15",
                         "hover:from-brand-600 hover:to-brand-700 hover:shadow-lg hover:shadow-brand-500/30",
                         "disabled:cursor-not-allowed disabled:opacity-40 active:scale-95",
-                        compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"
+                        compact ? "px-4 py-2 text-sm" : "px-6 py-3 text-base"
                       )}
                     >
                       {isThisBooking
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <ArrowRight className="h-3.5 w-3.5" />
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <ArrowRight className="h-4 w-4" />
                       }
                       {isThisBooking ? "Booking…" : "Book now"}
                     </button>

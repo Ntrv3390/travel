@@ -578,8 +578,8 @@ export function PackageOptionsSection() {
                   ? "Ready to continue with your package selection."
                   : "Complete all required fields to continue."}
               </p>
-              <div className="grid grid-cols-2 gap-2 md:flex">
-                <Button variant="outline" className="rounded-xl border-brand-300 text-brand-700 hover:bg-brand-50" disabled={!canCheckout || isAddingToCart} onClick={async () => {
+              <div className="grid grid-cols-1 gap-2 md:flex">
+                {/* <Button variant="outline" className="rounded-xl border-brand-300 text-brand-700 hover:bg-brand-50" disabled={!canCheckout || isAddingToCart} onClick={async () => {
                   if (!canCheckout || isAddingToCart) return;
                   setIsAddingToCart(true);
                   const sessionId = getCartSessionId();
@@ -604,7 +604,7 @@ export function PackageOptionsSection() {
                   }
                 }}>
                   {isAddingToCart ? "Adding..." : "Add to cart"}
-                </Button>
+                </Button> */}
                 <Button className="rounded-xl bg-gradient-to-r from-blue-700 to-brand-600 text-white hover:from-blue-800 hover:to-brand-700" disabled={!canCheckout || isBooking} onClick={async () => {
                   if (!canCheckout || isBooking) return;
                   setIsBooking(true);

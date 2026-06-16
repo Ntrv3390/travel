@@ -555,10 +555,33 @@ func (h *BookingFlowHandler) CreateBooking(c *gin.Context) {
 		}
 	}
 
-	if err := h.verifyPrice(c.Request.Context(), &req); err != nil {
-		logger.Warnf("Price verification failed for variant %s: %v", req.VariantID, err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if strings.EqualFold(req.InventoryType, "SVG") {
+		// Seatmap: re-validate the specific seats right before booking to get
+		// the current price. Headout uses dynamic pricing for seat-map products,
+		// so the price stored at selection time may be stale by checkout time.
+		if len(req.InventorySeatIDs) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "seatmap booking requires seat selection"})
+			return
+		}
+		freshPrice, err := fetchFreshSeatmapPrice(c.Request.Context(), h.authService, req.ProductID, req.VariantID, req.InventoryID, req.InventorySeatIDs, req.CurrencyCode)
+		if err != nil {
+			logger.Warnf("Could not refresh seatmap price (using submitted %.2f): %v", req.PriceAmount, err)
+			if req.PriceAmount <= 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "seatmap booking has no price amount"})
+				return
+			}
+		} else {
+			if req.PriceAmount > 0 && math.Abs(freshPrice-req.PriceAmount)/req.PriceAmount > 0.01 {
+				logger.Infof("Seatmap price refreshed: submitted=%.2f, fresh=%.2f for variant %s", req.PriceAmount, freshPrice, req.VariantID)
+			}
+			req.PriceAmount = freshPrice
+		}
+	} else {
+		if err := h.verifyPrice(c.Request.Context(), &req); err != nil {
+			logger.Warnf("Price verification failed for variant %s: %v", req.VariantID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	inventoryID := strings.TrimSpace(req.InventoryID)
@@ -2024,6 +2047,62 @@ func extractMaxBookableQuantityFromItems(items []inventoryItem) *int {
 	}
 
 	return &best
+}
+
+// fetchFreshSeatmapPrice re-validates the chosen seats against Headout's
+// validate endpoint and returns the current total price. This mirrors what
+// verifyPrice does for regular inventory, but uses the seatmap-specific API.
+func fetchFreshSeatmapPrice(ctx context.Context, authService *services.HeadoutProxyService, productID, variantID, inventoryID string, seatCodes []string, currencyCode string) (float64, error) {
+	invID, err := strconv.ParseInt(strings.TrimSpace(inventoryID), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid inventoryId %q: %w", inventoryID, err)
+	}
+
+	body, err := json.Marshal(map[string]interface{}{
+		"inventoryId": invID,
+		"seatCodes":   seatCodes,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to build validate body: %w", err)
+	}
+
+	q := url.Values{}
+	if cc := strings.ToUpper(strings.TrimSpace(currencyCode)); cc != "" {
+		q.Set("currencyCode", cc)
+	}
+
+	path := fmt.Sprintf("/v2/seatmap/products/%s/variants/%s/validate/",
+		url.PathEscape(productID), url.PathEscape(variantID))
+
+	upstream, err := authService.Post(ctx, path, q, body, true)
+	if err != nil {
+		return 0, fmt.Errorf("seatmap validate call failed: %w", err)
+	}
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		return 0, fmt.Errorf("seatmap validate returned %d", upstream.StatusCode)
+	}
+
+	var resp struct {
+		Seats []struct {
+			Pricing *struct {
+				HeadoutSellingPrice float64 `json:"headoutSellingPrice"`
+			} `json:"pricing"`
+		} `json:"seats"`
+	}
+	if err := json.Unmarshal(upstream.Body, &resp); err != nil {
+		return 0, fmt.Errorf("failed to parse validate response: %w", err)
+	}
+
+	total := 0.0
+	for _, seat := range resp.Seats {
+		if seat.Pricing != nil {
+			total += seat.Pricing.HeadoutSellingPrice
+		}
+	}
+	if total <= 0 {
+		return 0, fmt.Errorf("seatmap validate returned zero total price")
+	}
+	return total, nil
 }
 
 func nullableString(s string) *string {

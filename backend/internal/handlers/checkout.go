@@ -129,14 +129,39 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 		item.Currency = "USD"
 	}
 
-	currentTotal, err := fetchFreshTotalPrice(ctx, h.authService, item.VariantID, inventoryID, item.Date, item.Currency, item.StartDateTime, item.GuestCounts, item.Adults, item.Children)
-	if err != nil {
-		result.Status = "FAILED"
-		result.Error = fmt.Sprintf("unable to refresh price: %v", err)
-		return result
+	var totalAmount float64
+	if strings.EqualFold(item.InventoryType, "SVG") {
+		// Seatmap: re-validate specific seats to get current price.
+		if len(item.InventorySeatIDs) == 0 {
+			result.Status = "FAILED"
+			result.Error = "seatmap booking has no seat selection"
+			return result
+		}
+		productID := item.ProductID
+		if productID == "" {
+			productID = item.ExperienceID
+		}
+		freshPrice, err := fetchFreshSeatmapPrice(ctx, h.authService, productID, item.VariantID, inventoryID, item.InventorySeatIDs, item.Currency)
+		if err != nil {
+			logger.Warnf("Checkout: could not refresh seatmap price (using stored %.2f): %v", item.PriceAmount, err)
+			if item.PriceAmount <= 0 {
+				result.Status = "FAILED"
+				result.Error = "seatmap booking has no price amount — please reselect your seats"
+				return result
+			}
+			totalAmount = item.PriceAmount
+		} else {
+			totalAmount = freshPrice
+		}
+	} else {
+		currentTotal, err := fetchFreshTotalPrice(ctx, h.authService, item.VariantID, inventoryID, item.Date, item.Currency, item.StartDateTime, item.GuestCounts, item.Adults, item.Children)
+		if err != nil {
+			result.Status = "FAILED"
+			result.Error = fmt.Sprintf("unable to refresh price: %v", err)
+			return result
+		}
+		totalAmount = currentTotal
 	}
-
-	totalAmount := currentTotal
 
 	productID := item.ProductID
 	if productID == "" {
@@ -180,6 +205,10 @@ func (h *CheckoutHandler) processCartItem(ctx context.Context, item services.Car
 			"amount":       totalAmount,
 			"currencyCode": item.Currency,
 		},
+	}
+
+	if len(item.InventorySeatIDs) > 0 {
+		headoutPayload["inventorySeatIds"] = item.InventorySeatIDs
 	}
 
 	if item.IdempotencyKey != "" {

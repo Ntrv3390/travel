@@ -396,7 +396,7 @@ function PackageCard({
           </button>
 
           <div className={cn(
-            "rounded-full px-3.5 py-1 text-[11px] font-bold transition-all",
+            "rounded-full px-5 py-2 text-sm font-bold transition-all",
             isSelected ? "bg-brand-500 text-white" : "bg-muted text-muted-foreground"
           )}>
             {isSelected ? "Selected" : "Select"}
