@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ShoppingCart, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { CurrencyPicker } from "@/components/common/CurrencyPicker";
 import { useCart } from "@/hooks/useCart";
@@ -13,7 +13,7 @@ import { SearchOverlay } from "@/components/search/SearchOverlay";
 const NAV_LINKS = ["Products", "Cities", "About", "Help"] as const;
 
 export function Navbar() {
-  const { itemCount } = useCart();
+  useCart();
   const pathname = usePathname();
   const router = useRouter();
   const isHome = pathname === "/" || pathname === "/about" || pathname === "/help";

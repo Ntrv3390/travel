@@ -136,7 +136,6 @@ export function PackageOptionsSection() {
   const [isCalendarPopupOpen, setIsCalendarPopupOpen] = useState(false);
   const [visibleMonthKey, setVisibleMonthKey] = useState(toMonthKey(new Date()));
   const [clientNow, setClientNow] = useState<Date | null>(null);
-  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const calendarPopupRef = useRef<HTMLDivElement | null>(null);
 
