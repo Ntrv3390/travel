@@ -65,7 +65,7 @@ function makeInitialState(products: Product[], nextOffset: number | null): State
   return { products: [], nextOffset: 0, total: 0, loading: false, error: null, initialLoading: true, done: false };
 }
 
-const ITEM_LIMIT = 60;
+const ITEM_LIMIT = 24;
 const ITEMS_BEFORE_END = 8;
 
 interface ProductsGridProps {
@@ -232,9 +232,9 @@ export function ProductsGrid({ queryParams, initialProducts = [], initialNextOff
   return (
     <div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {state.products.map((product) => (
+        {state.products.map((product, index) => (
           <div key={product.id} id={`product-card-${product.id}`}>
-            <ProductCard product={product} />
+            <ProductCard product={product} priority={index < 4} />
           </div>
         ))}
       </div>

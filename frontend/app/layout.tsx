@@ -1,4 +1,5 @@
 ﻿import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 import { cookies } from "next/headers";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
@@ -8,11 +9,18 @@ import { Toaster } from "@/components/ui/toaster";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
-import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
-import { VisitorTracker } from "@/components/layout/VisitorTracker";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import "@/styles/globals.css";
+
+const GlobalSearchModal = dynamic(
+  () => import("@/components/search/GlobalSearchModal").then((m) => ({ default: m.GlobalSearchModal })),
+  { ssr: false }
+);
+const VisitorTracker = dynamic(
+  () => import("@/components/layout/VisitorTracker").then((m) => ({ default: m.VisitorTracker })),
+  { ssr: false }
+);
 
 export const metadata: Metadata = {
   title: { default: "Triipzy - Experiences Worth Having", template: "%s | Triipzy" },

@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 
 export default async function ProductsPage() {
   const result = await getProducts(
-    { offset: 0, limit: 60 },
+    { offset: 0, limit: 24 },
     { revalidate: PDP_REVALIDATE_SECONDS },
   );
   const initialProducts = result.data?.products ?? [];

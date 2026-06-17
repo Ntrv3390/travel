@@ -9,13 +9,13 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { toSlug } from "@/lib/utils";
 import type { Product } from "@/types/product";
 
-function optimizeImageUrl(url: string, width: number): string {
-  if (url.startsWith("//")) url = `https:${url}`;
-  if (url.includes("cdn-imgix.headout.com")) {
-    const separator = url.includes("?") ? "&" : "?";
-    return `${url}${separator}w=${width}&q=75&auto=format`;
-  }
-  return url;
+function normalizeUrl(url: string): string {
+  return url.startsWith("//") ? `https:${url}` : url;
+}
+
+function imgixLoader({ src, width, quality }: { src: string; width: number; quality?: number }): string {
+  const separator = src.includes("?") ? "&" : "?";
+  return `${src}${separator}w=${width}&q=${quality ?? 75}&auto=format,compress&fit=crop`;
 }
 
 const productTypeColors: Record<string, string> = {
@@ -28,7 +28,7 @@ const productTypeColors: Record<string, string> = {
   ADD_ON: "bg-pink-100 text-pink-700 border-pink-200",
 };
 
-export function ProductCard({ product }: { product: Product }) {
+export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
   const { currency: selectedCurrency, formatPrice } = useCurrency();
   const {
     id,
@@ -46,7 +46,9 @@ export function ProductCard({ product }: { product: Product }) {
     currency,
   } = product as Product;
 
-  const imgSrc = imageUrl ?? (media?.find(m => m.type === "IMAGE")?.url) ?? null;
+  const rawImgSrc = imageUrl ?? (media?.find(m => m.type === "IMAGE")?.url) ?? null;
+  const imgSrc = rawImgSrc ? normalizeUrl(rawImgSrc) : null;
+  const isImgix = imgSrc?.includes("cdn-imgix.headout.com") ?? false;
 
   const discount = listingPrice?.bestDiscount ?? 0;
   const hasDiscount = discount > 0;
@@ -70,9 +72,11 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
           {imgSrc ? (
             <Image
-              src={optimizeImageUrl(imgSrc, 400)}
+              src={imgSrc}
+              loader={isImgix ? imgixLoader : undefined}
               alt={productName}
               fill
+              priority={priority}
               className="object-cover transition-transform duration-300 group-hover:scale-105"
               sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
             />
