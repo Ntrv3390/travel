@@ -209,6 +209,8 @@ func main() {
 	// Currencies endpoint
 	currencyHandler := handlers.NewCurrencyHandler()
 	router.GET("/api/v1/currencies", currencyHandler.ListCurrencies)
+	exchangeRateHandler := handlers.NewExchangeRateHandler()
+	router.GET("/api/v1/exchange-rates", exchangeRateHandler.GetRates)
 
 	// Headout proxy routes
 	headoutHandler := handlers.NewHeadoutHandler(cfg, database.GetDB())

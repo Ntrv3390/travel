@@ -102,6 +102,10 @@ function PackageModal({
   onClose,
 }: PackageModalProps) {
   const { formatPrice } = useCurrency();
+  const variantCurrency =
+    (variant as { startingHeadoutSellingPrice?: { currencyCode?: string } })
+      .startingHeadoutSellingPrice?.currencyCode ??
+    (variant as { pricing?: { currency?: string } }).pricing?.currency;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -166,11 +170,11 @@ function PackageModal({
                   </p>
                   <div className="mt-0.5 flex items-baseline gap-2">
                     <span className="text-2xl font-black tracking-tight">
-                      {displayPrice !== undefined ? formatPrice(displayPrice) : "—"}
+                      {displayPrice !== undefined ? formatPrice(displayPrice, variantCurrency) : "—"}
                     </span>
                     {discount > 0 && originalPrice && (
                       <span className="text-sm text-muted-foreground line-through">
-                        {formatPrice(originalPrice)}
+                        {formatPrice(originalPrice, variantCurrency)}
                       </span>
                     )}
                   </div>
@@ -278,6 +282,10 @@ function PackageCard({
 }: PackageCardProps) {
   const { formatPrice } = useCurrency();
   const displayPrice = getDisplayPrice(variant);
+  const variantCurrency =
+    (variant as { startingHeadoutSellingPrice?: { currencyCode?: string } })
+      .startingHeadoutSellingPrice?.currencyCode ??
+    (variant as { pricing?: { currency?: string } }).pricing?.currency;
   const badge = getVariantBadge(index, total);
 
   return (
@@ -373,11 +381,11 @@ function PackageCard({
                 </span>
               )}
               <span className="text-xl font-black tracking-tight sm:text-2xl">
-                {formatPrice(displayPrice)}
+                {formatPrice(displayPrice, variantCurrency)}
               </span>
               {discount > 0 && originalPrice && (
                 <span className="block text-[11px] text-muted-foreground line-through">
-                  {formatPrice(originalPrice)}
+                  {formatPrice(originalPrice, variantCurrency)}
                 </span>
               )}
               <span className="block text-[10px] text-muted-foreground">per person</span>

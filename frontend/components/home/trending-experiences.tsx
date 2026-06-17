@@ -26,19 +26,26 @@ export function TrendingExperiences({
   const isFirstRender = useRef(true);
 
   useEffect(() => {
-    // Skip the initial mount when the server already provided data
+    const isCurrencyChange = !isFirstRender.current;
+
     if (isFirstRender.current) {
       isFirstRender.current = false;
       if (initialExperiences.length > 0) return;
     }
+
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const id = ++fetchId.current;
-    setLoading(true);
+
+    // Show skeletons only on initial load, not on currency change
+    // (exchange rates give instant conversion while the silent re-fetch runs)
+    if (!isCurrencyChange) setLoading(true);
+
     getTopExperiences(50, 1, currency, { signal: abortRef.current.signal })
       .then((result) => {
         if (id !== fetchId.current) return;
-        setExperiences(result.data?.experiences ?? []);
+        const incoming = result.data?.experiences;
+        if (incoming && incoming.length > 0) setExperiences(incoming);
       })
       .catch(() => { })
       .finally(() => {

@@ -45,6 +45,8 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
   const imageUrl = images[0]?.url ?? "/images/fallback-experience.svg";
   const option = options[0];
   const price = option?.price ?? 0;
+  // Use the source currency from the data so formatPrice can convert from→to correctly.
+  // formatPrice(amount, fromCurrency) converts option.currency → context currency.
   const currency = option?.currency ?? contextCurrency;
   const hasMobile = option?.fulfillmentMobile;
   const hasFreeCancel = cancellationPolicy?.refundPercent === 100;

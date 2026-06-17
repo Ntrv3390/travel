@@ -6,6 +6,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 
 interface StickyBookingBarProps {
   price: number | undefined;
+  priceCurrency?: string;
   hasFreeCancellation?: boolean;
   hasInstantConfirmation?: boolean;
   onCheckAvailability: () => void;
@@ -13,6 +14,7 @@ interface StickyBookingBarProps {
 
 export function StickyBookingBar({
   price,
+  priceCurrency,
   hasFreeCancellation,
   hasInstantConfirmation,
   onCheckAvailability,
@@ -54,7 +56,7 @@ export function StickyBookingBar({
                 From
               </span>
               <span className="block text-[22px] font-black tracking-tight leading-none text-foreground">
-                {formatPrice(price)}
+                {formatPrice(price, priceCurrency)}
               </span>
               <span className="block text-[9px] text-muted-foreground">per person</span>
             </div>

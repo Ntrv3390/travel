@@ -57,9 +57,23 @@ export const metadata: Metadata = {
   },
 };
 
+async function fetchInitialRates(): Promise<Record<string, number>> {
+  try {
+    const res = await fetch(`${env.API_URL}/api/v1/exchange-rates`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return {};
+    const json = await res.json();
+    return json?.rates && typeof json.rates === "object" ? json.rates : {};
+  } catch {
+    return {};
+  }
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const initialCurrency = cookieStore.get("traviia_currency")?.value ?? "INR";
+  const initialRates = await fetchInitialRates();
 
   return (
     <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
@@ -68,7 +82,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="dns-prefetch" href="https://cdn-imgix.headout.com" />
       </head>
       <body className={cn(GeistSans.className, "bg-background")}>
-        <CurrencyProvider initialCurrency={initialCurrency}>
+        <CurrencyProvider initialCurrency={initialCurrency} initialRates={initialRates}>
           <CartProvider>
             <Toaster>
               <AuthProvider>

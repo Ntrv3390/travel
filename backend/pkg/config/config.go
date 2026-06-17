@@ -41,6 +41,9 @@ type Config struct {
 	SMTPFrom    string
 	AdminEmail string
 
+	// Exchange Rate API
+	ExchangeRateAPIKey string
+
 	// Sync Worker Pool
 	SyncWorkerCount      int
 	SyncDiscoveryWorkers int // Tier-2: variant resolver workers (default 40)
@@ -79,6 +82,9 @@ func Load() *Config {
 		SMTPPass:    getEnv("SMTP_PASS", ""),
 		SMTPFrom:    getEnv("SMTP_FROM", ""),
 		AdminEmail: getEnv("ADMIN_EMAIL", ""),
+
+		// Exchange Rate API
+		ExchangeRateAPIKey: getEnv("EXCHANGE_RATE_API_KEY", ""),
 	}
 
 	if cfg.JWTSecret == "" {

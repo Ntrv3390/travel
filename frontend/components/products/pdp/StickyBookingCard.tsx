@@ -14,6 +14,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 
 interface StickyBookingCardProps {
   price: number | undefined;
+  priceCurrency?: string;
   originalPrice?: number;
   discount?: number;
   productName: string;
@@ -35,6 +36,7 @@ function formatDuration(ms: number | null): string {
 
 export function StickyBookingCard({
   price,
+  priceCurrency,
   originalPrice,
   discount = 0,
   productName,
@@ -90,7 +92,7 @@ export function StickyBookingCard({
               Starting from
             </p>
             <span className="mt-1 block text-[2.5rem] font-black tracking-tight leading-none text-white drop-shadow-sm">
-              {price !== undefined ? formatPrice(price) : "—"}
+              {price !== undefined ? formatPrice(price, priceCurrency) : "—"}
             </span>
 
             {/* Discount row — separated below the price */}
@@ -100,7 +102,7 @@ export function StickyBookingCard({
                   -{discount}% OFF
                 </span>
                 <span className="text-sm text-white/70 line-through">
-                  {formatPrice(originalPrice)}
+                  {formatPrice(originalPrice, priceCurrency)}
                 </span>
               </div>
             ) : null}

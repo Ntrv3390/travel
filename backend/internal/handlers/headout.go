@@ -722,23 +722,37 @@ func (h *HeadoutHandler) GetProductByIDV2(c *gin.Context) {
 		return
 	}
 
+	currencyCode := strings.TrimSpace(c.Query("currencyCode"))
+
+	// Include currency in cache key so different currencies get their own cached response.
+	// Currency-agnostic requests (no currencyCode) are cached under the bare product key.
 	cacheKey := "product-v2:" + productID
+	if currencyCode != "" {
+		cacheKey = "product-v2:" + productID + ":" + strings.ToUpper(currencyCode)
+	}
 	if entry, ok := headoutCacheGet(cacheKey); ok {
 		c.Data(entry.status, "application/json", entry.body)
 		return
 	}
 
+	query := url.Values{}
+	if currencyCode != "" {
+		query.Set("currencyCode", strings.ToUpper(currencyCode))
+	}
 	path := fmt.Sprintf("/v2/products/%s/", url.PathEscape(productID))
-	upstream, err := h.service.Get(c.Request.Context(), path, url.Values{}, true)
+	upstream, err := h.service.Get(c.Request.Context(), path, query, true)
 	if err != nil {
 		h.handleProxyError(c, err)
 		return
 	}
 	if upstream.StatusCode >= 200 && upstream.StatusCode < 300 {
 		headoutCacheSet(cacheKey, upstream.StatusCode, upstream.Body, headoutCacheTTL)
-		var pData map[string]interface{}
-		if json.Unmarshal(upstream.Body, &pData) == nil {
-			go h.saveProductToDB(productID, pData)
+		// Only persist to DB for the default (no-currency) fetch to avoid storing currency-specific data
+		if currencyCode == "" {
+			var pData map[string]interface{}
+			if json.Unmarshal(upstream.Body, &pData) == nil {
+				go h.saveProductToDB(productID, pData)
+			}
 		}
 	}
 	h.writeUpstreamResponse(c, upstream)

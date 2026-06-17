@@ -65,6 +65,10 @@ export function ProductDetail({ product }: ProductDetailProps) {
     product.listingPrice?.minimumPrice?.finalPrice ??
     product.pricing.headoutSellingPrice;
 
+  const priceCurrency =
+    product.listingPrice?.currencyCode ??
+    product.currency?.code;
+
   const address = (
     product as {
       address?:
@@ -193,6 +197,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
           <div className="hidden min-w-0 lg:block">
             <StickyBookingCard
               price={finalPrice}
+              priceCurrency={priceCurrency}
               originalPrice={product.listingPrice?.minimumPrice?.originalPrice}
               discount={product.listingPrice?.bestDiscount ?? 0}
               productName={product.name}
@@ -209,6 +214,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
       {/* Mobile sticky bottom CTA */}
       <StickyBookingBar
         price={finalPrice}
+        priceCurrency={priceCurrency}
         hasFreeCancellation={product.cancellationPolicy?.cancellable}
         hasInstantConfirmation={product.hasInstantConfirmation}
         onCheckAvailability={openPackageSelection}

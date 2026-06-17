@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ShieldCheck, ShoppingCart, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -20,16 +20,6 @@ export function PricingBox() {
   const { state } = useProduct();
   const experience = state.experience!;
   const { currency } = useCurrency();
-  const [isCurrencyRefetching, setIsCurrencyRefetching] = useState(false);
-  const isFirstCurrencyRender = useRef(true);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (isFirstCurrencyRender.current) { isFirstCurrencyRender.current = false; return; }
-    setIsCurrencyRefetching(true);
-    timerRef.current = setTimeout(() => setIsCurrencyRefetching(false), 800);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [currency]);
 
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
   const [inventoryId, setInventoryId] = useState("");
@@ -78,13 +68,13 @@ export function PricingBox() {
     }
   }, [date, variantId, inventoryId, availability]);
 
-  const canBook = Boolean(widget.date && variantId && (!slots.length || inventoryId) && availability && !isError) && !isCurrencyRefetching;
+  const canBook = Boolean(widget.date && variantId && (!slots.length || inventoryId) && availability && !isError);
 
   return (
     <Card className="sticky top-24 border-0 shadow-pricing-box">
       <CardHeader className="space-y-2">
         <p className="text-sm text-muted-foreground">From</p>
-        <PriceDisplay amount={effectivePrice} currency={selectedVariant?.currency ?? "USD"} className="text-display-xs font-bold" showSkeleton={isCurrencyRefetching} />
+        <PriceDisplay amount={effectivePrice} currency={selectedVariant?.currency ?? "USD"} className="text-display-xs font-bold" />
       </CardHeader>
       <CardContent className="space-y-4">
         <Separator />
@@ -98,7 +88,7 @@ export function PricingBox() {
 
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>
-          <PriceDisplay amount={widget.total} currency={effectiveCurrency} className="font-semibold" showSkeleton={isCurrencyRefetching} />
+          <PriceDisplay amount={widget.total} currency={effectiveCurrency} className="font-semibold" />
         </div>
 
         {isError ? (

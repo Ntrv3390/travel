@@ -54,6 +54,38 @@ var popularCities = []string{
 	"Budapest", "Athens", "Kuala Lumpur", "Mumbai", "Seoul",
 }
 
+// convertExperiencePrices converts the Price field of each experience from its stored
+// currency to toCurrency using the exchange rate service.
+// If toCurrency is empty it defaults to "USD". The Currency field is updated only
+// when conversion actually succeeds; entries whose currency pair cannot be resolved
+// are left unchanged so the frontend can attempt its own conversion.
+func convertExperiencePrices(experiences []models.Experience, toCurrency string) {
+	if toCurrency == "" {
+		toCurrency = "USD"
+	}
+	erSvc := GetExchangeRateService()
+	rates, err := erSvc.Rates()
+	if err != nil {
+		return // rates unavailable; leave prices in their original currency
+	}
+	for i := range experiences {
+		fromCurrency := experiences[i].Currency
+		if fromCurrency == "" {
+			fromCurrency = "USD"
+		}
+		if fromCurrency == toCurrency {
+			continue
+		}
+		fromRate, ok1 := rates[fromCurrency]
+		_, ok2 := rates[toCurrency]
+		if !ok1 || !ok2 || fromRate == 0 {
+			continue // unknown currency pair; leave unchanged
+		}
+		experiences[i].Price = erSvc.Convert(experiences[i].Price, fromCurrency, toCurrency)
+		experiences[i].Currency = toCurrency
+	}
+}
+
 // GetExperiences returns experiences — from DB when fetch_fresh=false, Headout otherwise
 func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	location := c.Query("location")
@@ -67,6 +99,7 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 	if !h.isFetchFresh() && h.catalogSvc != nil {
 		result, err := h.catalogSvc.ListExperiences(c.Request.Context(), category, location, q, sort, currencyCode, page, limit)
 		if err == nil && result.Count > 0 {
+			convertExperiencePrices(result.Experiences, currencyCode)
 			c.JSON(http.StatusOK, gin.H{
 				"data":          result.Experiences,
 				"count":         result.Count,
@@ -81,6 +114,7 @@ func (h *ExperienceHandler) GetExperiences(c *gin.Context) {
 		if h.db != nil {
 			products := h.fetchExperiencesFromProductsTable(category, location, q, page, limit)
 			if len(products) > 0 {
+				convertExperiencePrices(products, currencyCode)
 				totalPages := 1
 				if len(products) >= limit {
 					totalPages = page + 1
@@ -259,6 +293,7 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 	if !h.isFetchFresh() && h.catalogSvc != nil {
 		result, err := h.catalogSvc.SearchExperiences(c.Request.Context(), category, location, q, "", currencyCode, page, limit)
 		if err == nil && result.Count > 0 {
+			convertExperiencePrices(result.Experiences, currencyCode)
 			c.JSON(http.StatusOK, gin.H{
 				"data":          result.Experiences,
 				"count":         result.Count,
@@ -273,6 +308,7 @@ func (h *ExperienceHandler) SearchExperiences(c *gin.Context) {
 		if h.db != nil {
 			products := h.fetchExperiencesFromProductsTable(category, location, q, page, limit)
 			if len(products) > 0 {
+				convertExperiencePrices(products, currencyCode)
 				totalPages := 1
 				if len(products) >= limit {
 					totalPages = page + 1
@@ -497,6 +533,8 @@ func (h *ExperienceHandler) fetchRandomExperiences(c *gin.Context, page, limit i
 		}
 	}
 
+	convertExperiencePrices(deduped, currencyCode)
+
 	totalPages := 1
 	if len(deduped) >= limit {
 		totalPages = page + 1
@@ -580,6 +618,8 @@ func (h *ExperienceHandler) searchByQueryAcrossCities(c *gin.Context, q string, 
 			deduped = append(deduped, e)
 		}
 	}
+
+	convertExperiencePrices(deduped, currencyCode)
 
 	totalPages := 1
 	if len(deduped) >= limit {
