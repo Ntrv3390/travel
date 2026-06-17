@@ -41,8 +41,18 @@ function formatDuration(ms: number | null): string {
   return `${mins}m`;
 }
 
-function imgUrl(url: string): string {
-  return url?.startsWith("//") ? `https:${url}` : url;
+function imgixUrl(raw: string, width: number, quality = 65): string {
+  if (!raw) return raw;
+  const url = raw.startsWith("//") ? `https:${raw}` : raw;
+  if (!url.includes("cdn-imgix.headout.com") && !url.includes("cdn.headout.com")) return url;
+  const [base, existing] = url.split("?");
+  const params = new URLSearchParams(existing ?? "");
+  params.set("w", String(width));
+  params.set("q", String(quality));
+  params.set("auto", "format,compress");
+  params.set("fit", "crop");
+  params.delete("fm");
+  return `${base}?${params.toString()}`;
 }
 
 // ─── Lightbox ───────────────────────────────────────────────────────────────
@@ -125,7 +135,7 @@ function ImageLightbox({ images, initialIndex, productName, onClose }: LightboxP
         <AnimatePresence mode="wait">
           <motion.img
             key={current}
-            src={imgUrl(images[current]?.url)}
+            src={imgixUrl(images[current]?.url, 1200, 75)}
             alt={`${productName} — photo ${current + 1}`}
             className="max-h-full max-w-full select-none rounded-xl object-contain"
             initial={{ opacity: 0, scale: 0.97 }}
@@ -223,10 +233,12 @@ function ThumbRow({ images, selected, onSelect, onOpenAll, cols = 4 }: ThumbRowP
             )}
           >
             <img
-              src={imgUrl(img.url)}
+              src={imgixUrl(img.url, 200, 55)}
               alt=""
               className="h-full w-full object-cover"
               loading="lazy"
+              width={200}
+              height={150}
             />
             {isOverlay && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-xl bg-black/55 backdrop-blur-[3px]">
@@ -306,7 +318,9 @@ export function ProductHero({ product }: ProductHeroProps) {
             <AnimatePresence mode="wait" initial={false}>
               <motion.img
                 key={selectedImage}
-                src={imgUrl(images[selectedImage]?.url)}
+                src={imgixUrl(images[selectedImage]?.url, 640, 65)}
+                srcSet={`${imgixUrl(images[selectedImage]?.url, 390, 65)} 390w, ${imgixUrl(images[selectedImage]?.url, 640, 65)} 640w, ${imgixUrl(images[selectedImage]?.url, 828, 65)} 828w`}
+                sizes="100vw"
                 alt={product.name}
                 className="h-full w-full cursor-pointer select-none object-cover"
                 initial={{ opacity: 0 }}
@@ -494,7 +508,9 @@ export function ProductHero({ product }: ProductHeroProps) {
               <AnimatePresence mode="wait" initial={false}>
                 <motion.img
                   key={selectedImage}
-                  src={imgUrl(images[selectedImage]?.url)}
+                  src={imgixUrl(images[selectedImage]?.url, 828, 65)}
+                  srcSet={`${imgixUrl(images[selectedImage]?.url, 640, 65)} 640w, ${imgixUrl(images[selectedImage]?.url, 828, 65)} 828w, ${imgixUrl(images[selectedImage]?.url, 1080, 65)} 1080w`}
+                  sizes="65vw"
                   alt={product.name}
                   className="h-full w-full select-none object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                   initial={{ opacity: 0 }}

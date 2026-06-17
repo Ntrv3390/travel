@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { MapPin, Navigation, ExternalLink } from "lucide-react";
 import type { Product } from "@/types/product";
 
@@ -19,6 +20,28 @@ export function MeetingPointSection({
   endLocation,
   mainAddress,
 }: MeetingPointSectionProps) {
+  const lat =
+    address?.latitude ??
+    (address as { lat?: number })?.lat;
+  const lng =
+    address?.longitude ??
+    (address as { lng?: number })?.lng;
+  const hasCoords = lat != null && lng != null;
+
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [mapReady, setMapReady] = useState(false);
+  useEffect(() => {
+    if (!hasCoords) return;
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setMapReady(true); observer.disconnect(); } },
+      { rootMargin: "400px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasCoords]);
+
   const hasContent =
     address?.address ||
     endLocation?.address ||
@@ -50,14 +73,6 @@ export function MeetingPointSection({
       .filter(Boolean)
       .join(", ")
     : null;
-
-  const lat =
-    address?.latitude ??
-    (address as { lat?: number })?.lat;
-  const lng =
-    address?.longitude ??
-    (address as { lng?: number })?.lng;
-  const hasCoords = lat != null && lng != null;
 
   const mapUrl = hasCoords
     ? `https://www.google.com/maps?q=${lat},${lng}`
@@ -95,28 +110,36 @@ export function MeetingPointSection({
       "
       >
         {/* Map */}
-        <div className="relative h-[220px] overflow-hidden border-b border-border/50 md:h-[260px]">
+        <div ref={mapContainerRef} className="relative h-[220px] overflow-hidden border-b border-border/50 md:h-[260px]">
           {hasCoords ? (
-            <>
-              <iframe
-                src={`https://maps.google.com/maps?q=${lat},${lng}&z=15&output=embed`}
-                width="100%"
-                height="100%"
-                loading="lazy"
-                style={{ border: 0 }}
-                className="absolute inset-0 h-full w-full"
-                title="Meeting Point Map"
-              />
-
-              <div className="pointer-events-none absolute left-4 top-4">
-                <div className="rounded-full border border-white/50 bg-white/90 px-3 py-1.5 shadow-lg backdrop-blur-md">
-                  <span className="flex items-center gap-1 text-xs font-medium">
-                    <MapPin className="h-3.5 w-3.5 text-brand-600" />
-                    Meeting Point
-                  </span>
+            mapReady ? (
+              <>
+                <iframe
+                  src={`https://maps.google.com/maps?q=${lat},${lng}&z=15&output=embed`}
+                  width="100%"
+                  height="100%"
+                  loading="lazy"
+                  style={{ border: 0 }}
+                  className="absolute inset-0 h-full w-full"
+                  title="Meeting Point Map"
+                />
+                <div className="pointer-events-none absolute left-4 top-4">
+                  <div className="rounded-full border border-white/50 bg-white/90 px-3 py-1.5 shadow-lg backdrop-blur-md">
+                    <span className="flex items-center gap-1 text-xs font-medium">
+                      <MapPin className="h-3.5 w-3.5 text-brand-600" />
+                      Meeting Point
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex h-full items-center justify-center bg-muted/30">
+                <div className="text-center">
+                  <MapPin className="mx-auto h-10 w-10 text-brand-400/40 animate-pulse" />
+                  <p className="mt-2 text-sm text-muted-foreground">Loading map…</p>
                 </div>
               </div>
-            </>
+            )
           ) : (
             <div className="flex h-full items-center justify-center bg-muted/30">
               <div className="text-center">
