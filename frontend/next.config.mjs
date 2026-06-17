@@ -25,6 +25,9 @@ const nextConfig = {
     deviceSizes: [390, 640, 750, 828, 1080, 1200, 1920],
     imageSizes: [32, 64, 96, 128, 256, 384],
   },
+  experimental: {
+    optimizeCss: true,
+  },
   async rewrites() {
     if (!process.env.API_URL) return [];
     return [

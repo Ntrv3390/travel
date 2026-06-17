@@ -63,6 +63,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <head>
+        <link rel="preconnect" href="https://cdn-imgix.headout.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://cdn-imgix.headout.com" />
+      </head>
       <body className={cn(GeistSans.className, "bg-background")}>
         <CurrencyProvider initialCurrency={initialCurrency}>
           <CartProvider>

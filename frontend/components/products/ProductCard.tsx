@@ -14,8 +14,14 @@ function normalizeUrl(url: string): string {
 }
 
 function imgixLoader({ src, width, quality }: { src: string; width: number; quality?: number }): string {
-  const separator = src.includes("?") ? "&" : "?";
-  return `${src}${separator}w=${width}&q=${quality ?? 75}&auto=format,compress&fit=crop`;
+  const [base, existing] = src.split("?");
+  const params = new URLSearchParams(existing ?? "");
+  params.set("w", String(width));
+  params.set("q", String(quality ?? 55));
+  params.set("auto", "format,compress");
+  params.set("fit", "crop");
+  params.delete("fm");
+  return `${base}?${params.toString()}`;
 }
 
 const productTypeColors: Record<string, string> = {

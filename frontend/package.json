@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "analyze": "next build"
+    "analyze": "next build",
+    "postinstall": "node -e \"const fs=require('fs');const d='node_modules/critters';fs.mkdirSync(d,{recursive:true});fs.writeFileSync(d+'/package.json',JSON.stringify({name:'critters',version:'0.0.23',main:'index.js'}));fs.writeFileSync(d+'/index.js','module.exports=require(\\'beasties\\');');\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -34,11 +35,21 @@
     "tailwind-merge": "^2.5.5",
     "zod": "^3.24.1"
   },
+  "overrides": {
+    "critters": "npm:beasties@latest"
+  },
+  "browserslist": [
+    "Chrome >= 96",
+    "Safari >= 15.4",
+    "Firefox >= 105",
+    "Edge >= 96"
+  ],
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "autoprefixer": "^10.4.20",
+    "beasties": "^0.4.2",
     "eslint": "^8.0.0",
     "eslint-config-next": "^14.0.0",
     "postcss": "^8.4.49",
