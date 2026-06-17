@@ -41,7 +41,7 @@ export default function CartPage() {
   const router = useRouter();
   const { cart, isLoading, clearCart, itemCount, staleCurrency } = useCart();
   const { removeItem } = useCartContext();
-  const { currency, isChanging } = useCurrency();
+  const { currency } = useCurrency();
   const { toast } = useToast();
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
 
@@ -147,7 +147,7 @@ export default function CartPage() {
           </Button>
         </div>
 
-        {staleCurrency && !isChanging && (
+        {staleCurrency && (
           <Alert className="mb-6 rounded-xl border-amber-200 bg-amber-50 text-amber-800">
             <AlertDescription>
               Some items were priced in a different currency. Final prices will be confirmed at checkout.
@@ -229,7 +229,7 @@ export default function CartPage() {
                   <PriceDisplay
                     amount={cartTotal}
                     currency={currency}
-                    showSkeleton={isChanging}
+                    showSkeleton={false}
                     className="text-xl font-bold"
                   />
                 </div>
@@ -262,7 +262,7 @@ export default function CartPage() {
             <PriceDisplay
               amount={cartTotal}
               currency={currency}
-              showSkeleton={isChanging}
+              showSkeleton={false}
               className="text-lg font-bold"
             />
           </div>

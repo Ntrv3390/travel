@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCurrency } from "@/hooks/useCurrency";
 
@@ -10,9 +10,9 @@ interface PriceDisplayProps {
 }
 
 export function PriceDisplay({ amount, currency, className, showSkeleton }: PriceDisplayProps) {
-  const { formatPrice, isChanging } = useCurrency();
+  const { formatPrice } = useCurrency();
 
-  if (showSkeleton || isChanging) {
+  if (showSkeleton) {
     return (
       <span
         className={`inline-block animate-pulse rounded bg-muted ${className ?? ""}`}

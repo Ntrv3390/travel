@@ -16,7 +16,7 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: { city: string; slug: string } }): Promise<Metadata> {
   const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
   const result = await getExperience(params.city, params.slug, currency);
   if (!result.data) return {};
 
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: { params: { city: string; slu
 
 export default async function PDPPage({ params }: { params: { city: string; slug: string } }) {
   const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
   const result = await getExperience(params.city, params.slug, currency);
   if (!result.data) notFound();
 

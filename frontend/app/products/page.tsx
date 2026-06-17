@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { ProductsGrid } from "@/components/products/ProductsGrid";
 import { Breadcrumb, BreadcrumbJsonLd } from "@/components/ui/Breadcrumb";
 import { getProducts } from "@/lib/api";
-import { PDP_REVALIDATE_SECONDS } from "@/lib/constants";
 
-export const revalidate = PDP_REVALIDATE_SECONDS;
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Explore Experiences & Tours | Triipzy",
@@ -26,10 +26,10 @@ export const metadata: Metadata = {
 };
 
 export default async function ProductsPage() {
-  const result = await getProducts(
-    { offset: 0, limit: 24 },
-    { revalidate: PDP_REVALIDATE_SECONDS },
-  );
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
+
+  const result = await getProducts({ offset: 0, limit: 24, currencyCode: currency });
   const initialProducts = result.data?.products ?? [];
   const initialNextOffset = result.data?.nextOffset ?? null;
 

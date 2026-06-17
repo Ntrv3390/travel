@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
   const result = await getExperienceById(params.id, currency);
   if (!result.data) return {};
 
@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
 export default async function ExperienceByIDPage({ params }: { params: { id: string } }) {
   const cookieStore = await cookies();
-  const currency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
   const result = await getExperienceById(params.id, currency);
   if (!result.data) notFound();
 

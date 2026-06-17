@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Star, MapPin, Clock, ShieldCheck, Zap } from "lucide-react";
 import { PriceDisplay } from "@/components/common/PriceDisplay";
-import { useCurrency } from "@/hooks/useCurrency";
+import { useCurrencyContext } from "@/context/CurrencyContext";
 import type { Experience } from "@/types/experience";
 
 function formatDuration(minSec: number, maxSec: number): string {
@@ -25,7 +25,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function ExperienceCard({ experience }: { experience: Experience }) {
-  const { isChanging } = useCurrency();
+  const { currency: contextCurrency } = useCurrencyContext();
   const {
     id,
     headoutId,
@@ -45,7 +45,7 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
   const imageUrl = images[0]?.url ?? "/images/fallback-experience.svg";
   const option = options[0];
   const price = option?.price ?? 0;
-  const currency = option?.currency ?? "USD";
+  const currency = option?.currency ?? contextCurrency;
   const hasMobile = option?.fulfillmentMobile;
   const hasFreeCancel = cancellationPolicy?.refundPercent === 100;
   const category = categories[0];
@@ -123,7 +123,6 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
                   amount={price}
                   currency={currency}
                   className="text-base font-black text-foreground"
-                  showSkeleton={isChanging}
                 />
               </div>
             )}

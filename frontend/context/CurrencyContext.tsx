@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import {
   createContext,
@@ -6,10 +6,8 @@ import {
   useState,
   useEffect,
   useCallback,
-  useRef,
   type ReactNode,
 } from "react"
-import { useRouter } from "next/navigation"
 
 interface CurrencyInfo {
   code: string
@@ -20,15 +18,13 @@ interface CurrencyInfo {
 interface CurrencyContextValue {
   currency: string
   setCurrency: (code: string) => void
-  isChanging: boolean
   supportedCurrencies: CurrencyInfo[]
   formatPrice: (amount: number, currencyOverride?: string) => string
 }
 
 const CurrencyContext = createContext<CurrencyContextValue>({
-  currency: "USD",
+  currency: "INR",
   setCurrency: () => {},
-  isChanging: false,
   supportedCurrencies: [],
   formatPrice: () => "",
 })
@@ -37,18 +33,15 @@ const STORAGE_KEY = "traviia_currency"
 
 export function CurrencyProvider({
   children,
-  initialCurrency = "USD",
+  initialCurrency = "INR",
 }: {
   children: ReactNode
   initialCurrency?: string
 }) {
   const [currency, setCurrencyState] = useState(initialCurrency)
-  const [isChanging, setIsChanging] = useState(false)
   const [supportedCurrencies, setSupportedCurrencies] = useState<CurrencyInfo[]>([])
-  const router = useRouter()
-  const changingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Sync from localStorage on mount (handles case where cookie & localStorage differ)
+  // Sync from localStorage on mount — resolves any cookie vs localStorage drift
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved && saved !== currency) {
@@ -72,35 +65,16 @@ export function CurrencyProvider({
     (code: string) => {
       if (code === currency) return
 
-      // Persist to storage and cookie immediately
       setCurrencyState(code)
       try {
         localStorage.setItem(STORAGE_KEY, code)
       } catch {
-        // localStorage may throw in private/incognito mode on mobile
+        // localStorage unavailable in some private/incognito modes
       }
       document.cookie = `${STORAGE_KEY}=${code};path=/;max-age=31536000;SameSite=Lax`
-
-      // Show loading state
-      setIsChanging(true)
-      if (changingTimerRef.current) clearTimeout(changingTimerRef.current)
-
-      // Refresh server components so they re-run with the new cookie
-      router.refresh()
-
-      // Reset loading after grace period for client components to re-fetch
-      changingTimerRef.current = setTimeout(() => {
-        setIsChanging(false)
-      }, 1800)
     },
-    [currency, router],
+    [currency],
   )
-
-  useEffect(() => {
-    return () => {
-      if (changingTimerRef.current) clearTimeout(changingTimerRef.current)
-    }
-  }, [])
 
   const formatPrice = useCallback(
     (amount: number, currencyOverride?: string) => {
@@ -121,7 +95,7 @@ export function CurrencyProvider({
 
   return (
     <CurrencyContext.Provider
-      value={{ currency, setCurrency, isChanging, supportedCurrencies, formatPrice }}
+      value={{ currency, setCurrency, supportedCurrencies, formatPrice }}
     >
       {children}
     </CurrencyContext.Provider>

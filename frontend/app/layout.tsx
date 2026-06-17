@@ -59,7 +59,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
-  const initialCurrency = cookieStore.get("traviia_currency")?.value ?? "USD";
+  const initialCurrency = cookieStore.get("traviia_currency")?.value ?? "INR";
 
   return (
     <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>

@@ -15,7 +15,7 @@ export function TrendingExperiences({
 }: {
   initialExperiences?: Experience[];
 }) {
-  const { currency, isChanging } = useCurrency();
+  const { currency } = useCurrency();
   const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
   const [loading, setLoading] = useState(initialExperiences.length === 0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,7 +58,7 @@ export function TrendingExperiences({
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
   };
 
-  const showSkeletons = loading || isChanging;
+  const showSkeletons = loading;
 
   return (
     <section className="bg-background py-12 sm:py-16">

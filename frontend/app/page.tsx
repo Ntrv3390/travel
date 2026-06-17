@@ -1,6 +1,6 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { getCities, getHomeCategories, getHomeTestimonials, getTopExperiences } from "@/lib/api";
-import { HOME_REVALIDATE_SECONDS } from "@/lib/constants";
 import { Hero } from "@/components/home/hero";
 import { TrustSection } from "@/components/home/trust-section";
 import { TrendingExperiences } from "@/components/home/trending-experiences";
@@ -9,8 +9,9 @@ import { Destinations } from "@/components/home/destinations";
 import { Categories } from "@/components/home/categories";
 import { WhyTriipzy } from "@/components/home/why-triipzy";
 import { Testimonials } from "@/components/home/testimonials";
-// import { Partners } from "@/components/home/partners";
 import type { City, HomeCategory, Testimonial } from "@/types/api";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Triipzy - Discover & Book Unique Experiences Worldwide",
@@ -41,14 +42,15 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export const revalidate = 86400;
-
 export default async function HomePage() {
+  const cookieStore = await cookies();
+  const currency = cookieStore.get("traviia_currency")?.value ?? "INR";
+
   const [citiesResult, categoriesResult, testimonialsResult, trendingResult] = await Promise.all([
     getCities(0, 50),
     getHomeCategories(),
     getHomeTestimonials(),
-    getTopExperiences(50, 1, "USD", { revalidate: HOME_REVALIDATE_SECONDS }),
+    getTopExperiences(50, 1, currency),
   ]);
 
   const citiesResponse = citiesResult.data as { cities: City[]; total: number } | null;
@@ -83,39 +85,23 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLD) }}
       />
 
-      {/* Dark hero with video */}
       <Hero />
 
-      {/* Platform trust indicators */}
-      {/* <Partners /> */}
-
-
-
-      {/* Recently viewed — client-side, renders from localStorage or API */}
       <RecentlyViewedExperiences />
 
-      {/* Server data on first paint; client re-fetches only on currency change */}
       <TrendingExperiences initialExperiences={initialTrending} />
 
-            {/* Animated counters */}
       <TrustSection
         stats={{ totalExperiences: 0, totalDestinations, avgRating: 0, totalReviews: 0 }}
       />
 
-      {/* Destination photo grid */}
       <Destinations cities={cities} />
 
-      {/* Category grid */}
       <Categories categories={categories} />
 
-      {/* Why us + feature list */}
       <WhyTriipzy />
 
-      {/* Review carousel */}
       <Testimonials testimonials={testimonials} />
-
-      {/* Blog / journal */}
-      {/* <Inspiration /> */}
     </>
   );
 }
