@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Search, MapPin, Star, Shield, Zap, ChevronDown } from "lucide-react";
+import { useSearchAutocomplete } from "@/hooks/useSearchAutocomplete";
+import { SearchOverlay } from "@/components/search/SearchOverlay";
 
 const POPULAR = ["Paris", "Tokyo", "Bali", "New York", "Rome", "Santorini", "Dubai"];
 
@@ -16,13 +17,30 @@ const FLOAT_PILLS = [
 ];
 
 export function Hero() {
-  const [query, setQuery] = useState("");
   const router = useRouter();
+  const {
+    query,
+    setQuery,
+    grouped,
+    loading,
+    open,
+    highlightedIndex,
+    openDropdown,
+    closeDropdown,
+    handleKeyDown,
+    inputRef,
+    dropdownRef,
+  } = useSearchAutocomplete();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
+    closeDropdown();
     router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+  };
+
+  const openMobileSearch = () => {
+    window.dispatchEvent(new CustomEvent("open-search"));
   };
 
   return (
@@ -115,32 +133,72 @@ export function Hero() {
           <span className="font-semibold text-white/80">500+ destinations</span> worldwide.
         </motion.p>
 
-        {/* Search bar */}
-        <motion.form
+        {/* Search bar — mobile: tap to open full-screen modal */}
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.42 }}
-          onSubmit={handleSearch}
-          className="mx-auto mt-8 flex max-w-2xl items-center overflow-hidden rounded-full border border-white/10 bg-white/6 p-1.5 backdrop-blur-xl"
+          className="md:hidden mx-auto mt-8 flex max-w-2xl cursor-pointer items-center overflow-hidden rounded-full border border-white/10 bg-white/6 p-1.5 backdrop-blur-xl"
+          onClick={openMobileSearch}
+          role="button"
+          aria-label="Open search"
         >
           <div className="flex flex-1 items-center gap-2.5 px-4">
             <MapPin className="h-4 w-4 shrink-0 text-brand-400" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Where do you want to go?"
-              className="w-full bg-transparent text-sm text-white placeholder-white/35 outline-none"
-            />
+            <span className="w-full select-none text-sm text-white/35">
+              Where do you want to go?
+            </span>
           </div>
-          <button
-            type="submit"
-            className="shrink-0 rounded-full bg-brand-500 px-7 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 transition-all hover:bg-brand-600 active:scale-95"
+          <div className="shrink-0 rounded-full bg-brand-500 px-5 py-3">
+            <Search className="h-4 w-4 text-white" />
+          </div>
+        </motion.div>
+
+        {/* Search bar — desktop: inline autocomplete */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.42 }}
+          className="relative mx-auto mt-8 hidden max-w-2xl md:block"
+        >
+          <form
+            onSubmit={handleSearch}
+            className="flex items-center overflow-hidden rounded-full border border-white/10 bg-white/6 p-1.5 backdrop-blur-xl"
           >
-            <span className="hidden sm:inline">Search</span>
-            <Search className="h-4 w-4 sm:hidden" />
-          </button>
-        </motion.form>
+            <div className="flex flex-1 items-center gap-2.5 px-4">
+              <MapPin className="h-4 w-4 shrink-0 text-brand-400" />
+              <input
+                ref={inputRef as React.Ref<HTMLInputElement>}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={openDropdown}
+                onKeyDown={handleKeyDown}
+                placeholder="Where do you want to go?"
+                autoComplete="off"
+                className="w-full bg-transparent text-sm text-white placeholder-white/35 outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              className="shrink-0 rounded-full bg-brand-500 px-7 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 transition-all hover:bg-brand-600 active:scale-95"
+            >
+              Search
+            </button>
+          </form>
+          <SearchOverlay
+            grouped={grouped}
+            loading={loading}
+            open={open}
+            query={query}
+            highlightedIndex={highlightedIndex}
+            onClose={closeDropdown}
+            onKeyDown={handleKeyDown}
+            dropdownRef={dropdownRef}
+            inputRef={inputRef}
+            setQuery={setQuery}
+          />
+        </motion.div>
 
         {/* Popular tags */}
         <motion.div

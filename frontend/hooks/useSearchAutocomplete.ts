@@ -5,6 +5,35 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { searchAll } from "@/lib/api";
 import type { SearchAllResponse, SearchProduct, SearchCity, SearchCategory, SearchSuggestion } from "@/types/search";
 
+const CACHE_TTL = 2 * 60 * 1000;
+
+interface CacheEntry {
+  data: SearchAllResponse;
+  ts: number;
+}
+
+const searchCache = new Map<string, CacheEntry>();
+
+function getCached(key: string): SearchAllResponse | null {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL) {
+    searchCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCache(key: string, data: SearchAllResponse) {
+  if (searchCache.size > 50) {
+    const now = Date.now();
+    for (const [k, v] of searchCache) {
+      if (now - v.ts > CACHE_TTL) searchCache.delete(k);
+    }
+  }
+  searchCache.set(key, { data, ts: Date.now() });
+}
+
 interface SearchState {
   query: string;
   results: SearchAllResponse | null;
@@ -87,10 +116,17 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
   // Fetch popular cities when query is empty
   useEffect(() => {
     if (state.query !== "") return;
+    const cacheKey = `:${currency}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setState((prev) => ({ ...prev, results: cached, loading: false }));
+      return;
+    }
     let cancelled = false;
     (async () => {
       const data = await searchAll("", { currencyCode: currency });
-      if (cancelled) return;
+      if (cancelled || !data) return;
+      setCache(cacheKey, data);
       setState((prev) => ({ ...prev, results: data, loading: false }));
     })();
     return () => { cancelled = true; };
@@ -98,8 +134,32 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
 
   useEffect(() => {
     const normalized = normalizeQuery(state.query);
-    if (normalized.length < 2) {
-      return;
+    if (normalized.length < 2) return;
+
+    const cacheKey = `${normalized}:${currency}`;
+    const cached = getCached(cacheKey);
+
+    if (cached) {
+      if (abortRef.current) abortRef.current.abort();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      setState((prev) => ({
+        ...prev,
+        results: cached,
+        loading: false,
+        open: true,
+        highlightedIndex: -1,
+      }));
+
+      // Background refresh without showing loading spinner
+      const controller = new AbortController();
+      abortRef.current = controller;
+      searchAll(state.query, { signal: controller.signal, currencyCode: currency }).then((data) => {
+        if (controller.signal.aborted || !data) return;
+        setCache(cacheKey, data);
+        setState((prev) => ({ ...prev, results: data }));
+      });
+      return () => { controller.abort(); };
     }
 
     if (abortRef.current) abortRef.current.abort();
@@ -116,7 +176,12 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
         currencyCode: currency,
       });
       if (controller.signal.aborted) return;
+      if (!data) {
+        setState((prev) => ({ ...prev, loading: false }));
+        return;
+      }
 
+      setCache(cacheKey, data);
       setState((prev) => ({
         ...prev,
         results: data,
@@ -124,7 +189,7 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
         open: true,
         highlightedIndex: -1,
       }));
-    }, 250);
+    }, 150);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
