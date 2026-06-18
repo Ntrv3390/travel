@@ -272,6 +272,7 @@ export function ProductHero({ product }: ProductHeroProps) {
   const originalPrice = product.listingPrice?.minimumPrice?.originalPrice;
   const finalPrice =
     product.listingPrice?.minimumPrice?.finalPrice ?? product.pricing?.headoutSellingPrice;
+  const priceCurrency = product.listingPrice?.currencyCode ?? product.currency?.code;
 
   const rating = product.reviewsSummary?.averageRating;
   const reviewCount = product.reviewsSummary?.ratingsCount ?? 0;
@@ -467,11 +468,11 @@ export function ProductHero({ product }: ProductHeroProps) {
                     </p>
                     <div className="mt-1 flex items-baseline gap-2">
                       <span className="text-[1.6rem] font-black tracking-tight leading-none">
-                        {formatPrice(finalPrice)}
+                        {formatPrice(finalPrice, priceCurrency)}
                       </span>
                       {discount > 0 && originalPrice && (
                         <span className="text-sm text-muted-foreground line-through">
-                          {formatPrice(originalPrice)}
+                          {formatPrice(originalPrice, priceCurrency)}
                         </span>
                       )}
                     </div>
@@ -641,11 +642,11 @@ export function ProductHero({ product }: ProductHeroProps) {
                       </p>
                       <div className="mt-1 flex items-baseline gap-2">
                         <span className="text-[2rem] font-black tracking-tight leading-none">
-                          {formatPrice(finalPrice)}
+                          {formatPrice(finalPrice, priceCurrency)}
                         </span>
                         {discount > 0 && originalPrice && (
                           <span className="text-sm text-muted-foreground line-through">
-                            {formatPrice(originalPrice)}
+                            {formatPrice(originalPrice, priceCurrency)}
                           </span>
                         )}
                       </div>
