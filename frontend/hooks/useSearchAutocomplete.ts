@@ -165,11 +165,12 @@ export function useSearchAutocomplete(initialQuery = ""): SearchAutocompleteRetu
     if (abortRef.current) abortRef.current.abort();
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
+    // Show loading immediately and clear stale results so previous query's data doesn't flash
+    setState((prev) => ({ ...prev, loading: true, results: null }));
+
     debounceRef.current = setTimeout(async () => {
       const controller = new AbortController();
       abortRef.current = controller;
-
-      setState((prev) => ({ ...prev, loading: true }));
 
       const data = await searchAll(state.query, {
         signal: controller.signal,

@@ -44,7 +44,7 @@ export function Hero() {
   };
 
   return (
-    <section className="relative -mt-[68px] flex min-h-[92vh] flex-col items-center justify-center overflow-hidden bg-[#06101f] pt-[68px]">
+    <section className="relative -mt-[68px] flex min-h-[92vh] flex-col items-center justify-center overflow-x-hidden bg-[#06101f] pt-[68px]">
       {/* Ambient glow orbs */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/3 h-[600px] w-[600px] rounded-full bg-brand-600/25 blur-[140px]" />

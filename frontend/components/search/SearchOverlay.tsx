@@ -66,7 +66,7 @@ export function SearchOverlay({
       )}
 
       {/* Attractions */}
-      {attractions.length > 0 && (
+      {attractions.length > 0 && query.length >= 2 && (
         <div className="px-3 pb-2 pt-3">
           <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Attractions
@@ -88,7 +88,7 @@ export function SearchOverlay({
       )}
 
       {/* Cities */}
-      {cities.length > 0 && (
+      {cities.length > 0 && query.length >= 2 && (
         <div className="px-3 pb-2 pt-1">
           <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Cities
@@ -110,7 +110,7 @@ export function SearchOverlay({
       )}
 
       {/* Categories */}
-      {categories.length > 0 && (
+      {categories.length > 0 && query.length >= 2 && (
         <div className="px-3 pb-2 pt-1">
           <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Categories
@@ -132,7 +132,7 @@ export function SearchOverlay({
       )}
 
       {/* Popular Searches */}
-      {popular.length > 0 && (
+      {popular.length > 0 && query.length >= 2 && (
         <div className="border-t border-slate-100 px-3 py-2">
           <p className="mb-1.5 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Popular Searches
@@ -166,45 +166,39 @@ export function SearchOverlay({
 
       {/* Initial State - Popular Destinations from API */}
       {query.length < 2 && (
-        <div className="space-y-4 px-5 py-5">
-          {cities.length > 0 && (
+        <div className="px-4 py-4">
+          {cities.length > 0 ? (
             <div>
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <p className="mb-3 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 <TrendingUp className="h-3 w-3" />
                 Popular Destinations
               </p>
               <div className="flex flex-wrap gap-2">
-                {cities.map((city) => (
+                {cities.slice(0, 12).map((city) => (
                   <Link
                     key={city.code}
                     href={city.url}
                     onClick={onClose}
-                    className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
                   >
                     {city.name}
                   </Link>
                 ))}
               </div>
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <Link
+                  href="/cities"
+                  onClick={onClose}
+                  className="flex w-fit items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-600 transition-colors hover:bg-sky-100"
+                >
+                  <MapPin className="h-3 w-3" />
+                  Browse all cities
+                </Link>
+              </div>
             </div>
+          ) : (
+            <p className="py-2 text-center text-xs text-slate-400">Loading destinations…</p>
           )}
-          {cities.length === 0 && !loading && (
-            <p className="text-center text-xs text-slate-400">Loading destinations...</p>
-          )}
-          <div className="border-t border-slate-100 pt-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Quick Links
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/cities"
-                onClick={onClose}
-                className="flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-600 transition-colors hover:bg-sky-100"
-              >
-                <MapPin className="h-3 w-3" />
-                Browse All Cities
-              </Link>
-            </div>
-          </div>
         </div>
       )}
     </div>
