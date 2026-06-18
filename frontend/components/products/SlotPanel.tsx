@@ -153,7 +153,7 @@ export function SlotPanel({
 
   const getBookingPriceForType = (slot: SlotItem, type: string) => {
     const person = slot.pricing?.persons?.find(p => p.type === type)
-    return person?.price ?? person?.headoutSellingPrice ?? slot.pricing?.persons?.[0]?.price ?? 0
+    return person?.headoutSellingPrice ?? person?.price ?? slot.pricing?.persons?.[0]?.headoutSellingPrice ?? 0
   }
 
   const calculateTotalPrice = (slot: SlotItem) =>
