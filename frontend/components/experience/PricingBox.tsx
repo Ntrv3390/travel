@@ -14,12 +14,11 @@ import { PriceDisplay } from "@/components/common/PriceDisplay";
 import { useAvailability } from "@/hooks/useAvailability";
 import { useBookingWidget } from "@/hooks/useBookingWidget";
 import { useProduct } from "@/context/ProductContext";
-import { useCurrency } from "@/hooks/useCurrency";
 
 export function PricingBox() {
   const { state } = useProduct();
   const experience = state.experience!;
-  const { currency } = useCurrency();
+
 
   const [variantId, setVariantId] = useState(experience.options[0]?.id ?? "");
   const [inventoryId, setInventoryId] = useState("");
