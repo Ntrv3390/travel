@@ -7,7 +7,6 @@ import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import { ExperienceCard } from "@/components/shared/ExperienceCard";
 import { ExperienceCardSkeleton } from "@/components/experience/ExperienceCardSkeleton";
 import { getTopExperiences } from "@/lib/api";
-import { useCurrency } from "@/hooks/useCurrency";
 import type { Experience } from "@/types/experience";
 
 export function TrendingExperiences({
@@ -15,43 +14,28 @@ export function TrendingExperiences({
 }: {
   initialExperiences?: Experience[];
 }) {
-  const { currency } = useCurrency();
   const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
   const [loading, setLoading] = useState(initialExperiences.length === 0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
-  const abortRef = useRef<AbortController | null>(null);
-  const fetchId = useRef(0);
-  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    const isCurrencyChange = !isFirstRender.current;
+    if (initialExperiences.length > 0) return;
 
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      if (initialExperiences.length > 0) return;
-    }
+    const controller = new AbortController();
+    setLoading(true);
 
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    const id = ++fetchId.current;
-
-    // Show skeletons only on initial load, not on currency change
-    // (exchange rates give instant conversion while the silent re-fetch runs)
-    if (!isCurrencyChange) setLoading(true);
-
-    getTopExperiences(50, 1, currency, { signal: abortRef.current.signal })
+    getTopExperiences(50, 1, "USD", { signal: controller.signal })
       .then((result) => {
-        if (id !== fetchId.current) return;
         const incoming = result.data?.experiences;
         if (incoming && incoming.length > 0) setExperiences(incoming);
       })
-      .catch(() => { })
-      .finally(() => {
-        if (id === fetchId.current) setLoading(false);
-      });
-  }, [currency]); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch(() => {})
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scroll = (dir: "left" | "right") => {
     if (!scrollRef.current) return;
